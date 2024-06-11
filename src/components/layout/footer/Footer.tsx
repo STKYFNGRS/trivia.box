@@ -20,7 +20,7 @@ export default function Footer() {
                 passHref
                 className="font-robotoMono text-center text-xl font-medium text-white no-underline"
               >
-                BUILD ONCHAIN APPS
+                Trivia Box
               </NextLink>
               <NavbarLink href="https://github.com/coinbase/build-onchain-apps" target="_blank">
                 <GitHubLogoIcon
@@ -33,7 +33,7 @@ export default function Footer() {
 
             <div className="mt-8 flex flex-col items-center justify-center">
               <p className="text-base font-normal leading-7 text-boat-footer-light-gray">
-                This project is licensed under the MIT License - see the{' '}
+                &copy; {new Date().getFullYear()} ❤️ STKYFNGRS. All rights reserved.{' '}
                 <NextLink
                   href="https://github.com/coinbase/build-onchain-apps/blob/main/LICENSE.md"
                   className="underline"
