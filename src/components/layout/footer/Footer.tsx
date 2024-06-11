@@ -34,14 +34,6 @@ export default function Footer() {
             <div className="mt-8 flex flex-col items-center justify-center">
               <p className="text-base font-normal leading-7 text-boat-footer-light-gray">
                 &copy; {new Date().getFullYear()} ❤️ STKYFNGRS. All rights reserved.{' '}
-                <NextLink
-                  href="https://github.com/coinbase/build-onchain-apps/blob/main/LICENSE.md"
-                  className="underline"
-                  target="_blank"
-                >
-                  LICENSE.md
-                </NextLink>{' '}
-                file for details
               </p>
             </div>
           </div>
