@@ -1,6 +1,6 @@
 'use client';
 
-import { GitHubLogoIcon, ArrowTopRightIcon } from '@radix-ui/react-icons';
+import { ArrowTopRightIcon } from '@radix-ui/react-icons';
 import NextLink from 'next/link';
 import { NavbarLink } from '@/components/layout/header/Navbar';
 import FooterIcon from './FooterIcon';
@@ -22,13 +22,6 @@ export default function Footer() {
               >
                 Trivia Box
               </NextLink>
-              <NavbarLink href="https://github.com/coinbase/build-onchain-apps" target="_blank">
-                <GitHubLogoIcon
-                  width="24"
-                  height="24"
-                  aria-label="build-onchain-apps Github respository"
-                />
-              </NavbarLink>
             </div>
 
             <div className="mt-8 flex flex-col items-center justify-center">
