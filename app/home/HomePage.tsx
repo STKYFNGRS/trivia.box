@@ -30,7 +30,7 @@ export default function HomePage() {
               <b>chainId</b>: {account.chainId}
             </li>
             <li>
-              <b>ENS Name</b>: {ensName ?? 'No ENS name found'}
+              <b>ENS Name / Address</b>: {ensName ?? account.addresses?.[0]}
             </li>
           </ul>
         </div>
