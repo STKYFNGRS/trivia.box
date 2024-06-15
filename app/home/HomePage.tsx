@@ -1,5 +1,5 @@
 'use client';
-import { useAccount } from 'wagmi';
+import { useAccount, useEnsName } from 'wagmi';
 import Footer from '@/components/layout/footer/Footer';
 import Header from '@/components/layout/header/Header';
 
@@ -9,6 +9,7 @@ import Header from '@/components/layout/header/Header';
  */
 export default function HomePage() {
   const account = useAccount();
+  const { data: ensName } = useEnsName({ address: account.addresses?.[0] });
 
   return (
     <>
@@ -27,6 +28,9 @@ export default function HomePage() {
             </li>
             <li>
               <b>chainId</b>: {account.chainId}
+            </li>
+            <li>
+              <b>ENS Name / Address</b>: {ensName ?? account.addresses?.[0]}
             </li>
           </ul>
         </div>
