@@ -32,7 +32,7 @@ export default function HomePage() {
               <b>chainId</b>: {chainId}
             </li>
             <li>
-              <b>ENS Name / Address</b>: <Name address={address} showAddress />
+              <b>ENS Name / Address</b>: <Name address={address} />
             </li>
           </ul>
         </div>
