@@ -1,17 +1,14 @@
 'use client';
-import { useAccount, useEnsName } from 'wagmi';
+import { useAccount } from 'wagmi';
 import Footer from '@/components/layout/footer/Footer';
 import Header from '@/components/layout/header/Header';
 
+/**
+ * Use the page component to wrap the components
+ * that you want to render on the page.
+ */
 export default function HomePage() {
-  const { address, status, chainId } = useAccount();
-  const { data: name, isLoading, isError } = useEnsName({ address });
-
-  console.log('Account:', { address, status, chainId });
-  console.log('ENS Name:', { name, isLoading, isError });
-
-  if (isLoading) return <div>Loading...</div>;
-  if (isError) return <div>Error fetching ENS name</div>;
+  const account = useAccount();
 
   return (
     <>
@@ -23,16 +20,13 @@ export default function HomePage() {
           <h3 className="text-lg">Account</h3>
           <ul>
             <li>
-              <b>status</b>: {status}
+              <b>status</b>: {account.status}
             </li>
             <li>
-              <b>address</b>: {address}
+              <b>addresses</b>: {JSON.stringify(account.addresses)}
             </li>
             <li>
-              <b>chainId</b>: {chainId}
-            </li>
-            <li>
-              <b>ENS Name / Address</b>: {name ?? address}
+              <b>chainId</b>: {account.chainId}
             </li>
           </ul>
         </div>
