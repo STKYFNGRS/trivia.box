@@ -1,5 +1,6 @@
 'use client';
 import { useAccount, useEnsName } from 'wagmi';
+import { Name } from '@coinbase/onchainkit/identity';
 import Footer from '@/components/layout/footer/Footer';
 import Header from '@/components/layout/header/Header';
 
@@ -9,7 +10,7 @@ import Header from '@/components/layout/header/Header';
  */
 export default function HomePage() {
   const { address, status, chainId } = useAccount();
-  const { data: ensName } = useEnsName({ address: address });
+  const { data: ensName } = useEnsName({ address });
 
   return (
     <>
@@ -32,6 +33,10 @@ export default function HomePage() {
             <li>
               <b>ENS Name / Address</b>: {ensName ?? address}
             </li>
+            <Name address={address} ensName={ensName} />
+      ) : (
+        <div>No ENS name found for {address}</div>
+            
           </ul>
         </div>
       </main>
