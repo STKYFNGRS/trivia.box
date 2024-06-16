@@ -1,4 +1,5 @@
 'use client';
+import { Name } from '@coinbase/onchainkit/identity';
 import { useAccount } from 'wagmi';
 import Footer from '@/components/layout/footer/Footer';
 import Header from '@/components/layout/header/Header';
@@ -8,7 +9,9 @@ import Header from '@/components/layout/header/Header';
  * that you want to render on the page.
  */
 export default function HomePage() {
-  const account = useAccount();
+  const { address, chainId, status } = useAccount();
+
+  if (!address) return null;
 
   return (
     <>
@@ -20,13 +23,16 @@ export default function HomePage() {
           <h3 className="text-lg">Account</h3>
           <ul>
             <li>
-              <b>status</b>: {account.status}
+              <b>status</b>: {status}
             </li>
             <li>
-              <b>addresses</b>: {JSON.stringify(account.addresses)}
+              <b>addresses</b>: {address}
             </li>
             <li>
-              <b>chainId</b>: {account.chainId}
+              <b>chainId</b>: {chainId}
+            </li>
+            <li>
+              <Name address={address} showAddress />
             </li>
           </ul>
         </div>
