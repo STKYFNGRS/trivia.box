@@ -1,6 +1,6 @@
 'use client';
-import { useAccount, useEnsName } from 'wagmi';
 import { Name } from '@coinbase/onchainkit/identity';
+import { useAccount, useEnsName } from 'wagmi';
 import Footer from '@/components/layout/footer/Footer';
 import Header from '@/components/layout/header/Header';
 
