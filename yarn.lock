@@ -14084,7 +14084,7 @@ __metadata:
     "@babel/preset-react": "npm:^7.23.3"
     "@babel/preset-typescript": "npm:^7.23.3"
     "@coinbase/onchainkit": "npm:0.16.10"
-    "@coinbase/wallet-sdk": "npm:4.0.0"
+    "@coinbase/wallet-sdk": "npm:^4.0.0-beta.0"
     "@farcaster/hub-nodejs": "npm:^0.11.9"
     "@jest/globals": "npm:^29.7.0"
     "@radix-ui/react-dropdown-menu": "npm:^2.0.6"
@@ -14194,8 +14194,8 @@ __metadata:
   linkType: hard
 
 "ts-jest@npm:^29.1.1":
-  version: 29.1.4
-  resolution: "ts-jest@npm:29.1.4"
+  version: 29.1.5
+  resolution: "ts-jest@npm:29.1.5"
   dependencies:
     bs-logger: "npm:0.x"
     fast-json-stable-stringify: "npm:2.x"
@@ -14225,7 +14225,7 @@ __metadata:
       optional: true
   bin:
     ts-jest: cli.js
-  checksum: 10c0/97def10be26a553e529dfacafe264fa9833d638052bc2b1ebe6301262ae2d3e43954f4d91f2d2d07cf92352cdd4fa163a86f8116a1f6bb8cef7060cddfec794b
+  checksum: 10c0/5c1baf4d23342e138745d6283ae530b07957b779b103abc99fd6713e1fd7fc65d4a4638695d5a76e177f78c46c80ec53598b365f245997db5d3d00617940bf87
   languageName: node
   linkType: hard
 
@@ -15633,8 +15633,8 @@ __metadata:
   linkType: hard
 
 "ws@npm:^8.11.0":
-  version: 8.17.0
-  resolution: "ws@npm:8.17.0"
+  version: 8.17.1
+  resolution: "ws@npm:8.17.1"
   peerDependencies:
     bufferutil: ^4.0.1
     utf-8-validate: ">=5.0.2"
@@ -15643,7 +15643,7 @@ __metadata:
       optional: true
     utf-8-validate:
       optional: true
-  checksum: 10c0/55241ec93a66fdfc4bf4f8bc66c8eb038fda2c7a4ee8f6f157f2ca7dc7aa76aea0c0da0bf3adb2af390074a70a0e45456a2eaf80e581e630b75df10a64b0a990
+  checksum: 10c0/f4a49064afae4500be772abdc2211c8518f39e1c959640457dcee15d4488628620625c783902a52af2dd02f68558da2868fd06e6fd0e67ebcd09e6881b1b5bfe
   languageName: node
   linkType: hard
 
