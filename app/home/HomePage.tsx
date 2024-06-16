@@ -8,8 +8,8 @@ import Header from '@/components/layout/header/Header';
  * that you want to render on the page.
  */
 export default function HomePage() {
-  const { address, status, chainId } = useAccount();
-  const { data: ensName } = useEnsName({ address: address });
+  const account = useAccount();
+  const { data: name } = useEnsName({ address: account.address });
 
   return (
     <>
@@ -21,16 +21,16 @@ export default function HomePage() {
           <h3 className="text-lg">Account</h3>
           <ul>
             <li>
-              <b>status</b>: {status}
+              <b>status</b>: {account.status}
             </li>
             <li>
-              <b>address</b>: {address}
+              <b>address</b>: {account.address}
             </li>
             <li>
-              <b>chainId</b>: {chainId}
+              <b>chainId</b>: {account.chainId}
             </li>
             <li>
-              <b>ENS Name / Address</b>: {ensName ?? address}
+              <b>ENS Name / Address</b>: {name ?? account.address}
             </li>
           </ul>
         </div>
