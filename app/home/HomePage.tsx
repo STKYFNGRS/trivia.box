@@ -9,8 +9,8 @@ import Header from '@/components/layout/header/Header';
  */
 export default function HomePage() {
   const account = useAccount();
-  const { data: name } = useEnsName({ address: account.addresses?.[0] });
-  console.log('ensName:', name);
+  const { data: ensName } = useEnsName({ address: account.address});
+  console.log('ensName:', ensName);
 
   return (
     <>
@@ -31,7 +31,7 @@ export default function HomePage() {
               <b>chainId</b>: {account.chainId}
             </li>
             <li>
-              <b>ENS Name / Address</b>: {name ?? account.addresses?.[0]}
+              <b>ENS Name / Address</b>: {ensName ?? account.address}
             </li>
           </ul>
         </div>
