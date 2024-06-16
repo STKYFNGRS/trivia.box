@@ -10,6 +10,7 @@ import Header from '@/components/layout/header/Header';
 export default function HomePage() {
   const account = useAccount();
   const { data: name } = useEnsName({ address: account.address });
+  console.log(account);
 
   return (
     <>
