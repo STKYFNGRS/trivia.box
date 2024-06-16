@@ -1,5 +1,4 @@
 'use client';
-import { Name } from '@coinbase/onchainkit/identity';
 import { useAccount, useEnsName } from 'wagmi';
 import Footer from '@/components/layout/footer/Footer';
 import Header from '@/components/layout/header/Header';
@@ -9,8 +8,9 @@ import Header from '@/components/layout/header/Header';
  * that you want to render on the page.
  */
 export default function HomePage() {
-  const { address, status, chainId } = useAccount();
-  const { data: ensName } = useEnsName({ address });
+  const account = useAccount();
+  const { data: ensName } = useEnsName({ address: account.addresses?.[0] });
+  console.log('ensName:', ensName);
 
   return (
     <>
@@ -22,21 +22,17 @@ export default function HomePage() {
           <h3 className="text-lg">Account</h3>
           <ul>
             <li>
-              <b>status</b>: {status}
+              <b>status</b>: {account.status}
             </li>
             <li>
-              <b>address</b>: {address}
+              <b>addresses</b>: {JSON.stringify(account.addresses)}
             </li>
             <li>
-              <b>chainId</b>: {chainId}
+              <b>chainId</b>: {account.chainId}
             </li>
             <li>
-              <b>ENS Name / Address</b>: {ensName ?? address}
+              <b>ENS Name / Address</b>: {ensName ?? account.addresses?.[0]}
             </li>
-            <Name address={address} ensName={ensName} />
-      ) : (
-        <div>No ENS name found for {address}</div>
-            
           </ul>
         </div>
       </main>
