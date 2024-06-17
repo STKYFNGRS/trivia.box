@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const rpcUrl = process.env.NEXT_PRIVATE_RPC_URL;
-
 export async function POST(req: NextRequest) {
+  const rpcUrl = process.env.NEXT_PRIVATE_RPC_URL;
   console.log('RPC URL:', rpcUrl);  // Add this line for debugging
   
   if (rpcUrl === undefined) {
