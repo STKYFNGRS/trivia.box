@@ -1,38 +1,20 @@
 'use client';
-
-import { useAccount } from 'wagmi';
 import Footer from '@/components/layout/footer/Footer';
-import Header from '@/components/layout/header/Header';
+import Guide from './_components/Guide';
+import HomeHeader from './_components/HomeHeader';
+import WhyUseIt from './_components/WhyUseIt';
 
 /**
  * Use the page component to wrap the components
  * that you want to render on the page.
  */
 export default function HomePage() {
-  const { address, chainId, status } = useAccount();
-
-  if (!address) return null;
-
   return (
     <>
-      <Header />
+      <HomeHeader />
       <main className="container mx-auto flex flex-col px-8 py-16">
-        <div>
-          <h2 className="text-xl">Developer information</h2>
-          <br />
-          <h3 className="text-lg">Account</h3>
-          <ul>
-            <li>
-              <b>status</b>: {status}
-            </li>
-            <li>
-              <b>addresses</b>: {address}
-            </li>
-            <li>
-              <b>chainId</b>: {chainId}
-            </li>
-          </ul>
-        </div>
+        <WhyUseIt />
+        <Guide />
       </main>
       <Footer />
     </>

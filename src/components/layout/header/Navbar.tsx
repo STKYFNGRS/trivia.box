@@ -1,4 +1,4 @@
-import { ChevronDownIcon } from '@radix-ui/react-icons';
+import { ChevronDownIcon, GitHubLogoIcon } from '@radix-ui/react-icons';
 import * as NavigationMenu from '@radix-ui/react-navigation-menu';
 import { clsx } from 'clsx';
 import NextLink from 'next/link';
@@ -40,7 +40,7 @@ export function NavbarTitle() {
         className="font-robotoMono text-center text-xl font-medium text-white no-underline"
         aria-label="build-onchain-apps Github repository"
       >
-        Trivia Box
+        BUILD ONCHAIN APPS
       </NextLink>
     </div>
   );
@@ -58,6 +58,18 @@ function Navbar() {
         <NavbarTitle />
         <div className="flex items-center justify-start gap-8">
           <ul className="hidden items-center justify-start gap-8 md:flex">
+            <li className="flex">
+              <NavbarLink href="https://github.com/coinbase/build-onchain-apps" target="_blank">
+                <GitHubLogoIcon
+                  width="24"
+                  height="24"
+                  aria-label="build-onchain-apps Github respository"
+                />
+              </NavbarLink>
+            </li>
+            <li className="flex">
+              <NavbarLink href="/#get-started">Get Started</NavbarLink>
+            </li>
             <li className="flex">
               <NavigationMenu.Root className="relative">
                 <NavigationMenu.List className={clsx('flex flex-row space-x-2')}>

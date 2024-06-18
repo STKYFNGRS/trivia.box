@@ -2,8 +2,9 @@ import { generateMetadata } from '@/utils/generateMetadata';
 import HomePage from './home/HomePage';
 
 export const metadata = generateMetadata({
-  title: 'Trivia Box',
-  description: 'Onchain Trivia, Games and Puzzles',
+  title: 'Build Onchain Apps Template',
+  description:
+    'Save weeks of initial app setup and the hassle of integrating onchain components with web2 infrastructure.',
   images: 'themes.png',
   pathname: '',
 });

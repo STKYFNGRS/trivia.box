@@ -1,7 +1,5 @@
 import './global.css';
 
-import { Analytics } from '@vercel/analytics/react';
-import { SpeedInsights } from '@vercel/speed-insights/next';
 import GoogleAnalytics from '@/components/GoogleAnalytics/GoogleAnalytics';
 import OnchainProviders from '@/OnchainProviders';
 import { initAnalytics } from '@/utils/analytics';
@@ -33,8 +31,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="flex flex-1 flex-col">
         <OnchainProviders>{children}</OnchainProviders>
       </body>
-      <Analytics />
-      <SpeedInsights />
       <GoogleAnalytics />
     </html>
   );
