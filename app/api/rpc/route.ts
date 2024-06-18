@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { NextRequest, NextResponse } from 'next/server';
 
 const rpcUrl = process.env.NEXT_PRIVATE_RPC_URL;
@@ -16,32 +17,26 @@ export async function POST(req: NextRequest) {
 
   try {
     // Forward the request to the Coinbase Developer Platform RPC
-    const response = await fetch(rpcUrl, {
-      method: req.method,
+    const response = await axios({
+      method: 'POST',
+      url: rpcUrl,
       headers: req.headers,
-      body: req.body as BodyInit, // Type assertion to ensure body is correctly typed
+      data: req.body,
     });
 
-    // Check if the response is OK (status code 2xx)
-    if (!response.ok) {
-      throw new Error(`Fetch error: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json() as Record<string, unknown>; // Ensure the response data is typed
-
     // Return the response data to the client
-    return NextResponse.json(data, {
+    return NextResponse.json(response.data, {
       status: response.status,
       statusText: response.statusText,
     });
   } catch (error) {
-    console.error('Error:', (error as Error).message);
+    console.error('Error:', error.message);
 
     // Return a 500 Internal Server Error response
     return NextResponse.json(
       {
         error: 'Internal Server Error',
-        message: (error as Error).message,
+        message: error.message,
       },
       {
         status: 500,
