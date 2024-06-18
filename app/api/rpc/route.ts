@@ -8,34 +8,20 @@ export async function POST(req: NextRequest) {
       {},
       {
         status: 401,
-        statusText: 'You need a RPC URL! Get yours at https://www.coinbase.com/developer-platform/products/base-node?utm_source=boat',
+        statusText:
+          'You need a RPC URL! Get yours at https://www.coinbase.com/developer-platform/products/base-node?utm_source=boat',
       },
     );
   }
 
-  const requestMethod = req.method;
-  const requestBody = await req.text(); // Use req.text() to get the request body as a string
-
-  // Create a new Headers instance and copy the headers from req.headers
-  const headers = new Headers();
-  for (const [key, value] of req.headers.entries()) {
-    headers.set(key, value);
-  }
-
-  // Forward to Coinbase Developer Platform RPC
-  return fetch(rpcUrl, {
-    method: requestMethod,
-    body: requestMethod !== 'GET' && requestMethod !== 'HEAD' ? requestBody : undefined,
-    headers,
-  })
+  // forward to Coinbase Developer Platform RPC
+  return fetch(rpcUrl, req)
     .then(async (response) => {
       // Return the response data to the client
-      const webResp = new NextResponse(response.body, {
+      return NextResponse.json(await response.json(), {
         status: response.status,
         statusText: response.statusText,
-        headers: response.headers,
       });
-      return webResp;
     })
     .catch((error) => {
       console.error('Error:', error);
