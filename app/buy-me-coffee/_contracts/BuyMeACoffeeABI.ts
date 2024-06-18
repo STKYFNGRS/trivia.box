@@ -4,259 +4,259 @@
  */
 const abi = [
   {
-    "type": "constructor",
-    "inputs": [],
-    "stateMutability": "nonpayable"
+    type: 'constructor',
+    inputs: [],
+    stateMutability: 'nonpayable',
   },
   {
-    "type": "receive",
-    "stateMutability": "payable"
+    type: 'receive',
+    stateMutability: 'payable',
   },
   {
-    "type": "function",
-    "name": "buyCoffee",
-    "inputs": [
+    type: 'function',
+    name: 'buyCoffee',
+    inputs: [
       {
-        "name": "numCoffees",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: 'numCoffees',
+        type: 'uint256',
+        internalType: 'uint256',
       },
       {
-        "name": "message",
-        "type": "string",
-        "internalType": "string"
-      }
+        name: 'message',
+        type: 'string',
+        internalType: 'string',
+      },
     ],
-    "outputs": [],
-    "stateMutability": "payable"
+    outputs: [],
+    stateMutability: 'payable',
   },
   {
-    "type": "function",
-    "name": "getMemos",
-    "inputs": [
+    type: 'function',
+    name: 'getMemos',
+    inputs: [
       {
-        "name": "index",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: 'index',
+        type: 'uint256',
+        internalType: 'uint256',
       },
       {
-        "name": "size",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: 'size',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "tuple[]",
-        "internalType": "struct Memo[]",
-        "components": [
+        name: '',
+        type: 'tuple[]',
+        internalType: 'struct Memo[]',
+        components: [
           {
-            "name": "numCoffees",
-            "type": "uint256",
-            "internalType": "uint256"
+            name: 'numCoffees',
+            type: 'uint256',
+            internalType: 'uint256',
           },
           {
-            "name": "message",
-            "type": "string",
-            "internalType": "string"
+            name: 'message',
+            type: 'string',
+            internalType: 'string',
           },
           {
-            "name": "time",
-            "type": "uint256",
-            "internalType": "uint256"
+            name: 'time',
+            type: 'uint256',
+            internalType: 'uint256',
           },
           {
-            "name": "userAddress",
-            "type": "address",
-            "internalType": "address"
-          }
-        ]
-      }
+            name: 'userAddress',
+            type: 'address',
+            internalType: 'address',
+          },
+        ],
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: 'view',
   },
   {
-    "type": "function",
-    "name": "memos",
-    "inputs": [
+    type: 'function',
+    name: 'memos',
+    inputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "numCoffees",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: 'numCoffees',
+        type: 'uint256',
+        internalType: 'uint256',
       },
       {
-        "name": "message",
-        "type": "string",
-        "internalType": "string"
+        name: 'message',
+        type: 'string',
+        internalType: 'string',
       },
       {
-        "name": "time",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: 'time',
+        type: 'uint256',
+        internalType: 'uint256',
       },
       {
-        "name": "userAddress",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: 'userAddress',
+        type: 'address',
+        internalType: 'address',
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: 'view',
   },
   {
-    "type": "function",
-    "name": "modifyMemoMessage",
-    "inputs": [
+    type: 'function',
+    name: 'modifyMemoMessage',
+    inputs: [
       {
-        "name": "index",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: 'index',
+        type: 'uint256',
+        internalType: 'uint256',
       },
       {
-        "name": "message",
-        "type": "string",
-        "internalType": "string"
-      }
+        name: 'message',
+        type: 'string',
+        internalType: 'string',
+      },
     ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
-    "type": "function",
-    "name": "owner",
-    "inputs": [],
-    "outputs": [
+    type: 'function',
+    name: 'owner',
+    inputs: [],
+    outputs: [
       {
-        "name": "",
-        "type": "address",
-        "internalType": "address payable"
-      }
+        name: '',
+        type: 'address',
+        internalType: 'address payable',
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: 'view',
   },
   {
-    "type": "function",
-    "name": "price",
-    "inputs": [],
-    "outputs": [
+    type: 'function',
+    name: 'price',
+    inputs: [],
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: 'view',
   },
   {
-    "type": "function",
-    "name": "removeMemo",
-    "inputs": [
+    type: 'function',
+    name: 'removeMemo',
+    inputs: [
       {
-        "name": "index",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: 'index',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
     ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
-    "type": "function",
-    "name": "setPriceForCoffee",
-    "inputs": [
+    type: 'function',
+    name: 'setPriceForCoffee',
+    inputs: [
       {
-        "name": "_price",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: '_price',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
     ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
-    "type": "function",
-    "name": "withdrawTips",
-    "inputs": [],
-    "outputs": [],
-    "stateMutability": "nonpayable"
+    type: 'function',
+    name: 'withdrawTips',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
-    "type": "event",
-    "name": "BuyMeACoffeeEvent",
-    "inputs": [
+    type: 'event',
+    name: 'BuyMeACoffeeEvent',
+    inputs: [
       {
-        "name": "buyer",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
+        name: 'buyer',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
       },
       {
-        "name": "price",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
+        name: 'price',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "event",
-    "name": "NewMemo",
-    "inputs": [
+    type: 'event',
+    name: 'NewMemo',
+    inputs: [
       {
-        "name": "userAddress",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
+        name: 'userAddress',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
       },
       {
-        "name": "time",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
+        name: 'time',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
       },
       {
-        "name": "numCoffees",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
+        name: 'numCoffees',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
       },
       {
-        "name": "message",
-        "type": "string",
-        "indexed": false,
-        "internalType": "string"
-      }
+        name: 'message',
+        type: 'string',
+        indexed: false,
+        internalType: 'string',
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "error",
-    "name": "InsufficientFunds",
-    "inputs": []
+    type: 'error',
+    name: 'InsufficientFunds',
+    inputs: [],
   },
   {
-    "type": "error",
-    "name": "InvalidArguments",
-    "inputs": [
+    type: 'error',
+    name: 'InvalidArguments',
+    inputs: [
       {
-        "name": "message",
-        "type": "string",
-        "internalType": "string"
-      }
-    ]
+        name: 'message',
+        type: 'string',
+        internalType: 'string',
+      },
+    ],
   },
   {
-    "type": "error",
-    "name": "OnlyOwner",
-    "inputs": []
+    type: 'error',
+    name: 'OnlyOwner',
+    inputs: [],
   },
 ] as const;
 

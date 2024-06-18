@@ -1,9 +1,5 @@
 import { useCallback, useState } from 'react';
-import {
-  ChevronDownIcon,
-  Cross1Icon,
-  HamburgerMenuIcon,
-} from '@radix-ui/react-icons';
+import { ChevronDownIcon, Cross1Icon, HamburgerMenuIcon } from '@radix-ui/react-icons';
 import * as NavigationMenu from '@radix-ui/react-navigation-menu';
 import { clsx } from 'clsx';
 import AccountConnect from './AccountConnect';

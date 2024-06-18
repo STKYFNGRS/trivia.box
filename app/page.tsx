@@ -3,8 +3,7 @@ import HomePage from './home/HomePage';
 
 export const metadata = generateMetadata({
   title: 'Trivia Box',
-  description:
-    'Onchain Trivia, Games and Puzzles',
+  description: 'Onchain Trivia, Games and Puzzles',
   images: 'themes.png',
   pathname: '',
 });
