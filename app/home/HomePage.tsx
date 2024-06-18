@@ -1,5 +1,5 @@
 'use client';
-import { Name } from '@coinbase/onchainkit/identity';
+
 import { useAccount } from 'wagmi';
 import Footer from '@/components/layout/footer/Footer';
 import Header from '@/components/layout/header/Header';
@@ -30,9 +30,6 @@ export default function HomePage() {
             </li>
             <li>
               <b>chainId</b>: {chainId}
-            </li>
-            <li>
-              <b>ENS Name</b>: <Name address={address} />
             </li>
           </ul>
         </div>
