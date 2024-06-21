@@ -7,7 +7,7 @@ describe('useBuyMeACoffeeContract', () => {
     const contract = useBuyMeACoffeeContract();
     expect(contract).toEqual({
       abi: BuyMeACoffeeABI,
-      address: '0x3789FA005a28ed00cdA5259cA4D0d3ED97D7dAa8',
+      address: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
       status: 'ready',
       supportedChains: [baseSepolia],
     });
