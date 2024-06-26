@@ -1,6 +1,6 @@
 'use client';
 
-import { GitHubLogoIcon, ArrowTopRightIcon } from '@radix-ui/react-icons';
+import { ArrowTopRightIcon } from '@radix-ui/react-icons';
 import NextLink from 'next/link';
 import { NavbarLink } from '@/components/layout/header/Navbar';
 import FooterIcon from './FooterIcon';
@@ -20,29 +20,14 @@ export default function Footer() {
                 passHref
                 className="font-robotoMono text-center text-xl font-medium text-white no-underline"
               >
-                BUILD ONCHAIN APPS
+                Trivia.Box
               </NextLink>
-              <NavbarLink href="https://github.com/coinbase/build-onchain-apps" target="_blank">
-                <GitHubLogoIcon
-                  width="24"
-                  height="24"
-                  aria-label="build-onchain-apps Github respository"
-                />
-              </NavbarLink>
             </div>
 
             <div className="mt-8 flex flex-col items-center justify-center">
-              <p className="text-base font-normal leading-7 text-boat-footer-light-gray">
-                This project is licensed under the MIT License - see the{' '}
-                <NextLink
-                  href="https://github.com/coinbase/build-onchain-apps/blob/main/LICENSE.md"
-                  className="underline"
-                  target="_blank"
-                >
-                  LICENSE.md
-                </NextLink>{' '}
-                file for details
-              </p>
+            <p>
+              &copy; {new Date().getFullYear()} ❤️ STKYFNGRS. All rights reserved.
+            </p>
             </div>
           </div>
 
