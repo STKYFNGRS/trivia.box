@@ -115,7 +115,7 @@ function SolarSystemSimulation() {
       createPlanet(9, 0.3, 0.002, THREE.MathUtils.degToRad(1.77), neptuneTexture), // Neptune
     ];
 
-    camera.position.z = 15;
+    camera.position.z = 12; // Adjust this value to zoom in or out
 
     const animate = () => {
       requestAnimationFrame(animate);
