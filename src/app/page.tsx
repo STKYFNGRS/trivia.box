@@ -1,12 +1,23 @@
+'use client';
 
+import dynamic from 'next/dynamic';
+
+// Dynamically import the Web3Provider with no SSR
+const Web3Provider = dynamic(
+  () => import('@/components/Web3Provider').then(mod => mod.Web3Provider),
+  { ssr: false }
+);
+
+// Dynamically import the ClientPage with no SSR
+const ClientPage = dynamic(
+  () => import('@/components/ClientPage'),
+  { ssr: false }
+);
 
 export default function Home() {
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        
-      </main>
-      
-    </div>
+    <Web3Provider>
+      <ClientPage />
+    </Web3Provider>
   );
 }
