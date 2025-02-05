@@ -18,14 +18,14 @@ export default function ClientPage() {
       {isConnected ? (
         <>
           <Header />
-          <main className="relative flex flex-col items-center justify-center min-h-screen px-4">
+          <main className="relative flex flex-col items-center justify-center min-h-screen px-4 py-20">
             {/* Connected state content */}
           </main>
           <GameModal />
         </>
       ) : (
         <main className="relative flex flex-col items-center justify-center min-h-screen px-4">
-         <div className="relative max-w-4xl mx-auto px-2 sm:px-4">
+         <div className="relative max-w-4xl mx-auto px-2 sm:px-4 py-6 sm:py-0">
             <div className="absolute inset-0 bg-gradient-to-r from-[#FF3366]/10 via-transparent to-[#FF8C42]/10 blur-3xl pointer-events-none" />
             
             <div className="relative text-center space-y-8">
