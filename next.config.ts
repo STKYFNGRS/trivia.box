@@ -13,15 +13,17 @@ const nextConfig: NextConfig = {
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
-  env: {
-    NEXT_PUBLIC_NODE_ENV: process.env.NODE_ENV
-  },
-  webpack: (config) => {
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      '@lit-labs/motion': '@lit-labs/motion/dist/motion.min.js',
-      '@lit-labs/observers': '@lit-labs/observers/dist/observers.min.js'
-    };
+  webpack: (config, { dev, isServer }) => {
+    // Lit configuration for production
+    if (!dev && !isServer) {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        '@lit/reactive-element': '@lit/reactive-element/reactive-element.js',
+        'lit': 'lit/index.js',
+        'lit-element': 'lit-element/lit-element.js',
+        'lit-html': 'lit-html/lit-html.js',
+      };
+    }
     return config;
   }
 };

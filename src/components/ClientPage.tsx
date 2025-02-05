@@ -6,8 +6,6 @@ import Header from "./shared/Header";
 import Footer from "./shared/Footer";
 import GameModal from "./game/GameModal";
 import ParticleBackground from "./ui/ParticleBackground";
-import Web3ModalButton from "./shared/Web3ModalButton";
-
 import CustomConnectButton from "./shared/CustomConnectButton";
 
 export default function ClientPage() {
@@ -83,13 +81,6 @@ export default function ClientPage() {
         </main>
       )}
       <Footer />
-
-      <style jsx global>{`
-        w3m-button {
-          margin: 0 auto;
-          display: block;
-        }
-      `}</style>
     </div>
   );
 }
