@@ -121,7 +121,7 @@ export default function Header() {
 }
 
 interface StatsCardProps {
-  icon: JSX.Element;
+  icon: React.ReactNode;
   label: string;
   value: string;
   color: 'yellow' | 'purple' | 'green' | 'orange';
