@@ -33,7 +33,7 @@ interface CyberButtonProps {
 }
 
 const CyberButton = ({ children, selected, correct, revealed, onClick }: CyberButtonProps) => {
-  let buttonClass = "w-full text-left px-6 py-4 rounded-lg relative overflow-hidden transition-all duration-300 ";
+  let buttonClass = "w-full text-left px-4 sm:px-6 py-3 sm:py-4 rounded-lg relative overflow-hidden transition-all duration-300 ";
   let glowClass = "";
   let borderClass = "border border-white/10 hover:border-cyan-500/50 group";
 
@@ -62,7 +62,7 @@ const CyberButton = ({ children, selected, correct, revealed, onClick }: CyberBu
       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
       <div className="relative z-10 flex items-center">
         <div className="flex-grow">
-          <span className="text-lg font-medium text-white/90">{children}</span>
+          <span className="text-base sm:text-lg font-medium text-white/90">{children}</span>
         </div>
         {revealed && correct && (
           <div className="text-green-400">
@@ -177,13 +177,13 @@ export default function GameModal() {
   const correctAnswer = "Base";
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-40 p-4">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-40 p-2 sm:p-4">
       <div className="bg-[#0D1117]/90 w-full max-w-2xl rounded-2xl overflow-hidden border border-white/10">
         {/* Question Header */}
-        <div className="relative px-6 py-4 border-b border-white/10 bg-gradient-to-r from-black/50 via-cyan-500/10 to-black/50">
+        <div className="relative px-4 sm:px-6 py-3 sm:py-4 border-b border-white/10 bg-gradient-to-r from-black/50 via-cyan-500/10 to-black/50">
           <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent" />
           <div className="relative flex justify-between items-center">
-            <h3 className="text-lg font-semibold text-white/90">Daily Challenge</h3>
+            <h3 className="text-base sm:text-lg font-semibold text-white/90">Daily Challenge</h3>
             <button 
               onClick={handleClose}
               className="text-white/50 hover:text-white/90 transition-colors"
@@ -197,10 +197,10 @@ export default function GameModal() {
         </div>
 
         {/* Question Content */}
-        <div className="p-6 space-y-6">
+        <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
           <div className="space-y-2">
             <div className="text-sm text-cyan-400/80 uppercase tracking-wider font-medium">Question:</div>
-            <p className="text-lg text-white/90">Which layer 2 blockchain is this game built on?</p>
+            <p className="text-base sm:text-lg text-white/90">Which layer 2 blockchain is this game built on?</p>
           </div>
 
           <div className="grid gap-3">
@@ -219,7 +219,7 @@ export default function GameModal() {
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-white/10 bg-gradient-to-r from-black/50 via-purple-500/10 to-black/50">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-white/10 bg-gradient-to-r from-black/50 via-purple-500/10 to-black/50">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 text-sm">

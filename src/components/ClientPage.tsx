@@ -25,12 +25,12 @@ export default function ClientPage() {
         </>
       ) : (
         <main className="relative flex flex-col items-center justify-center min-h-screen px-4">
-         <div className="relative max-w-4xl mx-auto px-4">
+         <div className="relative max-w-4xl mx-auto px-2 sm:px-4">
             <div className="absolute inset-0 bg-gradient-to-r from-[#FF3366]/10 via-transparent to-[#FF8C42]/10 blur-3xl pointer-events-none" />
             
             <div className="relative text-center space-y-8">
               <div className="space-y-4">
-                <h1 className="text-8xl font-bold tracking-tight">
+                <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight">
                   <span className="text-[#E8DED1]">Welcome to</span>
                   <br />
                   <span className="bg-gradient-to-r from-[#FF3366] to-[#FF8C42] text-transparent bg-clip-text">
@@ -38,13 +38,13 @@ export default function ClientPage() {
                   </span>
                 </h1>
                 
-                <p className="text-2xl font-medium text-[#D4A373]">
+                <p className="text-lg sm:text-xl lg:text-2xl font-medium text-[#D4A373]">
                   Test your knowledge, earn rewards, and climb the global leaderboard
                 </p>
               </div>
 
-              <div className="grid grid-cols-3 gap-6 py-12 animate-fade-in-up" style={{animationDelay: '200ms'}}>
-                <div className="p-6 rounded-2xl bg-[#0D0D17]/90 border border-[#FF3366]/20 shadow-lg shadow-[#FF3366]/5 group hover:border-[#FF3366]/40 transition-all duration-300">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 py-8 sm:py-12 animate-fade-in-up" style={{animationDelay: '200ms'}}>
+                <div className="p-4 sm:p-6 rounded-2xl bg-[#0D0D17]/90 border border-[#FF3366]/20 shadow-lg shadow-[#FF3366]/5 group hover:border-[#FF3366]/40 transition-all duration-300">
                   <div className="flex flex-col items-center gap-4">
                     <div className="w-12 h-12 rounded-xl bg-[#FF3366]/20 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
                       <Calendar className="w-6 h-6 text-[#FF3366] group-hover:rotate-12 transition-transform duration-300" />
@@ -53,7 +53,7 @@ export default function ClientPage() {
                   </div>
                 </div>
 
-                <div className="p-6 rounded-2xl bg-[#0D0D17]/90 border border-[#FF6B6B]/20 shadow-lg shadow-[#FF6B6B]/5 group hover:border-[#FF6B6B]/40 transition-all duration-300">
+                <div className="p-4 sm:p-6 rounded-2xl bg-[#0D0D17]/90 border border-[#FF6B6B]/20 shadow-lg shadow-[#FF6B6B]/5 group hover:border-[#FF6B6B]/40 transition-all duration-300">
                   <div className="flex flex-col items-center gap-4">
                     <div className="w-12 h-12 rounded-xl bg-[#FF6B6B]/20 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
                       <CircleDollarSign className="w-6 h-6 text-[#FF6B6B] group-hover:rotate-12 transition-transform duration-300" />
@@ -62,7 +62,7 @@ export default function ClientPage() {
                   </div>
                 </div>
 
-                <div className="p-6 rounded-2xl bg-[#0D0D17]/90 border border-[#FF8C42]/20 shadow-lg shadow-[#FF8C42]/5 group hover:border-[#FF8C42]/40 transition-all duration-300">
+                <div className="p-4 sm:p-6 rounded-2xl bg-[#0D0D17]/90 border border-[#FF8C42]/20 shadow-lg shadow-[#FF8C42]/5 group hover:border-[#FF8C42]/40 transition-all duration-300">
                   <div className="flex flex-col items-center gap-4">
                     <div className="w-12 h-12 rounded-xl bg-[#FF8C42]/20 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
                       <Trophy className="w-6 h-6 text-[#FF8C42] group-hover:rotate-12 transition-transform duration-300" />
