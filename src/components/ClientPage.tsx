@@ -1,15 +1,41 @@
 'use client';
 
 import { Calendar, CircleDollarSign, Trophy } from 'lucide-react';
-import { useAccount } from "wagmi";
+import { useAccount, useDisconnect } from "wagmi";
 import Header from "./shared/Header";
 import Footer from "./shared/Footer";
 import GameModal from "./game/GameModal";
 import ParticleBackground from "./ui/ParticleBackground";
 import CustomConnectButton from "./shared/CustomConnectButton";
+import { useEffect } from 'react';
+import { clearWeb3Storage } from '@/utils/storage';
 
 export default function ClientPage() {
   const { isConnected } = useAccount();
+  const { disconnect } = useDisconnect();
+
+  // Handle connection state changes
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key?.startsWith('w3m')) {
+        // Only clear non-essential storage when connection state changes
+        clearWeb3Storage();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // Handle unmount cleanup
+  useEffect(() => {
+    return () => {
+      if (process.env.NODE_ENV === 'development') {
+        disconnect();
+        clearWeb3Storage();
+      }
+    };
+  }, [disconnect]);
 
   return (
     <div className="min-h-screen bg-[#0D0D17] relative overflow-hidden">
@@ -25,7 +51,7 @@ export default function ClientPage() {
         </>
       ) : (
         <main className="relative flex flex-col items-center justify-center min-h-screen px-4">
-         <div className="relative max-w-4xl mx-auto px-2 sm:px-4 py-6 sm:py-0">
+          <div className="relative max-w-4xl mx-auto px-2 sm:px-4 py-6 sm:py-0">
             <div className="absolute inset-0 bg-gradient-to-r from-[#FF3366]/10 via-transparent to-[#FF8C42]/10 blur-3xl pointer-events-none" />
             
             <div className="relative text-center space-y-8">
@@ -74,7 +100,7 @@ export default function ClientPage() {
 
               <div className="pt-6 flex flex-col items-center gap-2">
                 <CustomConnectButton />
-                <span className="text-sm text-white/50">Open Beta</span>
+              
               </div>
             </div>
           </div>

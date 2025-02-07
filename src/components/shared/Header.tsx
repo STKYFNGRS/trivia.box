@@ -1,9 +1,9 @@
 'use client';
 
-import { useWeb3Modal } from '@web3modal/wagmi/react';
 import { useState } from 'react';
 import { Menu } from 'lucide-react';
 import WalletDisplay from './WalletDisplay';
+import { modal } from '@/context';
 
 interface LeaderboardEntry {
   rank: number;
@@ -25,7 +25,6 @@ const mockLeaderboard: LeaderboardEntry[] = [
 ];
 
 export default function Header() {
-  const { open } = useWeb3Modal();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   return (
@@ -72,7 +71,7 @@ export default function Header() {
               <div className="flex-1 flex justify-between gap-8">
                 {/* Stats Panel */}
                 <div className="flex-1 flex items-start gap-8 bg-black/20 rounded-xl border border-white/5 p-4">
-                  <div onClick={() => open()} className="cursor-pointer transition-transform hover:scale-105">
+                  <div onClick={() => modal.open()} className="cursor-pointer transition-transform hover:scale-105">
                     <WalletDisplay />
                   </div>
                   

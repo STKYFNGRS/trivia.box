@@ -13,6 +13,10 @@ const nextConfig: NextConfig = {
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
+  webpack: config => {
+    config.externals.push('pino-pretty', 'lokijs', 'encoding')
+    return config
+  }
 };
 
 export default nextConfig;

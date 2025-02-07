@@ -1,32 +1,38 @@
 'use client';
 
-import { useAccount, useEnsName, useEnsAvatar } from 'wagmi';
+import { useAccount, useEnsName, useEnsAvatar, useChainId } from 'wagmi';
 import Image from 'next/image';
-import { useWeb3Modal } from '@web3modal/wagmi/react';
-import Web3ModalButton from './Web3ModalButton';
+import { base } from 'wagmi/chains';
+import { modal } from '@/context';
 
 export default function WalletDisplay() {
   const { address, isConnected } = useAccount();
+  const chainId = useChainId();
   const { data: ensName } = useEnsName({
     address,
-    chainId: 1,
+    chainId: 1, // Always check ENS on mainnet
+    query: {
+      enabled: Boolean(address)
+    }
   });
   const { data: ensAvatar } = useEnsAvatar({
     name: ensName || undefined,
-    chainId: 1,
+    chainId: 1, // Always check ENS on mainnet
+    query: {
+      enabled: Boolean(ensName)
+    }
   });
-  const { open } = useWeb3Modal();
 
   const truncatedAddress = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : '...';
   const displayAddress = ensName || truncatedAddress;
 
   if (!isConnected) {
-    return <Web3ModalButton />;
+    return null; // Let the parent handle the unconnected state
   }
 
   return (
     <button
-      onClick={() => open()}
+      onClick={() => modal.open()}
       className="flex flex-col items-center gap-3 p-3 rounded-2xl bg-[#0D0D17]/60 border border-white/10 hover:bg-[#0D0D17]/80 transition-all duration-300 hover:shadow-[0_0_20px_rgba(255,51,102,0.15)] group"
     >
       {ensAvatar ? (
@@ -41,13 +47,20 @@ export default function WalletDisplay() {
       ) : (
         <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center">
           <span className="text-xl text-purple-300">
-            {address ? address.slice(2, 4) : '??'}
+            {address ? address.slice(2, 4).toUpperCase() : '??'}
           </span>
         </div>
       )}
-      <span className="text-sm font-medium text-white">
-        {displayAddress}
-      </span>
+      <div className="flex flex-col items-center gap-1">
+        <span className="text-sm font-medium text-white">
+          {displayAddress}
+        </span>
+        {chainId !== base.id && (
+          <span className="text-xs text-red-400">
+            Wrong Network
+          </span>
+        )}
+      </div>
     </button>
   );
 }

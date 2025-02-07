@@ -1,5 +1,7 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { headers } from 'next/headers';
+import AppKitProvider from '@/context';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -25,18 +27,23 @@ export const metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const headersObj = await headers();
+  const cookies = headersObj.get('cookie');
+
   return (
     <html lang="en">
       <head>
         <link rel="icon" href="/favicon.ico" sizes="any" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        {children}
+        <AppKitProvider cookies={cookies}>
+          {children}
+        </AppKitProvider>
       </body>
     </html>
   );
