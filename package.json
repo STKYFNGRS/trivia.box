@@ -15,7 +15,7 @@
     "@vercel/og": "^0.5.20",
     "clsx": "^2.0.0",
     "date-fns": "^2.30.0",
-    "ethereum-identity-kit": "^0.2.2",
+    "ethereum-identity-kit": "^0.1.7",
     "ethers": "^6.8.1",
     "formik": "^2.4.5",
     "framer-motion": "^10.16.5",
