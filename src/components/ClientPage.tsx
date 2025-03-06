@@ -78,6 +78,11 @@ export default function ClientPage() {
   // Consider connected when wallet is connected and on Base chain
   const isFullyConnected = isConnected && chainId === 8453;
   
+  // Log render info outside JSX
+  if (gameState && gameState.questions && gameState.questions.length > 0) {
+    console.log('[Debug] ClientPage: Rendering GameModal with', gameState.questions.length, 'questions and sessionId:', gameState.sessionId);
+  }
+  
   return (
     <div className="flex flex-col min-h-screen">
       <ParticleBackground gameLoading={isLoading} />
@@ -102,10 +107,9 @@ export default function ClientPage() {
               />
             )}
             
-            {/* Use explicit conditional check with console output for debugging */}
+            {/* Use explicit conditional check without console.log in JSX */}
             {gameState && gameState.questions && gameState.questions.length > 0 && (
               <div key={gameModalKey} className="game-modal-container">
-                {console.log('[Debug] ClientPage: Rendering GameModal with', gameState.questions.length, 'questions and sessionId:', gameState.sessionId)}
                 <GameModal
                   questions={gameState.questions}
                   sessionId={gameState.sessionId}
