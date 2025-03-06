@@ -117,7 +117,6 @@ export async function lookupEnsAvatar(ensName: string): Promise<string | null> {
       });
       
       // Race the avatar lookup against the timeout
-      // In ethers v6, getAvatar is now available on the EnsResolver instance
       const resolver = await provider.getResolver(ensName);
       const avatar = resolver ? await Promise.race([
         resolver.getAvatar(),
@@ -125,10 +124,10 @@ export async function lookupEnsAvatar(ensName: string): Promise<string | null> {
       ]) : null;
       
       if (avatar) {
-        console.log(`Found ENS avatar for ${ensName}: ${avatar.url}`);
+        console.log(`Found ENS avatar for ${ensName}: ${avatar}`);
         
         // Handle ipfs:// links
-        let resolvedAvatar = avatar.url;
+        let resolvedAvatar = avatar;
         if (resolvedAvatar.startsWith('ipfs://')) {
           resolvedAvatar = resolveIpfsUrl(resolvedAvatar);
           console.log(`Resolved IPFS avatar to: ${resolvedAvatar}`);
