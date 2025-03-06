@@ -1,112 +1,173 @@
 'use client';
 
-import { Calendar, CircleDollarSign, Trophy } from 'lucide-react';
-import { useAccount, useDisconnect } from "wagmi";
-import Header from "./shared/Header";
-import Footer from "./shared/Footer";
-import GameModal from "./game/GameModal";
-import ParticleBackground from "./ui/ParticleBackground";
-import CustomConnectButton from "./shared/CustomConnectButton";
-import { useEffect } from 'react';
-import { clearWeb3Storage } from '@/utils/storage';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
+import { useAccount } from 'wagmi';
+import { useGameState } from '@/hooks/useGameState';
+import dynamic from 'next/dynamic';
+import GameOptions from '@/components/game/GameOptions';
+import CustomConnectButton from '@/components/shared/CustomConnectButton';
+import Header from '@/components/shared/Header';
+import LoadingAnimation from '@/components/ui/LoadingAnimation';
+import FeatureIcons from '@/components/FeatureIcons';
+import Footer from '@/components/shared/Footer';
+import GameModalFallback from '@/components/game/GameModalFallback';
+
+// Configuration
+const DEBUG_MODE = false; // Set to false to disable debug logging
+
+// Debug logger - only logs when DEBUG_MODE is true
+const debugLog = (...args: any[]) => {
+  if (DEBUG_MODE) {
+    console.log(...args);
+  }
+};
+
+// Dynamically import heavy components with better loading experience
+const GameModal = dynamic(() => import('@/components/game/GameModal'), {
+  loading: () => <GameModalFallback />,
+  ssr: false // Disable server-side rendering for game components
+});
+
+const AchievementsDropdown = dynamic(() => import('@/components/achievements/AchievementsDropdown'), {
+  ssr: false
+});
+
+const AchievementNotifications = dynamic(() => import('@/components/achievements/AchievementNotifications'), {
+  ssr: false
+});
+
+const ParticleBackground = dynamic(() => import('@/components/ui/ParticleBackground'), {
+  ssr: false
+});
 
 export default function ClientPage() {
-  const { isConnected } = useAccount();
-  const { disconnect } = useDisconnect();
-
-  // Handle connection state changes
+  const [isAchievementsOpen, setIsAchievementsOpen] = useState(false);
+  const { address, isConnected, chainId } = useAccount();
+  const { gameState, initGame, isLoading } = useGameState();
+  const [shouldRenderGame, setShouldRenderGame] = useState(false);
+  
+  // Enhanced debugging for game state changes
   useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key?.startsWith('w3m')) {
-        // Only clear non-essential storage when connection state changes
-        clearWeb3Storage();
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
-
-  // Handle unmount cleanup
-  useEffect(() => {
-    return () => {
-      if (process.env.NODE_ENV === 'development') {
-        disconnect();
-        clearWeb3Storage();
-      }
-    };
-  }, [disconnect]);
-
-  return (
-    <div className="min-h-screen bg-[#0D0D17] relative overflow-hidden">
-      <ParticleBackground />
+    if (gameState) {
+      debugLog('[Debug] ClientPage: Game state set with questions:', gameState.questions?.length);
+      debugLog('[Debug] ClientPage: Game session ID:', gameState.sessionId);
       
-      {isConnected ? (
-        <>
-          <Header />
-          <main className="relative flex flex-col items-center justify-center min-h-screen px-4 py-20">
-            {/* Connected state content */}
-          </main>
-          <GameModal />
-        </>
-      ) : (
-        <main className="relative flex flex-col items-center justify-center min-h-screen px-4">
-          <div className="relative max-w-4xl mx-auto px-2 sm:px-4 py-6 sm:py-0">
-            <div className="absolute inset-0 bg-gradient-to-r from-[#FF3366]/10 via-transparent to-[#FF8C42]/10 blur-3xl pointer-events-none" />
+      // Set a flag to ensure we render the game modal
+      setShouldRenderGame(true);
+    } else {
+      setShouldRenderGame(false);
+    }
+  }, [gameState]);
+  
+  // Force a re-render of the GameModal component when game state changes
+  // This helps ensure the component is properly mounted
+  const gameModalKey = gameState ? `game-modal-${gameState.sessionId}-${Date.now()}` : 'no-game';
+  
+  // Consider connected when wallet is connected and on Base chain
+  const isFullyConnected = isConnected && chainId === 8453;
+  
+  return (
+    <div className="flex flex-col min-h-screen">
+      <ParticleBackground gameLoading={isLoading} />
+      <LoadingAnimation isLoading={isLoading} />
+      
+      {isFullyConnected && (
+        <Header onAchievementsClick={() => setIsAchievementsOpen(true)} />
+      )}
+      
+      <main className={`flex-1 flex flex-col ${isFullyConnected ? 'pt-12' : ''} relative z-10`}>
+        {isFullyConnected ? (
+          <div className="flex-1 container mx-auto px-4 py-8">
+            <div className={(gameState || isAchievementsOpen || isLoading) ? 'invisible' : 'visible'}>
+              <GameOptions onStartGame={initGame} />
+            </div>
             
-            <div className="relative text-center space-y-8">
-              <div className="space-y-4">
-                <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight">
-                  <span className="text-[#E8DED1]">Welcome to</span>
-                  <br />
-                  <span className="bg-gradient-to-r from-[#FF3366] to-[#FF8C42] text-transparent bg-clip-text">
-                    Trivia.Box
-                  </span>
+            {isAchievementsOpen && address && (
+              <AchievementsDropdown
+                isOpen={isAchievementsOpen}
+                onClose={() => setIsAchievementsOpen(false)}
+                walletAddress={address}
+              />
+            )}
+            
+            {/* Use shouldRenderGame flag and a unique key to ensure proper rendering */}
+            {shouldRenderGame && gameState && gameState.questions && gameState.questions.length > 0 && (
+              <div key={gameModalKey} className="game-modal-container">
+                <GameModal
+                  questions={gameState.questions}
+                  sessionId={gameState.sessionId}
+                  onClose={() => window.location.reload()}
+                />
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center py-4 px-2">
+            <div className="max-w-4xl mx-auto text-center space-y-4">
+              <div className="space-y-3">
+                <div className="inline-block mb-1 px-3 py-1 bg-gray-900/80 backdrop-blur-sm rounded-full border border-amber-600/30">
+                  <span className="text-sm font-medium text-amber-600">Beta Version 1.0</span>
+                </div>
+                
+                <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-600 to-orange-600 leading-tight glow-text">
+                  Test Your Knowledge & Earn Rewards
                 </h1>
                 
-                <p className="text-lg sm:text-xl lg:text-2xl font-medium text-[#D4A373]">
-                  Test your knowledge, earn rewards, and climb the global leaderboard
+                <p className="text-md md:text-lg text-gray-300 animate-fadeIn max-w-2xl mx-auto" style={{ animationDelay: '0.3s' }}>
+                  Join the ultimate web3 trivia game. Challenge yourself, compete globally, and earn real rewards.
                 </p>
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 py-8 sm:py-12 animate-fade-in-up" style={{animationDelay: '200ms'}}>
-                <div className="p-4 sm:p-6 rounded-2xl bg-[#0D0D17]/90 border border-[#FF3366]/20 shadow-lg shadow-[#FF3366]/5 group hover:border-[#FF3366]/40 transition-all duration-300">
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-[#FF3366]/20 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                      <Calendar className="w-6 h-6 text-[#FF3366] group-hover:rotate-12 transition-transform duration-300" />
-                    </div>
-                    <span className="font-medium text-[#E8DED1]">Daily Challenges</span>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fadeIn" style={{ animationDelay: '0.4s' }}>
+                <div className="bg-gradient-to-br from-gray-900/90 to-gray-800/90 backdrop-blur-md p-4 rounded-xl border border-amber-600/20 hover:border-amber-600/40 transition-all group card-glow">
+                  <div className="w-10 h-10 bg-gradient-to-r from-amber-600 to-orange-600 rounded-lg mb-3 flex items-center justify-center group-hover:scale-110 transition-transform shadow-md icon-glow">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
                   </div>
+                  <h3 className="text-lg font-semibold text-amber-600 mb-1">Daily Challenges</h3>
+                  <p className="text-sm text-gray-300">Fresh trivia questions every day across multiple categories.</p>
                 </div>
-
-                <div className="p-4 sm:p-6 rounded-2xl bg-[#0D0D17]/90 border border-[#FF6B6B]/20 shadow-lg shadow-[#FF6B6B]/5 group hover:border-[#FF6B6B]/40 transition-all duration-300">
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-[#FF6B6B]/20 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                      <CircleDollarSign className="w-6 h-6 text-[#FF6B6B] group-hover:rotate-12 transition-transform duration-300" />
-                    </div>
-                    <span className="font-medium text-[#E8DED1]">Win Rewards</span>
+                <div className="bg-gradient-to-br from-gray-900/90 to-gray-800/90 backdrop-blur-md p-4 rounded-xl border border-amber-600/20 hover:border-amber-600/40 transition-all group card-glow">
+                  <div className="w-10 h-10 bg-gradient-to-r from-amber-600 to-orange-600 rounded-lg mb-3 flex items-center justify-center group-hover:scale-110 transition-transform shadow-md icon-glow">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
                   </div>
+                  <h3 className="text-lg font-semibold text-amber-600 mb-1">Win Rewards</h3>
+                  <p className="text-sm text-gray-300">Earn tokens and NFTs for your knowledge and fast responses.</p>
                 </div>
-
-                <div className="p-4 sm:p-6 rounded-2xl bg-[#0D0D17]/90 border border-[#FF8C42]/20 shadow-lg shadow-[#FF8C42]/5 group hover:border-[#FF8C42]/40 transition-all duration-300">
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-[#FF8C42]/20 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                      <Trophy className="w-6 h-6 text-[#FF8C42] group-hover:rotate-12 transition-transform duration-300" />
-                    </div>
-                    <span className="font-medium text-[#E8DED1]">Global Rankings</span>
+                <div className="bg-gradient-to-br from-gray-900/90 to-gray-800/90 backdrop-blur-md p-4 rounded-xl border border-amber-600/20 hover:border-amber-600/40 transition-all group card-glow">
+                  <div className="w-10 h-10 bg-gradient-to-r from-amber-600 to-orange-600 rounded-lg mb-3 flex items-center justify-center group-hover:scale-110 transition-transform shadow-md icon-glow">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
                   </div>
+                  <h3 className="text-lg font-semibold text-amber-600 mb-1">Global Rankings</h3>
+                  <p className="text-sm text-gray-300">Compete with players worldwide and climb the leaderboard.</p>
                 </div>
               </div>
-
-              <div className="pt-6 flex flex-col items-center gap-2">
-                <CustomConnectButton />
               
+              <div className="pt-12 pb-12 animate-fadeIn" style={{ animationDelay: '0.7s' }}>
+                <div className="flex flex-col items-center space-y-3">
+                  <CustomConnectButton />
+                  <p className="text-sm text-gray-400">
+                    Open Beta - Join now and be among the first to play!
+                  </p>
+                </div>
               </div>
             </div>
           </div>
-        </main>
+        )}
+      </main>
+      
+      {!isFullyConnected && (
+        <div className="mt-auto mb-2">
+          <Footer />
+        </div>
       )}
-      <Footer />
+      {/* Achievement notifications will always be shown when unlocked */}
+      <AchievementNotifications />
     </div>
   );
 }

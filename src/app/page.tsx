@@ -8,6 +8,17 @@ const ClientPage = dynamic(
   { ssr: false }
 );
 
+// Add direct styling to the page component for debugging
 export default function Home() {
-  return <ClientPage />;
+  return (
+    <>
+      <style jsx global>{`
+        body {
+          background-color: #000 !important;
+          color: #fff !important;
+        }
+      `}</style>
+      <ClientPage />
+    </>
+  );
 }

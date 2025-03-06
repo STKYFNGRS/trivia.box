@@ -17,21 +17,32 @@ interface Particle {
   symbol?: string;
 }
 
-const CYBER_SYMBOLS = ['01', '10', '∆', '◊', '[]', '//', '⚡'];
-const COLORS = ['#00ff00', '#00ffff', '#ff00ff', '#ffff00'];
+const CYBER_SYMBOLS = ['01', '10', '∆', '◊', '[]', '//', '⚡', '★', '♦'];
+const COLORS = ['#9333ea', '#e11d48', '#f97316', '#8b5cf6', '#ec4899', '#6366f1', '#06b6d4'];
 
 const STATES = {
   normal: {
-    speed: 0.8,
-    particleCount: 100
+    speed: 0.6,
+    particleCount: 120,
+    opacityRange: { min: 0.1, max: 0.5 }
   },
   connected: {
-    speed: 3,
-    particleCount: 150
+    speed: 1.2, 
+    particleCount: 200,
+    opacityRange: { min: 0.2, max: 0.7 }
+  },
+  loading: {
+    speed: 2.0,
+    particleCount: 250,
+    opacityRange: { min: 0.3, max: 0.9 }
   }
 };
 
-export default function ParticleBackground() {
+interface ParticleBackgroundProps {
+  gameLoading?: boolean;
+}
+
+export default function ParticleBackground({ gameLoading = false }: ParticleBackgroundProps) {
   const { isConnected } = useAccount();
   const particlesRef = useRef<Particle[]>([]);
   const [, forceRender] = useState({});
@@ -40,7 +51,7 @@ export default function ParticleBackground() {
   const visibilityRef = useRef<boolean>(true);
   const lightSourceRef = useRef({ x: 0, y: 0, color: COLORS[0] });
 
-  const generateParticle = useCallback((state: 'normal' | 'connected'): Particle => {
+  const generateParticle = useCallback((state: 'normal' | 'connected' | 'loading'): Particle => {
     const config = STATES[state];
     const particleType = Math.random() > 0.6 ? ('symbol' as const) : Math.random() > 0.4 ? ('question' as const) : ('glow' as const);
     const size = particleType === 'question' ? 
@@ -50,15 +61,17 @@ export default function ParticleBackground() {
         (Math.random() * 5 + 2);
 
     const angle = Math.random() * Math.PI * 2;
+    const baseSpeed = config.speed * (state !== 'normal' ? (Math.random() * 0.5 + 0.75) : 1);
+    
     return {
       x: Math.random() * window.innerWidth,
       y: Math.random() * window.innerHeight,
       size,
       speed: {
-        x: Math.cos(angle) * config.speed,
-        y: Math.sin(angle) * config.speed
+        x: Math.cos(angle) * baseSpeed,
+        y: Math.sin(angle) * baseSpeed
       },
-      opacity: Math.random() * 0.4 + 0.1,
+      opacity: Math.random() * (config.opacityRange.max - config.opacityRange.min) + config.opacityRange.min,
       type: particleType,
       color: COLORS[Math.floor(Math.random() * COLORS.length)],
       symbol: particleType === 'symbol' ? CYBER_SYMBOLS[Math.floor(Math.random() * CYBER_SYMBOLS.length)] : undefined
@@ -66,13 +79,20 @@ export default function ParticleBackground() {
   }, []);
 
   useEffect(() => {
-    const config = STATES[isConnected ? 'connected' : 'normal'];
+    let state = 'normal';
+    if (gameLoading) {
+      state = 'loading';
+    } else if (isConnected) {
+      state = 'connected';
+    }
+    
+    const config = STATES[state as keyof typeof STATES];
     particlesRef.current = Array.from(
       { length: config.particleCount }, 
-      () => generateParticle(isConnected ? 'connected' : 'normal')
+      () => generateParticle(state as keyof typeof STATES)
     );
     forceRender({});
-  }, [isConnected, generateParticle]);
+  }, [isConnected, generateParticle, gameLoading]);
 
   useEffect(() => {
     const updateParticles = () => {
@@ -114,7 +134,7 @@ export default function ParticleBackground() {
   }, []);
 
   useEffect(() => {
-    if (!isConnected) return;
+    if (!isConnected && !gameLoading) return;
 
     const strobeInterval = setInterval(() => {
       lightSourceRef.current = {
@@ -123,18 +143,20 @@ export default function ParticleBackground() {
         color: COLORS[Math.floor(Math.random() * COLORS.length)]
       };
       forceRender({});
-    }, 2000);
+    }, gameLoading ? 500 : 1000); // Faster strobe effect during loading
 
     return () => clearInterval(strobeInterval);
-  }, [isConnected]);
+  }, [isConnected, gameLoading]);
 
   return (
-    <div className="fixed inset-0 pointer-events-none overflow-hidden">
-      {isConnected && (
+    <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+      <div className="absolute inset-0 bg-gradient-to-b from-black via-purple-950/20 to-black opacity-70" />
+      
+      {(isConnected || gameLoading) && (
         <div 
           className="absolute inset-0 transition-opacity duration-500"
           style={{
-            background: `radial-gradient(circle at ${lightSourceRef.current.x}px ${lightSourceRef.current.y}px, ${lightSourceRef.current.color}20 0%, transparent 70%)`
+            background: `radial-gradient(circle at ${lightSourceRef.current.x}px ${lightSourceRef.current.y}px, ${lightSourceRef.current.color}${gameLoading ? '50' : '30'} 0%, transparent ${gameLoading ? '80%' : '70%'})` // Increased glow intensity during loading
           }}
         />
       )}
@@ -147,11 +169,13 @@ export default function ParticleBackground() {
             opacity: particle.opacity,
             color: particle.color,
             fontSize: `${particle.size}px`,
-            textShadow: isConnected ? `0 0 10px ${particle.color}` : 'none'
+            textShadow: isConnected || gameLoading ? 
+              `0 0 ${gameLoading ? '20' : '15'}px ${particle.color}` : 
+              `0 0 8px ${particle.color}` // Enhanced glow during loading
           }}
         >
           {particle.type === 'question' ? '?' : 
-           particle.type === 'symbol' && isConnected ? particle.symbol :
+           particle.type === 'symbol' && (isConnected || gameLoading) ? particle.symbol :
            '•'}
         </div>
       ))}

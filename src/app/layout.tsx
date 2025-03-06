@@ -1,49 +1,39 @@
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from 'next/font/google';
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { headers } from 'next/headers';
-import AppKitProvider from '@/context';
+import "ethereum-identity-kit/css";
+import Providers from "./providers";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-inter',
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export const metadata = {
-  title: "Trivia.Box",
-  description: "Play trivia games win rewards",
-  icons: {
-    icon: '/favicon.ico',
-    shortcut: '/favicon.ico',
-    apple: '/favicon.ico',
-    other: {
-      rel: 'apple-touch-icon-precomposed',
-      url: '/favicon.ico',
-    },
-  },
+export const metadata: Metadata = {
+  title: "Trivia Box - Web3 Trivia Game",
+  description: "Test your knowledge, earn rewards, and compete with players worldwide!",
 };
 
-export default async function RootLayout({
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1, 
+  userScalable: false,
+  themeColor: "#000000",
+};
+
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const headersObj = await headers();
-  const cookies = headersObj.get('cookie');
-
   return (
-    <html lang="en">
-      <head>
-        <link rel="icon" href="/favicon.ico" sizes="any" />
-      </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <AppKitProvider cookies={cookies}>
+    <html lang="en" className={inter.variable}>
+      <body className="dark overflow-x-hidden">
+        <Providers>
           {children}
-        </AppKitProvider>
+        </Providers>
       </body>
     </html>
   );

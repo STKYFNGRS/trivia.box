@@ -1,0 +1,185 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["jsonProtocol"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model trivia_users {
+  id                      Int                       @id @default(autoincrement())
+  wallet_address          String                    @unique
+  total_points            BigInt                    @default(0)
+  games_played            Int                       @default(0)
+  best_streak             Int                       @default(0)
+  created_at              DateTime                  @default(now())
+  last_played_at          DateTime                  @default(now())
+  trivia_achievements     trivia_achievements[]
+  trivia_player_responses trivia_player_responses[]
+  trivia_streak_history   trivia_streak_history[]
+  trivia_weekly_scores    trivia_weekly_scores[]
+
+  @@index([wallet_address])
+}
+
+model trivia_questions {
+  id                      Int                       @id @default(autoincrement())
+  content                 String
+  difficulty              trivia_difficulty
+  category                trivia_category
+  correct_answer          String
+  incorrect_answers       String[]
+  ai_generated            Boolean                   @default(false)
+  validation_status       trivia_question_status    @default(draft)
+  validation_feedback     Json?
+  created_at              DateTime                  @default(now())
+  last_used               DateTime?
+  usage_count             Int                       @default(0)
+  trivia_player_responses trivia_player_responses[]
+
+  @@index([category, difficulty])
+  @@index([validation_status])
+}
+
+model security_logs {
+  id                   Int                  @id @default(autoincrement())
+  session_id           Int
+  activity_type        ActivityLogType
+  details              Json
+  logged_at            DateTime             @default(now())
+  trivia_game_sessions trivia_game_sessions @relation(fields: [session_id], references: [id])
+
+  @@index([activity_type])
+  @@index([logged_at])
+  @@index([session_id])
+}
+
+model trivia_achievements {
+  id               Int          @id @default(autoincrement())
+  user_id          Int
+  token_id         Int?
+  achievement_type String
+  week_number      Int
+  year             Int
+  score            Int
+  streak_milestone Int?
+  fastest_response Int?
+  minted_at        DateTime     @default(now())
+  trivia_users     trivia_users @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([week_number, year])
+}
+
+model trivia_game_sessions {
+  id                      Int                       @id @default(autoincrement())
+  started_at              DateTime                  @default(now())
+  ended_at                DateTime?
+  question_sequence       String                    @default("[]")
+  player_count            Int                       @default(0)
+  status                  trivia_game_status        @default(pending)
+  current_index           Int                       @default(0)
+  security_logs           security_logs[]
+  trivia_player_responses trivia_player_responses[]
+  trivia_streak_history   trivia_streak_history[]
+
+  @@index([status])
+}
+
+model trivia_player_responses {
+  id                   Int                  @id @default(autoincrement())
+  game_session_id      Int
+  user_id              Int
+  question_id          Int
+  response_time_ms     Int
+  answer               String
+  is_correct           Boolean
+  points_earned        Int
+  potential_points     Int                  @default(15)
+  streak_count         Int                  @default(0)
+  time_remaining       Float?
+  answered_at          DateTime             @default(now())
+  trivia_game_sessions trivia_game_sessions @relation(fields: [game_session_id], references: [id])
+  trivia_questions     trivia_questions     @relation(fields: [question_id], references: [id])
+  trivia_users         trivia_users         @relation(fields: [user_id], references: [id])
+
+  // Optimized compound indexes for faster score and streak lookups
+  @@index([user_id, game_session_id, is_correct])
+  @@index([game_session_id, answered_at])
+  
+  @@index([game_session_id])
+  @@index([question_id])
+  @@index([response_time_ms])
+  @@index([streak_count])
+  @@index([user_id])
+}
+
+model trivia_streak_history {
+  id                   Int                  @id @default(autoincrement())
+  user_id              Int
+  game_session_id      Int
+  streak_count         Int
+  points_earned        Int
+  recorded_at          DateTime             @default(now())
+  trivia_game_sessions trivia_game_sessions @relation(fields: [game_session_id], references: [id])
+  trivia_users         trivia_users         @relation(fields: [user_id], references: [id])
+
+  @@index([game_session_id])
+  @@index([user_id])
+}
+
+model trivia_weekly_scores {
+  id           Int          @id @default(autoincrement())
+  user_id      Int
+  week         Int
+  year         Int
+  score        Int          @default(0)
+  trivia_users trivia_users @relation(fields: [user_id], references: [id])
+
+  @@unique([user_id, week, year])
+  @@index([user_id])
+}
+
+enum trivia_category {
+  technology
+  science
+  literature
+  pop_culture
+  history
+  geography
+  sports
+  gaming
+  internet
+  movies
+  music
+}
+
+enum ActivityLogType {
+  ANSWER
+  SESSION
+  ACHIEVEMENT
+  VIOLATION
+  SCORE_PERSISTENCE
+}
+
+enum trivia_difficulty {
+  easy
+  medium
+  hard
+}
+
+enum trivia_game_status {
+  pending
+  active
+  completed
+  cancelled
+}
+
+enum trivia_question_status {
+  draft
+  reviewing
+  approved
+  rejected
+}

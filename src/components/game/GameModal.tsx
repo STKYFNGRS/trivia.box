@@ -1,251 +1,507 @@
 'use client';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useAccount } from 'wagmi';
+import type { Question } from '@/types/question';
+import dynamic from 'next/dynamic';
+import { motion } from 'framer-motion';
+import { ArrowRight } from 'lucide-react';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { useAccount, useDisconnect } from 'wagmi';
+// Configuration
+const DEBUG_MODE = false; // Set to false to disable debug logging
+const DURATION = 15;
+const MAX_POINTS = 15;
 
-interface CyberTimerProps {
-  timeLeft: number;
-  duration: number;
-}
-
-const CyberTimer = ({ timeLeft, duration }: CyberTimerProps) => {
-  const progress = (timeLeft / duration) * 100;
-  const isLowTime = timeLeft <= 5;
-
-  return (
-    <div className="relative w-full h-1 mt-2 bg-black/20 rounded-full overflow-hidden">
-      <div 
-        className={`absolute left-0 top-0 h-full rounded-full transition-all duration-200 
-          ${isLowTime ? 'bg-gradient-to-r from-red-500 via-orange-500 to-red-500 animate-pulse' : 'bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500'}
-          ${isLowTime ? 'shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 'shadow-[0_0_15px_rgba(59,130,246,0.5)]'}`}
-        style={{ width: `${progress}%` }}
-      />
-    </div>
-  );
-};
-
-interface CyberButtonProps {
-  children: React.ReactNode;
-  selected: boolean;
-  correct: boolean;
-  revealed: boolean;
-  onClick: () => void;
-}
-
-const CyberButton = ({ children, selected, correct, revealed, onClick }: CyberButtonProps) => {
-  let buttonClass = "w-full text-left px-4 sm:px-6 py-3 sm:py-4 rounded-lg relative overflow-hidden transition-all duration-300 ";
-  let glowClass = "";
-  let borderClass = "border border-white/10 hover:border-cyan-500/50 group";
-
-  if (selected && !revealed) {
-    buttonClass += "bg-cyan-500/10 ";
-    glowClass = "shadow-[0_0_20px_rgba(6,182,212,0.3)] ";
-    borderClass = "border border-cyan-500/50";
-  } else if (revealed) {
-    if (correct) {
-      buttonClass += "bg-green-500/10 ";
-      glowClass = "shadow-[0_0_20px_rgba(34,197,94,0.3)] ";
-      borderClass = "border border-green-500/50";
-    } else if (selected) {
-      buttonClass += "bg-red-500/10 ";
-      glowClass = "shadow-[0_0_20px_rgba(239,68,68,0.3)] ";
-      borderClass = "border border-red-500/50";
-    }
+// Debug logger - only logs when DEBUG_MODE is true
+const debugLog = (...args: any[]) => {
+  if (DEBUG_MODE) {
+    console.log(...args);
   }
-
-  return (
-    <button 
-      onClick={onClick}
-      className={`${buttonClass} ${glowClass} ${borderClass}`}
-      disabled={revealed}
-    >
-      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
-      <div className="relative z-10 flex items-center">
-        <div className="flex-grow">
-          <span className="text-base sm:text-lg font-medium text-white/90">{children}</span>
-        </div>
-        {revealed && correct && (
-          <div className="text-green-400">
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-        )}
-        {revealed && selected && !correct && (
-          <div className="text-red-400">
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </div>
-        )}
-      </div>
-    </button>
-  );
 };
 
-interface ScoreIndicatorProps {
-  score: number;
+const CyberTimer = dynamic(() => import('./CyberTimer'));
+
+interface GameModalProps {
+  questions: Question[];
+  sessionId: string;
+  onClose: () => void;
+  onGameComplete?: (score: number) => Promise<void>;
 }
 
-const ScoreIndicator = ({ score }: ScoreIndicatorProps) => (
-  <div className="flex items-center gap-2 text-sm">
-    <svg className="w-5 h-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-        d="M13 10V3L4 14h7v7l9-11h-7z" />
-    </svg>
-    <div className="bg-gradient-to-r from-yellow-500 to-orange-500 bg-clip-text text-transparent font-bold">
-      {score} Points
-    </div>
-  </div>
-);
-
-export default function GameModal() {
-  const { isConnected } = useAccount();
-  const { disconnect } = useDisconnect();
-  const [isOpen, setIsOpen] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(30);
+export default function GameModal({ questions, sessionId, onClose, onGameComplete }: GameModalProps) {
+  const { address } = useAccount();
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [score, setScore] = useState(0);
-  const [combo, setCombo] = useState(0);
-
-  const handleClose = useCallback(() => {
-    setIsOpen(false);
-    setTimeLeft(30);
-    setSelectedAnswer(null);
-    setRevealed(false);
-    setScore(0);
-    setCombo(0);
-    disconnect();
-  }, [disconnect]);
-
-  useEffect(() => {
-    if (isConnected) {
-      setIsOpen(true);
-      setTimeLeft(30);
-      setSelectedAnswer(null);
-      setRevealed(false);
-    } else {
-      handleClose();
-    }
-  }, [isConnected, handleClose]);
-
-  useEffect(() => {
-    if (!isOpen || revealed) return;
+  const [timeLeft, setTimeLeft] = useState(DURATION);
+  const [gameEnded, setGameEnded] = useState(false);
+  const [currentStreak, setCurrentStreak] = useState(0);
+  const [gameBestStreak, setGameBestStreak] = useState(0);
+  const [potentialPoints, setPotentialPoints] = useState(MAX_POINTS);
+  const [isTimerActive, setIsTimerActive] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [finalStats, setFinalStats] = useState<{
+    correctAnswers: number;
+    totalQuestions: number;
+    bestStreak: number;
+    finalScore: number;
+  } | null>(null);
+  
+  // Early initialization of ref to track ongoing submissions
+  const isSubmitting = useRef(false);
+  const questionStartTime = useRef<string>(new Date().toISOString());
+  const isClosing = useRef(false);
+  const sessionResponses = useRef<Array<{ isCorrect: boolean }>>([]);
+  const hasLoggedRender = useRef(false);
+  
+  // Define current question and shuffled answers
+  const currentQuestion = questions && currentQuestionIndex < questions.length
+    ? questions[currentQuestionIndex]
+    : null;
     
-    let tickStarted = false;
-    const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 6 && !tickStarted) {
-          tickStarted = true;
-        }
-        if (prev <= 1) {
-          clearInterval(timer);
-          setRevealed(true);
-          setSelectedAnswer(null);
-          setCombo(0);
-          return 0;
-        }
-        return prev - 1;
+  const shuffledAnswers = useMemo(() => {
+    if (!currentQuestion) return [];
+    const answers = [currentQuestion.correct_answer, ...currentQuestion.incorrect_answers];
+    return answers.sort(() => Math.random() - 0.5);
+  }, [currentQuestion]);
+  
+  // Define submit answer function first as other hooks depend on it
+  const submitAnswer = useCallback(async (answer: string | null) => {
+    if (!currentQuestion || !address || !questions) return;
+    
+    try {
+      // Block duplicate submissions
+      if (isSubmitting.current || sessionResponses.current[currentQuestionIndex]) {
+        console.warn('Preventing duplicate answer submission');
+        return;
+      }
+      
+      // Mark as submitting to prevent concurrent calls
+      isSubmitting.current = true;
+      
+      debugLog(`Submitting answer for question ${currentQuestionIndex + 1}/${questions.length}`);
+      const startSubmit = Date.now();
+      
+      const endTime = new Date().toISOString();
+      const isLastQuestion = currentQuestionIndex + 1 >= questions.length;
+      
+      // Handle time-out case - ensure we have valid timing data
+      const effectiveTimeLeft = answer === null ? 0 : Math.max(0, timeLeft); 
+      const effectiveScore = score + (answer === currentQuestion.correct_answer ? effectiveTimeLeft : 0);
+      
+      // Set up request with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+      
+      // Verify the data before sending to avoid invalid timing errors
+      const payload = {
+        questionId: currentQuestion.id,
+        sessionId: parseInt(sessionId),
+        answer,
+        startTime: questionStartTime.current,
+        endTime,
+        walletAddress: address,
+        isLastQuestion,
+        timeRemaining: effectiveTimeLeft,
+        finalStats: isLastQuestion ? {
+          bestStreak: Math.max(gameBestStreak, currentStreak + (answer === currentQuestion.correct_answer ? 1 : 0)),
+          finalScore: effectiveScore
+        } : undefined
+      };
+      
+      console.log("Submitting answer payload:", { 
+        answer, 
+        timeRemaining: effectiveTimeLeft,
+        score: effectiveScore
       });
-    }, 1000);
-
-    return () => {
-      clearInterval(timer);
-    };
-  }, [isOpen, revealed]);
-
-  const handleAnswer = (answer: string) => {
-    if (revealed) return;
-    setSelectedAnswer(answer);
-    setRevealed(true);
-    
-    if (answer === correctAnswer) {
-      const timeBonus = Math.floor(timeLeft * 3.33);
-      const newCombo = combo + 1;
-      const comboBonus = Math.floor(newCombo * 10);
-      setScore(prev => prev + 100 + timeBonus + comboBonus);
-      setCombo(newCombo);
-    } else {
-      setCombo(0);
+      
+      const response = await fetch('/api/scores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to submit answer');
+      }
+      const result = await response.json();
+      const submitDuration = Date.now() - startSubmit;
+      debugLog(`Answer submitted successfully in ${submitDuration}ms`);
+      
+      sessionResponses.current[currentQuestionIndex] = {
+        isCorrect: result.isCorrect
+      };
+      const newScore = score + (result.score?.points || 0);
+      setScore(newScore);
+      
+      // No need to toggle score visibility since it's always visible now
+      const newCurrentStreak = result.isCorrect ? currentStreak + 1 : 0;
+      setCurrentStreak(newCurrentStreak);
+      setGameBestStreak(Math.max(gameBestStreak, newCurrentStreak));
+      
+      try {
+        // Only move to next question after all processing is complete
+        const moveDelay = Math.max(2000 - submitDuration, 1000); // At least 1 second delay, but aim for 2 seconds total
+        debugLog(`Moving to next question in ${moveDelay}ms`);
+        
+        setTimeout(() => {
+          if (isLastQuestion) {
+            debugLog('Game ended, showing final stats');
+            setGameEnded(true);
+            const correctAnswers = sessionResponses.current.filter(r => r?.isCorrect).length;
+            setFinalStats({
+              correctAnswers,
+              totalQuestions: questions.length,
+              bestStreak: Math.max(gameBestStreak, newCurrentStreak),
+              finalScore: newScore
+            });
+          } else {
+            debugLog(`Moving to question ${currentQuestionIndex + 2}/${questions.length}`);
+            // Move to next question
+            if (currentQuestionIndex + 1 >= questions.length) {
+              setGameEnded(true);
+            } else {
+              setCurrentQuestionIndex(prev => prev + 1);
+              setRevealed(false);
+              setSelectedAnswer(null);
+              setTimeLeft(DURATION);
+              setPotentialPoints(MAX_POINTS);
+              setIsTimerActive(true);
+              questionStartTime.current = new Date().toISOString();
+            }
+          }
+        }, moveDelay);
+      } catch (moveError) {
+        console.error('Error during question transition:', moveError);
+      }
+    } catch (error) {
+      console.error('Error submitting answer:', error);
+      if (error.name === 'AbortError') {
+        setError('Request timed out. Please try again.');
+      } else {
+        setError(error instanceof Error ? error.message : 'Failed to submit answer');
+      }
+    } finally {
+      // Reset submission flag when done
+      isSubmitting.current = false;
     }
-  };
-
-  if (!isOpen) return null;
-
-  const DURATION = 30;
-  const correctAnswer = "Base";
-
+  }, [address, currentQuestion, currentQuestionIndex, questions, sessionId, gameBestStreak, currentStreak, score, timeLeft]);
+  
+  // Handle timer updates with proper error handling and reduced update frequency
+  const handleTimeUpdate = useCallback(({ remainingTime }: { remainingTime: number }) => {
+    if (revealed) return; // Don't update if already revealed
+    
+    try {
+      // Only update UI for whole number changes to avoid too many renders
+      const roundedNew = Math.ceil(remainingTime);
+      const roundedCurrent = Math.ceil(timeLeft);
+      
+      if (roundedNew !== roundedCurrent) {
+        setPotentialPoints(Math.max(0, roundedNew));
+      }
+      
+      // Always update actual timeLeft for accurate scoring
+      setTimeLeft(Math.max(0, remainingTime));
+    } catch (error) {
+      console.error('Error updating time:', error);
+    }
+  }, [revealed, timeLeft]);
+  
+  // Simple fix for timer expiration
+  const handleTimeExpire = useCallback(() => {
+    if (revealed) return;
+    
+    console.log('Timer expired, submitting null answer');
+    setRevealed(true);
+    setIsTimerActive(false);
+    setTimeLeft(0);
+    
+    // Move to the next question without trying to submit a score
+    const isLastQuestion = currentQuestionIndex + 1 >= questions.length;
+    
+    // Wait a moment for animation
+    setTimeout(() => {
+      if (isLastQuestion) {
+        setGameEnded(true);
+        setFinalStats({
+          correctAnswers: sessionResponses.current.filter(r => r?.isCorrect).length,
+          totalQuestions: questions.length,
+          bestStreak: gameBestStreak,
+          finalScore: score
+        });
+      } else {
+        setCurrentQuestionIndex(prev => prev + 1);
+        setRevealed(false);
+        setSelectedAnswer(null);
+        setTimeLeft(DURATION);
+        setPotentialPoints(MAX_POINTS);
+        setIsTimerActive(true);
+        questionStartTime.current = new Date().toISOString();
+      }
+    }, 1000);
+  }, [revealed, currentQuestionIndex, questions, score, gameBestStreak]);
+  
+  // Handle selecting an answer with proper error handling
+  const handleAnswerSelect = useCallback(async (answer: string) => {
+    if (revealed || !isTimerActive || gameEnded || isSubmitting.current) return;
+    
+    try {
+      // First update UI state
+      setRevealed(true);
+      setIsTimerActive(false);
+      setSelectedAnswer(answer);
+      
+      // Then submit the answer
+      await submitAnswer(answer);
+    } catch (error) {
+      console.error('Error selecting answer:', error);
+      setError('Failed to submit answer');
+    }
+  }, [revealed, isTimerActive, gameEnded, submitAnswer]);
+  
+  const handleGameCompletion = useCallback(async () => {
+    if (!isClosing.current && finalStats) {
+      try {
+        isClosing.current = true;
+        debugLog('Completing game and processing achievements');
+        
+        // Verify achievements before game completion
+        if (address) {
+          try {
+            debugLog('Verifying achievements for wallet:', address);
+            // Add timeout protection
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            
+            const verifyResponse = await fetch(`/api/verify-achievements?wallet=${address}`, {
+              signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (verifyResponse.ok) {
+              const verifyResult = await verifyResponse.json();
+              debugLog('Achievement verification result:', verifyResult);
+            } else {
+              console.warn('Failed to verify achievements during game completion');
+            }
+          } catch (verifyError) {
+            // Don't block game completion if achievement verification fails
+            console.error('Error verifying achievements:', verifyError);
+          }
+        }
+        
+        if (onGameComplete) {
+          debugLog(`Submitting final score: ${finalStats.finalScore}`);
+          await onGameComplete(finalStats.finalScore);
+        }
+        
+        debugLog('Game completed successfully, closing modal');
+        onClose();
+      } catch (error) {
+        console.error('Error during game completion:', error);
+        setError('Failed to complete game');
+        isClosing.current = false;
+      }
+    }
+  }, [address, finalStats, onClose, onGameComplete]);
+  
+  // Update state when question changes
+  useEffect(() => {
+    if (!questions?.length || currentQuestionIndex >= questions.length) return;
+    
+    // Reset all question-related state
+    setRevealed(false);
+    setSelectedAnswer(null);
+    setTimeLeft(DURATION);
+    setIsTimerActive(true);
+    setPotentialPoints(MAX_POINTS);
+    isSubmitting.current = false; // Reset submission tracking
+    questionStartTime.current = new Date().toISOString();
+    
+    // For debugging purposes - log that we're displaying a question
+    debugLog(`Displaying question ${currentQuestionIndex + 1}/${questions.length}`);
+  }, [currentQuestionIndex, questions?.length]);
+  
+  // Initialize the game session as soon as the component mounts
+  useEffect(() => {
+    if (!sessionId || !questions?.length) return;
+    
+    debugLog(`Game modal initialized with session ID: ${sessionId}`);
+    debugLog(`Starting game with ${questions.length} questions`);
+    
+    // Set the initial timer and first question immediately
+    questionStartTime.current = new Date().toISOString();
+    
+    // Force a state update to ensure the component renders properly
+    setTimeLeft(DURATION);
+    setPotentialPoints(MAX_POINTS);
+    
+    // Make sure component is visible in DOM
+    setTimeout(() => {
+      const modalElement = document.querySelector('.fixed.inset-0.z-50');
+      if (modalElement) {
+        debugLog('Game modal element is in DOM and visible');
+        modalElement.classList.add('force-visible');
+      } else {
+        console.warn('Game modal element not found in DOM');
+      }
+    }, 300);
+  }, [sessionId, questions?.length]);
+  
+  useEffect(() => {
+    if (!gameEnded) return;
+    setIsTimerActive(false);
+  }, [gameEnded]);
+  
+  // Early return if required props are missing
+  if (!questions?.length || !sessionId) {
+    console.warn('Required props missing for GameModal - Questions:', questions?.length, 'SessionID:', sessionId);
+    return null;
+  }
+  
+  // Log only once per session to avoid console spam
+  if (!hasLoggedRender.current) {
+    debugLog('Rendering GameModal with session:', sessionId, 'and questions:', questions.length);
+    hasLoggedRender.current = true;
+  }
+  
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-40 p-2 sm:p-4">
-      <div className="bg-[#0D1117]/90 w-full max-w-2xl rounded-2xl overflow-hidden border border-white/10">
-        {/* Question Header */}
-        <div className="relative px-4 sm:px-6 py-3 sm:py-4 border-b border-white/10 bg-gradient-to-r from-black/50 via-cyan-500/10 to-black/50">
-          <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent" />
-          <div className="relative flex justify-between items-center">
-            <h3 className="text-base sm:text-lg font-semibold text-white/90">Daily Challenge</h3>
-            <button 
-              onClick={handleClose}
-              className="text-white/50 hover:text-white/90 transition-colors"
-            >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <CyberTimer timeLeft={timeLeft} duration={DURATION} />
-        </div>
-
-        {/* Question Content */}
-        <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-          <div className="space-y-2">
-            <div className="text-sm text-cyan-400/80 uppercase tracking-wider font-medium">Question:</div>
-            <p className="text-base sm:text-lg text-white/90">Which layer 2 blockchain is this game built on?</p>
-          </div>
-
-          <div className="grid gap-3">
-            {["Arbitrum", "Optimism", "Base", "Polygon"].map((answer) => (
-              <CyberButton
-                key={answer}
-                selected={selectedAnswer === answer}
-                correct={answer === correctAnswer}
-                revealed={revealed}
-                onClick={() => handleAnswer(answer)}
-              >
-                {answer}
-              </CyberButton>
-            ))}
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-white/10 bg-gradient-to-r from-black/50 via-purple-500/10 to-black/50">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 text-sm">
-                <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div className="text-cyan-400">
-                  {timeLeft}s
-                </div>
+    <div className="fixed inset-0 z-50">
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <motion.div
+          key="game-modal-panel"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          className="relative w-full max-w-5xl mt-28 pt-16 md:pt-10 md:mt-24"
+        >
+          <div className="rounded-2xl bg-gray-900/90 p-8 border border-amber-500/20 overflow-hidden flex flex-col">
+            {error ? (
+              <div className="text-center p-8">
+                <h2 className="text-xl font-bold mb-4 text-red-500">{error}</h2>
               </div>
-              {combo > 1 && (
-                <div className="flex items-center gap-2 text-sm">
-                  <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                      d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
-                  </svg>
-                  <div className="bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent font-bold">
-                    {combo}x Combo!
+            ) : gameEnded ? (
+              <div className="text-center p-4">
+                <h2 className="text-2xl font-bold text-white mb-6">Game Complete!</h2>
+                
+                {finalStats && (
+                  <div className="space-y-4 mb-8">
+                    <p className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-600">Final Score: {finalStats.finalScore}</p>
+                    
+                    <div className="flex items-center justify-center gap-4 mb-4">
+                      <div className="bg-gradient-to-br from-blue-900/30 to-blue-800/20 p-4 rounded-xl border border-blue-500/40 hover:shadow-md hover:shadow-blue-500/10 transition-all w-1/3">
+                        <p className="text-gray-300 mb-1 text-center">Correct Answers</p>
+                        <p className="text-xl font-bold text-white text-center">
+                          {finalStats.correctAnswers}/{finalStats.totalQuestions}
+                        </p>
+                      </div>
+                      <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/20 p-4 rounded-xl border border-amber-500/40 hover:shadow-md hover:shadow-amber-500/10 transition-all w-1/3">
+                        <p className="text-gray-300 mb-1 text-center">Game Best Streak</p>
+                        <p className="text-xl font-bold text-orange-400 text-center">
+                          {finalStats.bestStreak}<span className="ml-1">🔥</span>
+                        </p>
+                      </div>
+                      <div className="bg-gradient-to-br from-green-900/30 to-green-800/20 p-4 rounded-xl border border-green-500/40 hover:shadow-md hover:shadow-green-500/10 transition-all w-1/3">
+                        <p className="text-gray-300 mb-1 text-center">Points Earned</p>
+                        <p className="text-xl font-bold text-green-400 text-center">
+                          +{finalStats.finalScore}
+                        </p>
+                      </div>
+                    </div>
                   </div>
+                )}
+                
+                <button
+                  onClick={handleGameCompletion}
+                  className="relative px-8 py-4 rounded-lg font-bold transition-all bg-gradient-to-r from-amber-600 to-orange-600 text-gray-900 shadow-lg shadow-amber-600/20 hover:transform hover:scale-105 hover:shadow-lg hover:shadow-amber-600/30 border border-amber-500/40"
+                >
+                  {/* Reflective highlight effect */}
+                  <span className="absolute top-0 left-0 right-0 h-1/3 bg-gradient-to-b from-white/30 to-transparent pointer-events-none"></span>
+                  <span className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/30 to-transparent pointer-events-none"></span>
+                  <div className="flex items-center gap-2">
+                    <ArrowRight className="h-5 w-5" />
+                    <span>Continue</span>
+                  </div>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-6 h-[600px]">
+                <div className="text-sm xs:text-base text-gray-200 py-1 px-3 bg-gray-800/50 rounded-full border border-gray-700/40 inline-block">
+                  Question {currentQuestionIndex + 1} of {questions.length}
                 </div>
-              )}
-            </div>
-            <ScoreIndicator score={score} />
+                {!gameEnded && currentQuestion && (
+                  <>
+                    <div className="w-full xs:w-full mb-2">
+                      <CyberTimer
+                        timeLeft={timeLeft}
+                        duration={DURATION}
+                        isActive={isTimerActive}
+                        onTimeUpdate={handleTimeUpdate}
+                        onExpire={handleTimeExpire}
+                      />
+                    </div>
+                    
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="w-1/3">
+                        <div className="text-gray-300 py-1 px-3 bg-green-900/20 rounded-full border border-green-500/30 inline-block">
+                          Points Available: <span className="font-bold text-green-400">{potentialPoints}</span>
+                        </div>
+                      </div>
+                      
+                      {/* Score display - always visible and centered */}
+                      <div className="w-1/3 flex justify-center">
+                        <div className="text-gray-300 py-1 px-3 bg-blue-900/20 rounded-full border border-blue-500/30 inline-block">
+                          Score: <span className="font-bold text-amber-400">{score}</span>
+                        </div>
+                      </div>
+                      
+                      {/* Show streak if present - always on the right, or empty placeholder */}
+                      <div className="w-1/3 flex justify-end">
+                        {currentStreak > 0 && (
+                          <div className="text-orange-400 font-bold flex items-center gap-1 py-1 px-3 bg-amber-900/20 rounded-full border border-amber-500/30">
+                            <span>Streak:</span> {currentStreak}<span className="ml-0.5">🔥</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="bg-gray-800/50 p-4 rounded-xl border border-blue-500/20 mb-4 md:mb-6">
+                      <h3 className="text-base xs:text-lg md:text-xl text-gray-200">{currentQuestion.content}</h3>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-4">
+                      {shuffledAnswers.map((answer, index) => (
+                        <button
+                          key={`${currentQuestionIndex}-${index}`}
+                          onClick={() => handleAnswerSelect(answer)}
+                          disabled={revealed}
+                          className={`
+                            w-full p-4 text-left rounded-xl transition-all duration-300
+                            ${revealed
+                              ? answer === currentQuestion.correct_answer
+                                ? 'bg-gradient-to-br from-green-600/80 to-green-700/80 text-white shadow-lg shadow-green-500/20 transform scale-105 border border-green-400/30'
+                                : answer === selectedAnswer
+                                  ? 'bg-gradient-to-br from-red-600/80 to-red-700/80 text-white shadow-lg shadow-red-500/20 border border-red-400/30'
+                                  : 'bg-gray-800/50 text-gray-400 border border-gray-700/20'
+                              : 'bg-gray-800/50 hover:bg-gray-800/70 hover:shadow-lg hover:shadow-amber-500/10 hover:translate-y-[-2px] hover:scale-[1.01] text-gray-300 active:scale-[0.99] border border-gray-700/20 hover:border-gray-700/30'
+                            }
+                          `}
+                        >
+                          {answer}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
-        </div>
+          
+          {/* No backdrop - particles are visible */}
+        </motion.div>
       </div>
     </div>
   );
