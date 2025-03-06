@@ -18,7 +18,9 @@ export function resolveIpfsUrl(ipfsUrl: string): string {
   }
   
   return ipfsUrl;
-}// Direct ENS lookup using multiple providers
+}
+
+// Direct ENS lookup using multiple providers
 import { ethers } from 'ethers';
 
 // Cache duration in milliseconds (6 hours)
@@ -56,7 +58,8 @@ export async function lookupEnsName(address: string): Promise<string | null> {
   for (const rpcUrl of RPC_PROVIDERS) {
     try {
       console.log(`Trying ENS lookup via ${rpcUrl}`);
-      const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+      // Updated for ethers v6
+      const provider = new ethers.JsonRpcProvider(rpcUrl);
       
       // Set a timeout to avoid hanging
       const timeoutPromise = new Promise<null>((_, reject) => {
@@ -105,7 +108,8 @@ export async function lookupEnsAvatar(ensName: string): Promise<string | null> {
   for (const rpcUrl of RPC_PROVIDERS) {
     try {
       console.log(`Trying ENS avatar lookup via ${rpcUrl}`);
-      const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+      // Updated for ethers v6
+      const provider = new ethers.JsonRpcProvider(rpcUrl);
       
       // Set a timeout to avoid hanging
       const timeoutPromise = new Promise<null>((_, reject) => {
@@ -113,18 +117,20 @@ export async function lookupEnsAvatar(ensName: string): Promise<string | null> {
       });
       
       // Race the avatar lookup against the timeout
-      const avatar = await Promise.race([
-        provider.getAvatar(ensName),
+      // In ethers v6, getAvatar is now available on the EnsResolver instance
+      const resolver = await provider.getResolver(ensName);
+      const avatar = resolver ? await Promise.race([
+        resolver.getAvatar(),
         timeoutPromise
-      ]);
+      ]) : null;
       
       if (avatar) {
-        console.log(`Found ENS avatar for ${ensName}: ${avatar}`);
+        console.log(`Found ENS avatar for ${ensName}: ${avatar.url}`);
         
         // Handle ipfs:// links
-        let resolvedAvatar = avatar;
-        if (avatar.startsWith('ipfs://')) {
-          resolvedAvatar = resolveIpfsUrl(avatar);
+        let resolvedAvatar = avatar.url;
+        if (resolvedAvatar.startsWith('ipfs://')) {
+          resolvedAvatar = resolveIpfsUrl(resolvedAvatar);
           console.log(`Resolved IPFS avatar to: ${resolvedAvatar}`);
         }
         
