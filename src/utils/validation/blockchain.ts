@@ -4,7 +4,7 @@ import type {
   POAPMintRequest,
   MerkleDistribution
 } from '@/types'
-import { utils } from 'ethers'
+import { ethers } from 'ethers'
 
 export function validateTokenDistribution(
   distribution: TokenDistribution
@@ -42,9 +42,9 @@ export function validateTokenRecipient(
   valid: boolean
   error?: string
 } {
-  // Validate wallet address using ethers v5 utils
+  // Validate wallet address using ethers v6
   try {
-    utils.getAddress(recipient.wallet_address); // Will throw if invalid
+    ethers.getAddress(recipient.wallet_address); // Will throw if invalid
   } catch {
     return {
       valid: false,
@@ -77,9 +77,9 @@ export function validatePOAPMintRequest(
   valid: boolean
   error?: string
 } {
-  // Validate recipient address using ethers v5 utils
+  // Validate recipient address using ethers v6
   try {
-    utils.getAddress(request.recipient); // Will throw if invalid
+    ethers.getAddress(request.recipient); // Will throw if invalid
   } catch {
     return {
       valid: false,
@@ -152,12 +152,13 @@ export function verifyMerkleProof(
 
   for (const proofElement of proof) {
     if (computedHash < proofElement) {
-      computedHash = utils.keccak256(
-        utils.concat([computedHash, proofElement])
+      // In ethers v6, keccak256 and concat are directly on ethers
+      computedHash = ethers.keccak256(
+        ethers.concat([computedHash, proofElement])
       )
     } else {
-      computedHash = utils.keccak256(
-        utils.concat([proofElement, computedHash])
+      computedHash = ethers.keccak256(
+        ethers.concat([proofElement, computedHash])
       )
     }
   }
