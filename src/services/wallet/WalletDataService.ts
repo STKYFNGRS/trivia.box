@@ -155,36 +155,45 @@ class WalletDataService {
         return { name: null, avatar: null };
       }
       
-      // If we have a name, immediately return it and fetch avatar asynchronously
-      // This allows the UI to show the name faster
-      setTimeout(async () => {
-        try {
-          // Try to get the avatar with both methods
-          const avatar = await lookupEnsAvatar(name).catch(() => null) 
-                      || await getDirectEnsAvatar(name).catch(() => null);
-          
-          if (avatar) {
-            // Update the cache with the avatar
-            const cachedEns = this.getCachedEnsData(address);
-            if (cachedEns) {
-              this.cacheEnsData(address, { 
-                name: cachedEns.name, 
-                avatar 
-              });
-              
-              // Dispatch event to notify the UI of the avatar update
-              window.dispatchEvent(new CustomEvent('ensAvatarUpdated', { 
-                detail: { address, avatar } 
-              }));
-            }
-          }
-        } catch (error) {
-          console.warn('Async ENS avatar resolution error:', error);
-        }
-      }, 100);
+      // If we have a name, try to get avatar synchronously first - modified from original
+      let avatar = null;
+      try {
+        avatar = await lookupEnsAvatar(name);
+      } catch (avatarError) {
+        console.warn('Initial ENS avatar resolution error:', avatarError);
+      }
       
-      // Return the name immediately, avatar will be updated later
-      return { name, avatar: null };
+      // If we couldn't get the avatar, return just the name and fetch avatar asynchronously
+      if (!avatar) {
+        // This allows the UI to show the name faster
+        setTimeout(async () => {
+          try {
+            // Try to get the avatar with alternative method
+            const directAvatar = await getDirectEnsAvatar(name).catch(() => null);
+            
+            if (directAvatar) {
+              // Update the cache with the avatar
+              const cachedEns = this.getCachedEnsData(address);
+              if (cachedEns) {
+                this.cacheEnsData(address, { 
+                  name: cachedEns.name, 
+                  avatar: directAvatar 
+                });
+                
+                // Dispatch event to notify the UI of the avatar update
+                window.dispatchEvent(new CustomEvent('ensAvatarUpdated', { 
+                  detail: { address, avatar: directAvatar } 
+                }));
+              }
+            }
+          } catch (error) {
+            console.warn('Async ENS avatar resolution error:', error);
+          }
+        }, 100);
+      }
+      
+      // Return the name and avatar (if we got it synchronously)
+      return { name, avatar };
     } catch (error) {
       console.warn('ENS resolution error:', error);
       return { name: null, avatar: null };

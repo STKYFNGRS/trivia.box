@@ -42,6 +42,11 @@ export default function LeaderboardModal({ isOpen, onClose, leaderboard, current
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
 
+  // Display only 5 players at a time with scrolling
+  const pageSize = 5;
+  const [visibleLeaderboard, setVisibleLeaderboard] = useState<typeof leaderboard>([]);
+  const [currentPage, setCurrentPage] = useState(0);
+
   // Load ENS profiles for players
   useEffect(() => {
     if (!isOpen || leaderboard.length === 0) return;
@@ -113,6 +118,11 @@ export default function LeaderboardModal({ isOpen, onClose, leaderboard, current
   const sortedLeaderboard = useMemo(() => {
     return [...leaderboard].sort((a, b) => a.rank - b.rank);
   }, [leaderboard]);
+
+  useEffect(() => {
+    // Update visible leaderboard
+    setVisibleLeaderboard(sortedLeaderboard);
+  }, [sortedLeaderboard]);
 
   const handleCopyAddress = (address: string) => {
     navigator.clipboard.writeText(address);
