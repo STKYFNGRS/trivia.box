@@ -43,17 +43,19 @@ const ParticleBackground = dynamic(() => import('@/components/ui/ParticleBackgro
 export default function ClientPage() {
   const [isAchievementsOpen, setIsAchievementsOpen] = useState(false);
   const { address, isConnected, chainId } = useAccount();
-  const { gameState, initGame, isLoading } = useGameState();
+  const { gameState, initGame, isLoading, error } = useGameState();
   const [shouldRenderGame, setShouldRenderGame] = useState(false);
+  const [initializationAttempts, setInitializationAttempts] = useState(0);
   
   // Enhanced debugging for game state changes
   useEffect(() => {
-    console.log('[Debug] ClientPage: Game state updated:', gameState ? 'Yes' : 'No');
+    console.log('🎲 ClientPage: Game state updated:', gameState ? 'YES' : 'NO');
     
     if (gameState) {
-      console.log('[Debug] ClientPage: Game state details:', {
+      console.log('🎲 ClientPage: Game state details:', {
         sessionId: gameState.sessionId,
-        questionCount: gameState.questions?.length
+        questionCount: gameState.questions?.length,
+        timestamp: new Date().toISOString()
       });
       
       // Set a flag to ensure we render the game modal
@@ -63,12 +65,38 @@ export default function ClientPage() {
     }
   }, [gameState]);
   
-  // Handle the start game callback
+  // Debug effect for error and loading state changes
+  useEffect(() => {
+    console.log(`🎲 ClientPage: isLoading=${isLoading}, error=${error || 'none'}`);
+  }, [isLoading, error]);
+  
+  // Handle the start game callback with detailed error handling
   const handleStartGame = (options: { questionCount: number; category: string; difficulty: string }) => {
-    console.log('[Debug] ClientPage: handleStartGame called with:', options);
+    console.log('🎲 ClientPage: handleStartGame called with:', options);
     
-    // Make sure we're initializing with the correct options
-    initGame(options);
+    try {
+      // Track initialization attempts
+      setInitializationAttempts(prev => prev + 1);
+      
+      // Create a custom event for analytics/debugging
+      const eventDetail = {
+        ...options,
+        attempt: initializationAttempts + 1,
+        timestamp: new Date().toISOString()
+      };
+      
+      // Dispatch a custom event that can be caught by browser devtools
+      const gameStartEvent = new CustomEvent('game_start_attempt', { detail: eventDetail });
+      window.dispatchEvent(gameStartEvent);
+      
+      // Make sure we're initializing with the correct options
+      console.log('🎲 ClientPage: Calling initGame function...');
+      initGame(options);
+      
+      console.log('🎲 ClientPage: initGame function called successfully');
+    } catch (error) {
+      console.error('🛑 ClientPage: Error in handleStartGame:', error);
+    }
   };
   
   // Force a re-render of the GameModal component when game state changes
@@ -80,7 +108,7 @@ export default function ClientPage() {
   
   // Log render info outside JSX
   if (gameState && gameState.questions && gameState.questions.length > 0) {
-    console.log('[Debug] ClientPage: Rendering GameModal with', gameState.questions.length, 'questions and sessionId:', gameState.sessionId);
+    console.log('🎲 ClientPage: Rendering GameModal with', gameState.questions.length, 'questions and sessionId:', gameState.sessionId);
   }
   
   return (
@@ -115,6 +143,22 @@ export default function ClientPage() {
                   sessionId={gameState.sessionId}
                   onClose={() => window.location.reload()}
                 />
+              </div>
+            )}
+            
+            {/* Display error if something fails */}
+            {error && !isLoading && !gameState && (
+              <div className="fixed inset-0 flex items-center justify-center z-50">
+                <div className="bg-red-900/90 p-6 rounded-xl border border-red-500/50 text-white max-w-md">
+                  <h3 className="text-xl font-bold mb-2">Error Starting Game</h3>
+                  <p className="mb-4">{error}</p>
+                  <button 
+                    onClick={() => window.location.reload()}
+                    className="bg-red-700 hover:bg-red-600 px-4 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    Reload Page
+                  </button>
+                </div>
               </div>
             )}
           </div>

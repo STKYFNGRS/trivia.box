@@ -13,24 +13,10 @@ const INIT_COOLDOWN = 500; // Reduced from 1000ms to 500ms
 const MAX_INIT_ATTEMPTS = 3;
 const DEBUG_MODE = true; // Enable for better debugging
 
-// Debug logger - logs to console regardless of DEBUG_MODE for critical functions
+// Debug logger to track game initialization
 const debugLog = (...args: any[]) => {
-  if (DEBUG_MODE) {
-    console.log(...args);
-  }
+  console.log(...args); // Always log to make debugging easier
 };
-
-// Debounce implementation
-function debounce<T extends (...args: any[]) => any>(func: T, wait: number) {
-  let timeout: NodeJS.Timeout | null = null;
-  return function(...args: Parameters<T>) {
-    if (timeout) clearTimeout(timeout);
-    timeout = setTimeout(() => {
-      func(...args);
-      timeout = null;
-    }, wait);
-  };
-}
 
 export function useGameState() {
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -48,17 +34,18 @@ export function useGameState() {
 
   // Subscribe to controller state changes with improved error handling
   useEffect(() => {
-    console.log('useGameState: Setting up stateChange listener');
+    console.log('🎮 useGameState: Setting up stateChange listener');
     
     // Create a handler that explicitly calls setGameState
     const handleStateChange = (newState: GameState | null) => {
-      console.log('useGameState: Received state change event:', newState ? 'Valid Game State' : 'Null');
+      console.log('🎮 useGameState: Received state change event:', newState ? 'Valid Game State' : 'Null');
       if (newState) {
-        console.log(`useGameState: received state has sessionId: ${newState.sessionId} and ${newState.questions?.length || 0} questions`);
+        console.log(`🎮 useGameState: received state has sessionId: ${newState.sessionId} and ${newState.questions?.length || 0} questions`);
         
         // Force state update immediately (no timeout)
         setGameState(newState);
         initializationComplete.current = true;
+        console.log('🎮 useGameState: Game state updated successfully');
       } else {
         // For null state updates
         setGameState(null);
@@ -71,12 +58,12 @@ export function useGameState() {
     // Check if we already have a state in the controller
     const currentState = gameController.getGameState();
     if (currentState) {
-      console.log('useGameState: Found existing game state in controller');
+      console.log('🎮 useGameState: Found existing game state in controller');
       handleStateChange(currentState);
     }
     
     return () => {
-      console.log('useGameState: Removing stateChange listener');
+      console.log('🎮 useGameState: Removing stateChange listener');
       gameController.off('stateChange', handleStateChange);
     };
   }, [gameController]);
@@ -108,11 +95,11 @@ export function useGameState() {
   const resetGame = useCallback(() => {
     const now = Date.now();
     if (now - lastResetTime.current < RESET_COOLDOWN) {
-      console.log('Reset attempted too quickly');
+      console.log('🎮 Reset attempted too quickly');
       return;
     }
 
-    console.log('Resetting game state...');
+    console.log('🎮 Resetting game state...');
     lastResetTime.current = now;
     gameController.reset();
     setGameState(null);
@@ -121,47 +108,40 @@ export function useGameState() {
     initializationComplete.current = false;
   }, [gameController]);
 
-  const initGameUnbounced = useCallback(async (options: Partial<GameConfig> = {}) => {
+  // Key function for starting the game - direct implementation (no debounce)
+  const initGame = useCallback(async (options: Partial<GameConfig> = {}) => {
     if (isLoading) {
-      console.log('Game initialization already in loading state');
+      console.log('🎮 Game initialization already in loading state');
       return;
     }
     
     // Store the attempted options for potential retry
     lastAttemptedOptions.current = options;
-    console.log('Attempting to start game with options:', options);
+    console.log('🎮 Starting game with options:', {
+      ...options,
+      timestamp: new Date().toISOString()
+    });
     
     // Reset initialization flag since we're explicitly trying to init a new game
     initializationComplete.current = false;
     
-    const now = Date.now();
-    if (now - lastInitTime.current < INIT_COOLDOWN) {
-      console.log('Initialization attempted too frequently, please wait');
-      return;
-    }
-
-    // Reset attempt counter if it's been a while
-    if (now - lastInitTime.current > 30000) {
-      initAttempts.current = 0;
-    }
-
-    if (initAttempts.current >= MAX_INIT_ATTEMPTS) {
-      setError('Please wait a moment before trying again');
-      return;
-    }
-
     try {
-      console.log('Starting game initialization...');
+      console.log('🎮 Setting loading state to TRUE');
       setIsLoading(true);
       setError(null);
-      lastInitTime.current = now;
-      initAttempts.current++;
-
+      
       // Initialize with abort controller for timeout protection
       const abortController = new AbortController();
-      const timeoutId = setTimeout(() => abortController.abort(), 20000); // 20 second timeout
-
+      const timeoutId = setTimeout(() => {
+        console.log('🎮 Game initialization timeout - aborting');
+        abortController.abort();
+      }, 25000); // 25 second timeout - increased from 20s
+      
       try {
+        console.log('🎮 Calling gameController.startGame...');
+        const startTime = performance.now();
+        
+        // Critical function call to start the game
         const newGameState = await gameController.startGame({
           questionCount: options.questionCount || 10,
           category: options.category,
@@ -169,33 +149,51 @@ export function useGameState() {
           excludeQuestions: options.excludeQuestions || [],
           walletAddress: user || ''
         });
-
+        
+        const endTime = performance.now();
+        console.log(`🎮 gameController.startGame completed in ${Math.round(endTime - startTime)}ms`);
+        
         clearTimeout(timeoutId);
         
-        // Important: directly update React state - no more relying on events only
-        console.log('Game initialization successful - DIRECTLY setting game state');
-        setGameState(newGameState);
-        initializationComplete.current = true;
-        initAttempts.current = 0;
+        if (!newGameState) {
+          throw new Error('Game controller returned empty game state');
+        }
+        
+        // Important: directly update React state
+        console.log('🎮 Game initialization successful - Setting game state with:', {
+          sessionId: newGameState.sessionId,
+          questions: newGameState.questions?.length
+        });
+        
+        // Important: Use a special flag to ensure code doesn't optimize this away
+        const forceUpdate = true;
+        if (forceUpdate) {
+          setGameState(newGameState);
+          initializationComplete.current = true;
+          console.log('🎮 Game state successfully updated');
+        }
         
       } catch (fetchError) {
         clearTimeout(timeoutId);
+        console.error('🎮 Error in gameController.startGame:', fetchError);
+        
         if (fetchError.name === 'AbortError') {
           throw new Error('Game initialization timed out. Please try again.');
         }
         throw fetchError;
       }
     } catch (error) {
-      console.error('Game initialization failed:', error);
+      console.error('🎮 Game initialization failed:', error);
       setError(error instanceof Error ? error.message : 'Failed to initialize game');
       setGameState(null);
     } finally {
+      console.log('🎮 Setting loading state to FALSE');
       setIsLoading(false);
     }
   }, [gameController, isLoading, user]);
 
-  // Use initGameUnbounced directly - no more debouncing which was causing issues
-  const initGame = initGameUnbounced;
+  // We're not using debouncing which was causing issues
+  // const initGame = initGameUnbounced;
 
   const submitScore = useCallback(async (score: number) => {
     if (!user) {

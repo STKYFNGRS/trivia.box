@@ -1,3 +1,4 @@
+// Add minimal changes to ensure the game controller events work correctly
 import { GameOrchestrator } from '../services/gameOrchestrator';
 import { GameQuestionService } from '../services/client/GameQuestionService';
 import { AchievementService } from '@/services/achievements/AchievementService';
@@ -9,13 +10,11 @@ const MAX_RETRIES = 2; // Maximum 2 retries
 const MIN_RESET_INTERVAL = 3000; // Minimum 3 seconds between resets
 const SESSION_CLEANUP_TIMEOUT = 2000; // Wait 2 seconds for cleanup
 const SESSION_CREATION_TIMEOUT = 30000; // Increase timeout to 30 seconds for session creation
-const DEBUG_MODE = false; // Set to false to disable debug logging
+const DEBUG_MODE = true; // Enable for debugging
 
-// Debug logger - only logs when DEBUG_MODE is true
+// Debug logger - logs to console regardless of DEBUG_MODE for critical functions
 const debugLog = (...args: any[]) => {
-  if (DEBUG_MODE) {
-    console.log(...args);
-  }
+  console.log(...args);
 };
 
 export class GameController extends EventEmitter {
@@ -39,10 +38,14 @@ export class GameController extends EventEmitter {
     
     // Set a higher limit for event listeners to prevent warnings
     this.setMaxListeners(20);
+    
+    // Log constructor for debugging
+    console.log('🎲 GameController: constructor called');
   }
 
   public static getInstance(): GameController {
     if (!GameController.instance) {
+      console.log('🎲 GameController: Creating new instance');
       GameController.instance = new GameController();
     }
     return GameController.instance;
@@ -56,62 +59,25 @@ export class GameController extends EventEmitter {
     // Update the internal state
     this.gameState = newState;
     
-    debugLog('GameController: Emitting stateChange event with state:', newState ? 'Valid Game State' : 'Null');
+    console.log('🎲 GameController: Emitting stateChange event with state:', newState ? 'Valid Game State' : 'Null');
     if (newState) {
-      debugLog(`GameController: emitted state has sessionId: ${newState.sessionId} and ${newState.questions?.length || 0} questions`);
-      
-      // Additional logging for debug purposes
-      if (previousSessionId !== newState.sessionId) {
-        debugLog(`GameController: Session ID changed from ${previousSessionId || 'none'} to ${newState.sessionId}`);
-      }
+      console.log(`🎲 GameController: emitted state has sessionId: ${newState.sessionId} and ${newState.questions?.length || 0} questions`);
       
       // Force listeners to update with setTimeout to ensure proper event loop execution
-      setTimeout(() => {
-        this.emit('stateChange', newState);
-      }, 0);
+      // Don't use setTimeout - use immediate emission to prevent state loss
+      this.emit('stateChange', newState);
       
     } else if (hadPreviousState) {
       // If we're clearing state that previously existed, ensure we emit this change
-      debugLog(`GameController: Clearing previous game state with session ID: ${previousSessionId}`);
-      setTimeout(() => {
-        this.emit('stateChange', null);
-      }, 0);
+      console.log(`🎲 GameController: Clearing previous game state with session ID: ${previousSessionId}`);
+      this.emit('stateChange', null);
     }
-  }
-
-  private async retryWithBackoff(response?: Response): Promise<Response> {
-    if (this.retryCount >= MAX_RETRIES) {
-      this.retryCount = 0;
-      throw new Error('Maximum retry attempts reached');
-    }
-    
-    let retryDelay = RETRY_DELAY * Math.pow(2, this.retryCount);
-    
-    if (response?.headers) {
-      const serverRetryAfter = response.headers.get('Retry-After');
-      if (serverRetryAfter) {
-        retryDelay = Math.max(parseInt(serverRetryAfter) * 1000, retryDelay);
-      }
-    }
-    
-    retryDelay = Math.min(retryDelay, 10000);
-    debugLog(`Retrying request after ${retryDelay}ms (attempt ${this.retryCount + 1}/${MAX_RETRIES})`);
-    
-    await new Promise(resolve => setTimeout(resolve, retryDelay));
-    this.retryCount++;
-    
-    return fetch('/api/sessions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    });
   }
 
   async startGame(config: GameConfig): Promise<GameState> {
     try {
       if (this.sessionCreationLock) {
-        console.warn('Session creation already in progress');
+        console.warn('🎲 Session creation already in progress');
         if (this.gameState) {
           return this.gameState;
         } else {
@@ -120,51 +86,28 @@ export class GameController extends EventEmitter {
       }
       
       this.sessionCreationLock = true;
-      debugLog('GameController - Starting game with config:', 
-                  `${config.questionCount} questions, category: ${config.category}, difficulty: ${config.difficulty}`);
+      console.log('🎲 GameController - Starting game with config:', 
+                  `${config.questionCount} questions, category: ${config.category}, difficulty: ${config.difficulty}, wallet: ${config.walletAddress?.slice(0, 8)}...`);
       
-      // Try to get from cache first
-      const cacheKey = `game-state-${config.category}-${config.difficulty}-${config.questionCount}`;
-      // Check if we should force a refresh (always on second game)
-      const forceRefresh = true; // Always force refresh
+      // Always force refresh
+      const forceRefresh = true; 
       
-      if (!forceRefresh && typeof window !== 'undefined') {
-        try {
-          const cachedState = localStorage.getItem(cacheKey);
-          if (cachedState) {
-            const parsedCache = JSON.parse(cachedState);
-            // Only use cache if it's less than 5 minutes old
-            if (Date.now() - parsedCache.timestamp < 300000 && 
-                parsedCache.state?.questions?.length === config.questionCount) {
-              debugLog('Using cached game state');
-              const gameState = {
-                ...parsedCache.state,
-                walletAddress: config.walletAddress,
-                startTime: Date.now()
-              } as GameState;
-              
-              this.updateGameState(gameState);
-              return gameState;
-            }
-          }
-        } catch (cacheError) {
-          console.warn('Cache error, continuing with API request:', cacheError);
-        }
-      }
-
       // Create session immediately when starting the game with retry logic
       let attempts = 0;
       const maxAttempts = 3;
 
       while (attempts < maxAttempts) {
         attempts++;
-        debugLog(`Creating game session (attempt ${attempts}/${maxAttempts}) with wallet address:`, config.walletAddress);
+        console.log(`🎲 Creating game session (attempt ${attempts}/${maxAttempts}) with wallet address:`, config.walletAddress?.slice(0, 8));
         
         // Add request timeout - increased from 15s to 30s
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), SESSION_CREATION_TIMEOUT); 
         
         try {
+          console.log('🎲 Sending fetch request to /api/game/session');
+          const startTime = performance.now();
+          
           const response = await fetch('/api/game/session', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -179,24 +122,30 @@ export class GameController extends EventEmitter {
             signal: controller.signal
           });
           
+          const endTime = performance.now();
+          console.log(`🎲 Fetch request completed in ${Math.round(endTime - startTime)}ms`);
+          
           clearTimeout(timeoutId);
 
           if (!response.ok) {
             const errorData = await response.json();
             if (attempts < maxAttempts) {
-              console.log(`Session creation failed (attempt ${attempts}), retrying...`);
+              console.log(`🎲 Session creation failed (attempt ${attempts}), retrying...`);
               await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
               continue;
             }
             throw new Error(errorData.error || 'Failed to create game session');
           }
 
+          console.log('🎲 Parsing response JSON...');
+          const parseStart = performance.now();
           const data = await response.json();
+          console.log(`🎲 JSON parsing completed in ${Math.round(performance.now() - parseStart)}ms`);
           
           // Validate we have the correct number of questions
           if (!data.hasQuestions || !Array.isArray(data.questions) || data.questions.length !== config.questionCount) {
             if (attempts < maxAttempts) {
-              console.log(`Received incorrect question count: ${data.questions?.length || 0} (attempt ${attempts}), retrying...`);
+              console.log(`🎲 Received incorrect question count: ${data.questions?.length || 0} (attempt ${attempts}), retrying...`);
               await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
               continue;
             }
@@ -204,6 +153,7 @@ export class GameController extends EventEmitter {
           }
 
           // Create game state with validated data
+          console.log('🎲 Creating new game state object...');
           const gameState = {
             sessionId: data.sessionId.toString(),
             questions: data.questions,
@@ -217,39 +167,24 @@ export class GameController extends EventEmitter {
             startTime: Date.now()
           } as GameState;
           
-          console.log('Game session created successfully:', data.sessionId);
-          debugLog(`Received ${gameState.questions.length} questions for the game`);
+          console.log('🎲 Game session created successfully:', data.sessionId);
+          console.log(`🎲 Received ${gameState.questions.length} questions for the game`);
           
-          // Don't cache game state anymore
-          /*
-          if (typeof window !== 'undefined') {
-            try {
-              localStorage.setItem(cacheKey, JSON.stringify({
-                state: gameState,
-                timestamp: Date.now()
-              }));
-            } catch (storageError) {
-              console.warn('Failed to cache game state:', storageError);
-            }
-          }
-          */
-          
-          // Update internal state right away
+          // Critical: Update the internal state right away
           this.gameState = gameState;
           
-          // Emit state change event - use a very minimal timeout to ensure proper event loop handling
-          setTimeout(() => {
-            this.emit('stateChange', gameState);
-            debugLog('GameController: State change event emitted after session creation');
-          }, 10);
+          // Emit state change event immediately (no setTimeout)
+          console.log('🎲 Emitting stateChange event...');
+          this.emit('stateChange', gameState);
           
+          console.log('🎲 Returning gameState object');
           return gameState;
         } catch (fetchError) {
           clearTimeout(timeoutId);
           
           if (fetchError.name === 'AbortError') {
             if (attempts < maxAttempts) {
-              console.log(`Session creation timed out (attempt ${attempts}), retrying...`);
+              console.log(`🎲 Session creation timed out (attempt ${attempts}), retrying...`);
               await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
               continue;
             }
@@ -263,7 +198,7 @@ export class GameController extends EventEmitter {
       throw new Error(`Failed to create game session after ${maxAttempts} attempts`);
 
     } catch (error) {
-      console.error('Error starting game:', error);
+      console.error('🎲 Error starting game:', error);
       throw error;
     } finally {
       // Small delay before releasing the lock to prevent immediate retries
@@ -275,9 +210,9 @@ export class GameController extends EventEmitter {
 
   private async cleanupSession(sessionId: string) {
     try {
-      debugLog(`Cleaning up session: ${sessionId}`);
+      console.log(`🎲 Cleaning up session: ${sessionId}`);
       await fetch(`/api/game/session/${sessionId}`, { method: 'DELETE' });
-      debugLog(`Session ${sessionId} cleanup completed`);
+      console.log(`🎲 Session ${sessionId} cleanup completed`);
     } catch (error) {
       console.error('Failed to cleanup session:', error);
     }
@@ -286,7 +221,7 @@ export class GameController extends EventEmitter {
   reset() {
     const now = Date.now();
     if (now - this.lastResetTime < MIN_RESET_INTERVAL) {
-      debugLog('Reset attempted too quickly');
+      console.log('🎲 Reset attempted too quickly');
       return;
     }
     
@@ -322,12 +257,12 @@ export class GameController extends EventEmitter {
     }
 
     try {
-      debugLog(`Ending game session ${sessionId}${this.gameState.walletAddress ? ` for wallet: ${this.gameState.walletAddress}` : ''}`);
+      console.log(`🎲 Ending game session ${sessionId}${this.gameState.walletAddress ? ` for wallet: ${this.gameState.walletAddress}` : ''}`);
       
       // Before cleanup, process achievements if we have player data
       if (this.gameState.walletAddress) {
         try {
-          debugLog(`Processing achievements for wallet: ${this.gameState.walletAddress}`);
+          console.log(`🎲 Processing achievements for wallet: ${this.gameState.walletAddress}`);
           
           // First verify all achievements for the wallet - this ensures everything is tracked properly
           const verifyResponse = await fetch('/api/verify-achievements?wallet=' + 
@@ -337,7 +272,7 @@ export class GameController extends EventEmitter {
             console.warn('Failed to verify all achievements');
           } else {
             const verifyResult = await verifyResponse.json();
-            debugLog('Achievement verification result:', verifyResult);
+            console.log('Achievement verification result:', verifyResult);
           }
           
           // Then get game results data
@@ -370,7 +305,7 @@ export class GameController extends EventEmitter {
               endTime: new Date()
             });
             
-            debugLog('Processed achievements for game session:', sessionId);
+            console.log('Processed achievements for game session:', sessionId);
           }
         } catch (error) {
           console.error('Failed to process achievements:', error);

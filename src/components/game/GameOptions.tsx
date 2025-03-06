@@ -67,18 +67,26 @@ export default function GameOptions({ onStartGame, isVisible = true }: GameOptio
 
   const handleStartGame = () => {
     if (selectedCount && selectedCategory && selectedDifficulty) {
-      // Add debug logging
-      console.log('Starting game with options:', {
+      // More detailed debug logging
+      console.log('🎮 GameOptions: START GAME BUTTON CLICKED', {
         questionCount: selectedCount,
         category: selectedCategory,
-        difficulty: selectedDifficulty
+        difficulty: selectedDifficulty,
+        timestamp: new Date().toISOString()
       });
       
-      onStartGame({
-        questionCount: selectedCount,
-        category: selectedCategory,
-        difficulty: selectedDifficulty
-      });
+      try {
+        // Call the parent onStartGame function - add try/catch to detect errors
+        onStartGame({
+          questionCount: selectedCount,
+          category: selectedCategory,
+          difficulty: selectedDifficulty
+        });
+        
+        console.log('🎮 GameOptions: onStartGame function called successfully');
+      } catch (error) {
+        console.error('🛑 GameOptions: Error calling onStartGame:', error);
+      }
     }
   };
 
