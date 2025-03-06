@@ -13,9 +13,9 @@ import Footer from '@/components/shared/Footer';
 import GameModalFallback from '@/components/game/GameModalFallback';
 
 // Configuration
-const DEBUG_MODE = false; // Set to false to disable debug logging
+const DEBUG_MODE = true; // Enable for better debugging
 
-// Debug logger - only logs when DEBUG_MODE is true
+// Debug logger
 const debugLog = (...args: any[]) => {
   if (DEBUG_MODE) {
     console.log(...args);
@@ -48,9 +48,13 @@ export default function ClientPage() {
   
   // Enhanced debugging for game state changes
   useEffect(() => {
+    console.log('[Debug] ClientPage: Game state updated:', gameState ? 'Yes' : 'No');
+    
     if (gameState) {
-      debugLog('[Debug] ClientPage: Game state set with questions:', gameState.questions?.length);
-      debugLog('[Debug] ClientPage: Game session ID:', gameState.sessionId);
+      console.log('[Debug] ClientPage: Game state details:', {
+        sessionId: gameState.sessionId,
+        questionCount: gameState.questions?.length
+      });
       
       // Set a flag to ensure we render the game modal
       setShouldRenderGame(true);
@@ -58,6 +62,14 @@ export default function ClientPage() {
       setShouldRenderGame(false);
     }
   }, [gameState]);
+  
+  // Handle the start game callback
+  const handleStartGame = (options: { questionCount: number; category: string; difficulty: string }) => {
+    console.log('[Debug] ClientPage: handleStartGame called with:', options);
+    
+    // Make sure we're initializing with the correct options
+    initGame(options);
+  };
   
   // Force a re-render of the GameModal component when game state changes
   // This helps ensure the component is properly mounted
@@ -79,7 +91,7 @@ export default function ClientPage() {
         {isFullyConnected ? (
           <div className="flex-1 container mx-auto px-4 py-8">
             <div className={(gameState || isAchievementsOpen || isLoading) ? 'invisible' : 'visible'}>
-              <GameOptions onStartGame={initGame} />
+              <GameOptions onStartGame={handleStartGame} />
             </div>
             
             {isAchievementsOpen && address && (
@@ -90,9 +102,10 @@ export default function ClientPage() {
               />
             )}
             
-            {/* Use shouldRenderGame flag and a unique key to ensure proper rendering */}
-            {shouldRenderGame && gameState && gameState.questions && gameState.questions.length > 0 && (
+            {/* Use explicit conditional check with console output for debugging */}
+            {gameState && gameState.questions && gameState.questions.length > 0 && (
               <div key={gameModalKey} className="game-modal-container">
+                {console.log('[Debug] ClientPage: Rendering GameModal with', gameState.questions.length, 'questions and sessionId:', gameState.sessionId)}
                 <GameModal
                   questions={gameState.questions}
                   sessionId={gameState.sessionId}

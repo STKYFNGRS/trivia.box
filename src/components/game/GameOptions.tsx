@@ -67,6 +67,13 @@ export default function GameOptions({ onStartGame, isVisible = true }: GameOptio
 
   const handleStartGame = () => {
     if (selectedCount && selectedCategory && selectedDifficulty) {
+      // Add debug logging
+      console.log('Starting game with options:', {
+        questionCount: selectedCount,
+        category: selectedCategory,
+        difficulty: selectedDifficulty
+      });
+      
       onStartGame({
         questionCount: selectedCount,
         category: selectedCategory,
@@ -87,10 +94,9 @@ export default function GameOptions({ onStartGame, isVisible = true }: GameOptio
           exit={{ opacity: 0, scale: 0.95 }}
           className="relative w-full max-w-4xl mt-28 pt-16 md:pt-10 md:mt-24"
         >
-          {/* Added max-h for mobile and overflow-y-auto to make content scrollable */}
-          <div className="rounded-2xl bg-gradient-to-br from-gray-900/90 to-gray-800/90 p-6 backdrop-blur-lg border border-amber-500/20 max-h-[70vh] overflow-y-auto">
+          <div className="rounded-2xl bg-gradient-to-br from-gray-900/90 to-gray-800/90 p-6 backdrop-blur-lg border border-amber-500/20 overflow-y-auto max-h-[80vh]">
             {/* Header */}
-            <div className="mb-6 flex items-center sticky top-0 z-10 bg-gradient-to-br from-gray-900/95 to-gray-800/95 py-2 -mx-2 px-2 backdrop-blur-md">
+            <div className="mb-6 flex items-center">
               <div className="flex items-center gap-3 justify-center w-full relative">
                 <Cog className="h-6 w-6 text-amber-400" />
                 <h2 className="text-xl font-bold text-white">Choose Your Game Settings</h2>
@@ -98,7 +104,7 @@ export default function GameOptions({ onStartGame, isVisible = true }: GameOptio
             </div>
 
             {/* Game Options */}
-            <div className="space-y-6 pb-4">
+            <div className="space-y-6">
               {/* Question Count - Always in one row on all screen sizes */}
               <div className="space-y-3">
                 <div className="text-base font-medium text-gray-200">
@@ -126,7 +132,7 @@ export default function GameOptions({ onStartGame, isVisible = true }: GameOptio
                 <div className="text-base font-medium text-gray-200">
                   Difficulty:
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-4 gap-3">
                   {difficulties.map(difficulty => (
                     <button
                       key={difficulty.id}
@@ -143,12 +149,12 @@ export default function GameOptions({ onStartGame, isVisible = true }: GameOptio
                 </div>
               </div>
 
-              {/* Category - 2x6 grid on mobile, 3x4 on larger screens */}
+              {/* Category - 3x4 grid for all screen sizes */}
               <div className="space-y-3">
                 <div className="text-base font-medium text-gray-200">
                   Category:
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   {categories.map(category => (
                     <button
                       key={category.id}
@@ -166,12 +172,12 @@ export default function GameOptions({ onStartGame, isVisible = true }: GameOptio
               </div>
             </div>
 
-            {/* Start Game Button - Sticky at bottom for mobile */}
-            <div className="sticky bottom-0 pt-4 pb-2 bg-gradient-to-t from-gray-900/95 via-gray-900/95 to-gray-900/80 backdrop-blur-md -mx-2 px-2 flex justify-center">
+            {/* Start Game Button */}
+            <div className="flex justify-center mt-6">
               <button
                 onClick={handleStartGame}
                 disabled={!selectedCount || !selectedCategory || !selectedDifficulty}
-                className={`relative px-8 py-4 rounded-lg font-bold transition-all w-full sm:w-auto ${
+                className={`relative px-8 py-4 rounded-lg font-bold transition-all ${
                   selectedCount && selectedCategory && selectedDifficulty
                     ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-gray-900 shadow-lg shadow-amber-600/20 hover:transform hover:scale-105 hover:shadow-lg hover:shadow-amber-600/30 border border-amber-500/40'
                     : 'bg-gray-800/60 text-gray-400 border border-gray-700/40 cursor-not-allowed'
@@ -184,7 +190,7 @@ export default function GameOptions({ onStartGame, isVisible = true }: GameOptio
                     <span className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/30 to-transparent pointer-events-none"></span>
                   </>
                 )}
-                <div className="flex items-center justify-center gap-2">
+                <div className="flex items-center gap-2">
                   <Play className="h-5 w-5" />
                   <span>Start Game</span>
                 </div>

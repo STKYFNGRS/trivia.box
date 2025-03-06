@@ -9,11 +9,11 @@ import type { GameState, GameConfig } from '@/types/game';
 
 // Configuration
 const RESET_COOLDOWN = 500; // 0.5 seconds cooldown between resets
-const INIT_COOLDOWN = 1000; // 1 second cooldown between init attempts
+const INIT_COOLDOWN = 500; // Reduced from 1000ms to 500ms
 const MAX_INIT_ATTEMPTS = 3;
-const DEBUG_MODE = false; // Set to false to disable debug logging
+const DEBUG_MODE = true; // Enable for better debugging
 
-// Debug logger - only logs when DEBUG_MODE is true
+// Debug logger - logs to console regardless of DEBUG_MODE for critical functions
 const debugLog = (...args: any[]) => {
   if (DEBUG_MODE) {
     console.log(...args);
@@ -43,21 +43,22 @@ export function useGameState() {
   const initAttempts = useRef(0);
   const initializationComplete = useRef(false);
 
-  // Subscribe to controller state changes
+  // Add a ref to directly track attempted initialization options
+  const lastAttemptedOptions = useRef<Partial<GameConfig> | null>(null);
+
+  // Subscribe to controller state changes with improved error handling
   useEffect(() => {
-    debugLog('useGameState: Setting up stateChange listener');
+    console.log('useGameState: Setting up stateChange listener');
     
     // Create a handler that explicitly calls setGameState
     const handleStateChange = (newState: GameState | null) => {
-      debugLog('useGameState: Received state change event:', newState ? 'Valid Game State' : 'Null');
+      console.log('useGameState: Received state change event:', newState ? 'Valid Game State' : 'Null');
       if (newState) {
-        debugLog(`useGameState: received state has sessionId: ${newState.sessionId} and ${newState.questions?.length || 0} questions`);
+        console.log(`useGameState: received state has sessionId: ${newState.sessionId} and ${newState.questions?.length || 0} questions`);
         
-        // Force state update on the next microtask to ensure React processes it
-        setTimeout(() => {
-          setGameState(newState);
-          initializationComplete.current = true;
-        }, 0);
+        // Force state update immediately (no timeout)
+        setGameState(newState);
+        initializationComplete.current = true;
       } else {
         // For null state updates
         setGameState(null);
@@ -70,12 +71,12 @@ export function useGameState() {
     // Check if we already have a state in the controller
     const currentState = gameController.getGameState();
     if (currentState) {
-      debugLog('useGameState: Found existing game state in controller');
+      console.log('useGameState: Found existing game state in controller');
       handleStateChange(currentState);
     }
     
     return () => {
-      debugLog('useGameState: Removing stateChange listener');
+      console.log('useGameState: Removing stateChange listener');
       gameController.off('stateChange', handleStateChange);
     };
   }, [gameController]);
@@ -107,11 +108,11 @@ export function useGameState() {
   const resetGame = useCallback(() => {
     const now = Date.now();
     if (now - lastResetTime.current < RESET_COOLDOWN) {
-      debugLog('Reset attempted too quickly');
+      console.log('Reset attempted too quickly');
       return;
     }
 
-    debugLog('Resetting game state...');
+    console.log('Resetting game state...');
     lastResetTime.current = now;
     gameController.reset();
     setGameState(null);
@@ -122,16 +123,20 @@ export function useGameState() {
 
   const initGameUnbounced = useCallback(async (options: Partial<GameConfig> = {}) => {
     if (isLoading) {
-      debugLog('Game initialization already in loading state');
+      console.log('Game initialization already in loading state');
       return;
     }
+    
+    // Store the attempted options for potential retry
+    lastAttemptedOptions.current = options;
+    console.log('Attempting to start game with options:', options);
     
     // Reset initialization flag since we're explicitly trying to init a new game
     initializationComplete.current = false;
     
     const now = Date.now();
     if (now - lastInitTime.current < INIT_COOLDOWN) {
-      debugLog('Initialization attempted too frequently, please wait');
+      console.log('Initialization attempted too frequently, please wait');
       return;
     }
 
@@ -146,7 +151,7 @@ export function useGameState() {
     }
 
     try {
-      debugLog('Starting game initialization...');
+      console.log('Starting game initialization...');
       setIsLoading(true);
       setError(null);
       lastInitTime.current = now;
@@ -167,11 +172,11 @@ export function useGameState() {
 
         clearTimeout(timeoutId);
         
-        // Important: directly update our local state in addition to relying on the event
+        // Important: directly update React state - no more relying on events only
+        console.log('Game initialization successful - DIRECTLY setting game state');
         setGameState(newGameState);
         initializationComplete.current = true;
         initAttempts.current = 0;
-        debugLog('Game initialization successful with direct state update');
         
       } catch (fetchError) {
         clearTimeout(timeoutId);
@@ -189,11 +194,8 @@ export function useGameState() {
     }
   }, [gameController, isLoading, user]);
 
-  // Use useMemo to create the debounced version of initGameUnbounced with a shorter delay
-  const initGame = useMemo(
-    () => debounce(initGameUnbounced, 100), // Reduce from 300ms to 100ms for more responsive feeling
-    [initGameUnbounced]
-  );
+  // Use initGameUnbounced directly - no more debouncing which was causing issues
+  const initGame = initGameUnbounced;
 
   const submitScore = useCallback(async (score: number) => {
     if (!user) {
