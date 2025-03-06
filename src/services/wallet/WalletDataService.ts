@@ -156,15 +156,15 @@ class WalletDataService {
       }
       
       // If we have a name, try to get avatar synchronously first - modified from original
-      let avatar = null;
+      let avatarResult: string | null = null;
       try {
-        avatar = await lookupEnsAvatar(name);
+        avatarResult = await lookupEnsAvatar(name);
       } catch (avatarError) {
         console.warn('Initial ENS avatar resolution error:', avatarError);
       }
       
       // If we couldn't get the avatar, return just the name and fetch avatar asynchronously
-      if (!avatar) {
+      if (!avatarResult) {
         // This allows the UI to show the name faster
         setTimeout(async () => {
           try {
@@ -193,7 +193,7 @@ class WalletDataService {
       }
       
       // Return the name and avatar (if we got it synchronously)
-      return { name, avatar };
+      return { name, avatar: avatarResult };
     } catch (error) {
       console.warn('ENS resolution error:', error);
       return { name: null, avatar: null };
