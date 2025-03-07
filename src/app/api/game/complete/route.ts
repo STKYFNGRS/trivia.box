@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/dist/server/web/spec-extension/response';
 import { prisma } from '@/lib/db/client';
 import { AchievementService } from '@/services/achievements/AchievementService';
 
