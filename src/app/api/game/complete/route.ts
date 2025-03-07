@@ -111,7 +111,7 @@ export async function POST(req: Request) {
       await achievementService.processGameEnd({
         userId: user.id,
         sessionId: parseInt(sessionId.toString()),
-        category: trivia_category.general, // Use the correct enum value
+        category: trivia_category.science, // Use a valid category from the enum
         correctAnswers: correctAnswers || 0,
         totalQuestions: totalQuestions || 0,
         bestStreak: bestStreak || 0,
