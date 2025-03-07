@@ -7,6 +7,7 @@ interface StatsDisplayProps {
     totalPoints: number;
     bestStreak: number;
     gamesPlayed: number;
+    rank?: number;
   } | null;
   isLoading?: boolean;
 }
@@ -45,7 +46,7 @@ const StatsDisplay = memo(function StatsDisplay({ stats, isLoading = false }: St
         <div className="text-center flex flex-col items-center px-1">
           <Flame className="w-4 h-4 text-orange-500 mb-0.5" />
           <span className="text-orange-500 font-bold text-sm md:text-base">
-            {stats.bestStreak}
+            {stats.bestStreak || 0}
           </span>
           <span className="text-gray-400 text-xs hidden md:block">Streak</span>
         </div>
@@ -59,13 +60,13 @@ const StatsDisplay = memo(function StatsDisplay({ stats, isLoading = false }: St
           <span className="text-gray-400 text-xs hidden md:block">Games</span>
         </div>
         
-        {/* Weekly Points */}
+        {/* Rank */}
         <div className="text-center flex flex-col items-center px-1">
           <Trophy className="w-4 h-4 text-amber-500 mb-0.5" />
           <span className="text-amber-500 font-bold text-sm md:text-base">
-            {stats.totalPoints}
+            {stats.rank || 1}
           </span>
-          <span className="text-gray-400 text-xs hidden md:block">Weekly</span>
+          <span className="text-gray-400 text-xs hidden md:block">Rank</span>
         </div>
       </div>
     </div>

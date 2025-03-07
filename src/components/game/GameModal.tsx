@@ -381,6 +381,10 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
             if (completeResponse.ok) {
               const result = await completeResponse.json();
               debugLog('Game completion successful:', result);
+              
+              // Trigger wallet stats refresh after successful game completion
+              console.log('Triggering wallet stats refresh');
+              window.dispatchEvent(new CustomEvent('refreshWalletStats'));
             } else {
               console.warn('Game completion API returned error status:', completeResponse.status);
               // Continue even if completion API fails - we don't want to block the user

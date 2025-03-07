@@ -103,6 +103,14 @@ export default function ClientPage() {
   // This helps ensure the component is properly mounted
   const gameModalKey = gameState ? `game-modal-${gameState.sessionId}-${Date.now()}` : 'no-game';
   
+  // Trigger stats refresh when game state changes
+  useEffect(() => {
+    if (!gameState) {
+      // When returning to main screen, refresh wallet stats
+      window.dispatchEvent(new CustomEvent('refreshWalletStats'));
+    }
+  }, [gameState]);
+  
   // Consider connected when wallet is connected and on Base chain
   const isFullyConnected = isConnected && chainId === 8453;
   
