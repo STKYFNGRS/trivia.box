@@ -20,9 +20,8 @@ export function resolveIpfsUrl(ipfsUrl: string): string {
   return ipfsUrl;
 }
 
-// Direct ENS lookup using multiple providers
+// Direct ENS lookup using ethers v5
 import { providers } from 'ethers';
-const { JsonRpcProvider } = providers;
 
 // Cache duration in milliseconds (6 hours)
 const CACHE_DURATION = 1000 * 60 * 60 * 6;
@@ -60,7 +59,7 @@ export async function lookupEnsName(address: string): Promise<string | null> {
     try {
       console.log(`Trying ENS lookup via ${rpcUrl}`);
       // Using ethers v5 import structure
-      const provider = new JsonRpcProvider(rpcUrl);
+      const provider = new providers.JsonRpcProvider(rpcUrl);
       
       // Set a timeout to avoid hanging
       const timeoutPromise = new Promise<null>((_, reject) => {
@@ -110,49 +109,41 @@ export async function lookupEnsAvatar(ensName: string): Promise<string | null> {
     try {
       console.log(`Trying ENS avatar lookup via ${rpcUrl}`);
       // Using ethers v5 import structure
-      const provider = new JsonRpcProvider(rpcUrl);
+      const provider = new providers.JsonRpcProvider(rpcUrl);
       
       // Set a timeout to avoid hanging
       const timeoutPromise = new Promise<null>((_, reject) => {
         setTimeout(() => reject(new Error('ENS lookup timeout')), 5000);
       });
       
-      // Race the avatar lookup against the timeout
-      const resolver = await provider.getResolver(ensName);
+      // Get the resolver
+      const resolverAddress = await provider.getResolver(ensName);
       
-      if (resolver) {
-        const avatar: any = await Promise.race([
-          resolver.getAvatar(),
-          timeoutPromise
-        ]);
-        
-        if (avatar) {
-          console.log(`Found ENS avatar for ${ensName}: ${avatar}`);
+      if (resolverAddress) {
+        try {
+          // Get the avatar
+          const avatar = await provider.getAvatar(ensName);
           
-          // Handle ipfs:// links - use a more type-safe approach
-          let finalAvatar = '';
-          
-          if (avatar && typeof avatar === 'string') {
-            // Handle string avatar
-            finalAvatar = avatar.startsWith('ipfs://') ? resolveIpfsUrl(avatar) : avatar;
-            console.log(`Resolved string avatar: ${finalAvatar}`);
-          } else if (avatar && typeof avatar === 'object' && avatar !== null) {
-            // Handle object avatar
-            if ('url' in avatar && typeof avatar.url === 'string') {
-              finalAvatar = avatar.url.startsWith('ipfs://') ? resolveIpfsUrl(avatar.url) : avatar.url;
-              console.log(`Resolved object avatar: ${finalAvatar}`);
-            } else {
-              // Fallback - try to convert to string
-              finalAvatar = String(avatar);
-              console.log(`Using fallback avatar string: ${finalAvatar}`);
+          if (avatar) {
+            console.log(`Found ENS avatar for ${ensName}: ${avatar}`);
+            
+            // Process the avatar URL
+            let finalAvatar = avatar;
+            
+            if (typeof avatar === 'string') {
+              // Handle string avatar
+              finalAvatar = avatar.startsWith('ipfs://') ? resolveIpfsUrl(avatar) : avatar;
+              console.log(`Resolved string avatar: ${finalAvatar}`);
+            }
+            
+            if (finalAvatar) {
+              // Cache the result
+              cacheEnsAvatar(ensName, finalAvatar);
+              return finalAvatar;
             }
           }
-          
-          if (finalAvatar) {
-            // Cache the result
-            cacheEnsAvatar(ensName, finalAvatar);
-            return finalAvatar;
-          }
+        } catch (avatarError) {
+          console.warn(`Avatar fetch failed for ${ensName}:`, avatarError);
         }
       }
     } catch (e) {
