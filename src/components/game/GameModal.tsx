@@ -152,15 +152,39 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
             signal: controller.signal
           });
           
+          // First check the response content type
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('text/html')) {
+            // This is likely an error page, not JSON
+            console.error('Received HTML response instead of JSON. Server may be returning an error page.');
+            const htmlContent = await response.text();
+            console.log('HTML error preview:', htmlContent.substring(0, 200) + '...');
+            throw new Error('Server returned HTML instead of JSON. API endpoint may be unavailable.');
+          }
+          
           if (response.ok) {
-            result = await response.json();
-            break; // Success, exit retry loop
+            try {
+              result = await response.json();
+              break; // Success, exit retry loop
+            } catch (jsonError) {
+              console.error('JSON parsing error:', jsonError);
+              throw new Error('Failed to parse server response');
+            }
           } else {
-            const errorData = await response.json();
-            console.error(`API error (attempt ${2-retries}/2):`, errorData);
-            retries--;
-            if (retries < 0) {
-              throw new Error(errorData.error || 'Failed to submit answer');
+            try {
+              const errorData = await response.json();
+              console.error(`API error (attempt ${2-retries}/2):`, errorData);
+              retries--;
+              if (retries < 0) {
+                throw new Error(errorData.error || 'Failed to submit answer');
+              }
+            } catch (jsonError) {
+              console.error('Failed to parse error response:', jsonError);
+              // Still retry even if we can't parse the error
+              retries--;
+              if (retries < 0) {
+                throw new Error('Server returned invalid JSON error response');
+              }
             }
             // Wait before retrying
             await new Promise(res => setTimeout(res, 1000));
@@ -318,29 +342,52 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
         isClosing.current = true;
         debugLog('Completing game and processing achievements');
         
-        // Verify achievements before game completion
         if (address) {
           try {
-            debugLog('Verifying achievements for wallet:', address);
+            debugLog('Sending game completion request for wallet:', address);
             // Add timeout protection
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
             
-            const verifyResponse = await fetch(`/api/verify-achievements?wallet=${address}`, {
+            // Use the dedicated game completion endpoint
+            const completeResponse = await fetch('/api/game/complete', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache'
+              },
+              body: JSON.stringify({
+                sessionId: sessionId,
+                walletAddress: address,
+                finalScore: finalStats.finalScore,
+                correctAnswers: finalStats.correctAnswers,
+                totalQuestions: finalStats.totalQuestions,
+                bestStreak: finalStats.bestStreak
+              }),
               signal: controller.signal
             });
             
             clearTimeout(timeoutId);
             
-            if (verifyResponse.ok) {
-              const verifyResult = await verifyResponse.json();
-              debugLog('Achievement verification result:', verifyResult);
-            } else {
-              console.warn('Failed to verify achievements during game completion');
+            // Check for HTML response which indicates error
+            const contentType = completeResponse.headers.get('content-type');
+            if (contentType && contentType.includes('text/html')) {
+              console.error('Received HTML response instead of JSON. Server may be returning an error page.');
+              const htmlContent = await completeResponse.text();
+              console.log('HTML error preview:', htmlContent.substring(0, 200) + '...');
+              throw new Error('Server returned HTML instead of JSON');
             }
-          } catch (verifyError) {
-            // Don't block game completion if achievement verification fails
-            console.error('Error verifying achievements:', verifyError);
+            
+            if (completeResponse.ok) {
+              const result = await completeResponse.json();
+              debugLog('Game completion successful:', result);
+            } else {
+              console.warn('Game completion API returned error status:', completeResponse.status);
+              // Continue even if completion API fails - we don't want to block the user
+            }
+          } catch (completeError) {
+            // Log but don't block game completion if the API fails
+            console.error('Error during game completion API call:', completeError);
           }
         }
         
@@ -381,7 +428,7 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
         isClosing.current = false;
       }
     }
-  }, [address, finalStats, onClose, onGameComplete]);
+  }, [address, finalStats, onClose, onGameComplete, sessionId]);
   
   // Update state when question changes
   useEffect(() => {

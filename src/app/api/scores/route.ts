@@ -12,7 +12,30 @@ export async function POST(req: Request) {
   const achievementService = AchievementService.getInstance();
   
   try {
-    const { questionId, sessionId, answer, startTime, endTime, walletAddress, isLastQuestion, finalStats } = await req.json();
+    console.log('API: Processing score submission');
+    
+    // Parse request body
+    let jsonData;
+    try {
+      jsonData = await req.json();
+    } catch (parseError) {
+      console.error('API: Invalid JSON in request body:', parseError);
+      return NextResponse.json({ 
+        error: 'Invalid JSON in request body', 
+        details: parseError instanceof Error ? parseError.message : 'Parse error'
+      }, { status: 400 });
+    }
+    
+    const { questionId, sessionId, answer, startTime, endTime, walletAddress, isLastQuestion, finalStats } = jsonData;
+    
+    console.log('API: Score submission request:', { 
+      questionId, 
+      sessionId, 
+      hasAnswer: !!answer,
+      walletAddress: walletAddress ? walletAddress.slice(0, 10) + '...' : null,
+      isLastQuestion,
+      hasFinalStats: !!finalStats
+    });
     
     if (!questionId || !sessionId || !startTime || !endTime || !walletAddress) {
       return NextResponse.json({ 
@@ -24,7 +47,20 @@ export async function POST(req: Request) {
     // Validate timing early to fail fast if invalid
     const timing = scoreCalculator.validateTiming(startTime, endTime);
     if (!timing.isValid) {
+      console.log('API: Invalid timing in request');
       return NextResponse.json({ error: 'Invalid timing' }, { status: 400 });
+    }
+    
+    // Check database connection
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      console.log('API: Database connection verified');
+    } catch (dbConnError) {
+      console.error('API: Database connection error:', dbConnError);
+      return NextResponse.json({
+        error: 'Database connection failed',
+        details: dbConnError instanceof Error ? dbConnError.message : String(dbConnError)
+      }, { status: 500 });
     }
     
     // Use a transaction to batch database operations
@@ -178,9 +214,27 @@ export async function POST(req: Request) {
     });
 
   } catch (error) {
-    console.error('Score submission error:', error);
+    console.error('API: Score submission error:', error);
+    
+    // Provide more detailed error information
+    let errorMessage = 'Failed to process score submission';
+    let errorDetails = null;
+    
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      errorDetails = error.stack;
+    } else if (typeof error === 'string') {
+      errorMessage = error;
+    } else if (error && typeof error === 'object') {
+      errorMessage = JSON.stringify(error);
+    }
+    
     return NextResponse.json(
-      { error: 'Failed to fetch user stats' },
+      { 
+        error: errorMessage,
+        details: errorDetails,
+        success: false
+      },
       { status: 500 }
     );
   }
