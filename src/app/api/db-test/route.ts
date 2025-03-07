@@ -25,16 +25,21 @@ export async function GET() {
     const questionCount = await prisma.trivia_questions.count();
     console.log(`API: Number of questions in database: ${questionCount}`);
     
-    // Try to get one category from each enum
-    const categoryList = Object.values(prisma.$type.trivia_category)[0];
-    console.log('API: Available categories:', categoryList);
+    // We'll skip trying to get enum values directly from Prisma types
+    // and just use a sample query instead
+    const sampleCategories = await prisma.$queryRaw`
+      SELECT DISTINCT category 
+      FROM trivia_questions 
+      LIMIT 10
+    `;
+    console.log('API: Sample categories from database:', sampleCategories);
     
     return NextResponse.json({
       success: true,
       connectionTest: 'successful',
       tables: tableNames,
       questionCount,
-      categories: categoryList
+      sampleCategories
     });
   } catch (error) {
     console.error('API: Database test error:', error);
