@@ -44,7 +44,7 @@ export async function POST(req: Request) {
     }
     
     // Get questions user has recently answered to exclude
-    let recentQuestionIds = [];
+    let recentQuestionIds: number[] = [];
     try {
       const repetitionManager = QuestionRepetitionManager.getInstance();
       recentQuestionIds = await repetitionManager.getQuestionsToExclude(walletAddress);
