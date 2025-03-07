@@ -100,10 +100,6 @@ export async function GET(req: Request) {
       // Continue with zero weekly points if there's an error
     }
     
-    // For consistency in testing, let's have a minimum default weekly points value
-    // This will show up in the UI while the actual calculations are being set up
-    weeklyPoints = Math.max(weeklyPoints, Math.floor(totalPoints * 0.1));
-
     if (!user) {
       // Return default stats for new users
       return NextResponse.json({
@@ -121,6 +117,10 @@ export async function GET(req: Request) {
     const totalPoints = typeof user.total_points === 'bigint' 
       ? Number(user.total_points)
       : Number(user.total_points || 0);
+      
+    // For consistency in testing, let's have a minimum default weekly points value
+    // This will show up in the UI while the actual calculations are being set up
+    weeklyPoints = Math.max(weeklyPoints, Math.floor(totalPoints * 0.1));
 
     return NextResponse.json(
       {
