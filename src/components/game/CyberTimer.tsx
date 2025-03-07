@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 interface CyberTimerProps {
   timeLeft: number;
@@ -12,56 +12,74 @@ interface CyberTimerProps {
 export default function CyberTimer({ timeLeft, duration, isActive, onTimeUpdate, onExpire }: CyberTimerProps) {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const hasExpired = useRef(false);
+  const [initialDelay, setInitialDelay] = useState(true);
 
+  // Clear any previous timer and setup new one
   useEffect(() => {
-    // Reset expired flag when timer is reset
-    if (timeLeft >= duration - 0.1) {
-      hasExpired.current = false;
+    // Handle initial delay
+    if (initialDelay && isActive) {
+      const delayTimeout = setTimeout(() => {
+        setInitialDelay(false);
+      }, 250); // Reduced from 1000ms to 250ms (0.25 seconds)
+      
+      return () => clearTimeout(delayTimeout);
     }
-  }, [timeLeft, duration]);
-
-  useEffect(() => {
+    
+    // Don't run timer during delay or if not active
+    if (initialDelay || !isActive) {
+      return;
+    }
+    
     // Clear any existing timer
     if (timerRef.current) {
       clearInterval(timerRef.current);
-      timerRef.current = null;
     }
-
-    // Don't set a new timer if inactive or time is up
-    if (!isActive || timeLeft <= 0) {
+    
+    // Don't start new timer if time is already up
+    if (timeLeft <= 0) {
+      if (!hasExpired.current) {
+        hasExpired.current = true;
+        onExpire();
+      }
       return;
     }
-
-    // Set a new timer
+    
+    // Start new countdown timer
     timerRef.current = setInterval(() => {
-      const newTime = Math.max(0, timeLeft - 0.1);
-      onTimeUpdate({ remainingTime: newTime });
+      // Decrement time
+      const newTimeLeft = Math.max(0, timeLeft - 0.1);
+      onTimeUpdate({ remainingTime: newTimeLeft });
       
-      // Check if time is up
-      if (newTime <= 0 && !hasExpired.current) {
+      // Check for expiration
+      if (newTimeLeft <= 0 && !hasExpired.current) {
         hasExpired.current = true;
-        
         if (timerRef.current) {
           clearInterval(timerRef.current);
-          timerRef.current = null;
         }
-        
-        console.log("Timer expired in CyberTimer");
         onExpire();
       }
     }, 100);
-
-    // Cleanup on unmount
+    
+    // Cleanup function
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
-        timerRef.current = null;
       }
     };
-  }, [timeLeft, isActive, onTimeUpdate, onExpire]);
+  }, [timeLeft, isActive, onTimeUpdate, onExpire, initialDelay]);
+  
+  // Reset expired flag when question changes
+  useEffect(() => {
+    if (timeLeft >= duration - 0.1) {
+      hasExpired.current = false;
+      setInitialDelay(true);
+    }
+  }, [timeLeft, duration]);
 
   // Calculate progress percentage
-  const progress = Math.max(0, Math.min(100, (timeLeft / duration) * 100));
+  const progress = initialDelay 
+    ? 100 
+    : Math.max(0, Math.min(100, (timeLeft / duration) * 100));
 
   return (
     <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">

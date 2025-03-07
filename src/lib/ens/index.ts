@@ -21,7 +21,8 @@ export function resolveIpfsUrl(ipfsUrl: string): string {
 }
 
 // Direct ENS lookup using multiple providers
-import { ethers } from 'ethers';
+import { providers } from 'ethers';
+const { JsonRpcProvider } = providers;
 
 // Cache duration in milliseconds (6 hours)
 const CACHE_DURATION = 1000 * 60 * 60 * 6;
@@ -58,8 +59,8 @@ export async function lookupEnsName(address: string): Promise<string | null> {
   for (const rpcUrl of RPC_PROVIDERS) {
     try {
       console.log(`Trying ENS lookup via ${rpcUrl}`);
-      // Updated for ethers v6
-      const provider = new ethers.JsonRpcProvider(rpcUrl);
+      // Using ethers v5 import structure
+      const provider = new JsonRpcProvider(rpcUrl);
       
       // Set a timeout to avoid hanging
       const timeoutPromise = new Promise<null>((_, reject) => {
@@ -108,8 +109,8 @@ export async function lookupEnsAvatar(ensName: string): Promise<string | null> {
   for (const rpcUrl of RPC_PROVIDERS) {
     try {
       console.log(`Trying ENS avatar lookup via ${rpcUrl}`);
-      // Updated for ethers v6
-      const provider = new ethers.JsonRpcProvider(rpcUrl);
+      // Using ethers v5 import structure
+      const provider = new JsonRpcProvider(rpcUrl);
       
       // Set a timeout to avoid hanging
       const timeoutPromise = new Promise<null>((_, reject) => {
@@ -118,24 +119,41 @@ export async function lookupEnsAvatar(ensName: string): Promise<string | null> {
       
       // Race the avatar lookup against the timeout
       const resolver = await provider.getResolver(ensName);
-      const avatar = resolver ? await Promise.race([
-        resolver.getAvatar(),
-        timeoutPromise
-      ]) : null;
       
-      if (avatar) {
-        console.log(`Found ENS avatar for ${ensName}: ${avatar}`);
+      if (resolver) {
+        const avatar: any = await Promise.race([
+          resolver.getAvatar(),
+          timeoutPromise
+        ]);
         
-        // Handle ipfs:// links
-        let resolvedAvatar = avatar;
-        if (resolvedAvatar.startsWith('ipfs://')) {
-          resolvedAvatar = resolveIpfsUrl(resolvedAvatar);
-          console.log(`Resolved IPFS avatar to: ${resolvedAvatar}`);
+        if (avatar) {
+          console.log(`Found ENS avatar for ${ensName}: ${avatar}`);
+          
+          // Handle ipfs:// links - use a more type-safe approach
+          let finalAvatar = '';
+          
+          if (avatar && typeof avatar === 'string') {
+            // Handle string avatar
+            finalAvatar = avatar.startsWith('ipfs://') ? resolveIpfsUrl(avatar) : avatar;
+            console.log(`Resolved string avatar: ${finalAvatar}`);
+          } else if (avatar && typeof avatar === 'object' && avatar !== null) {
+            // Handle object avatar
+            if ('url' in avatar && typeof avatar.url === 'string') {
+              finalAvatar = avatar.url.startsWith('ipfs://') ? resolveIpfsUrl(avatar.url) : avatar.url;
+              console.log(`Resolved object avatar: ${finalAvatar}`);
+            } else {
+              // Fallback - try to convert to string
+              finalAvatar = String(avatar);
+              console.log(`Using fallback avatar string: ${finalAvatar}`);
+            }
+          }
+          
+          if (finalAvatar) {
+            // Cache the result
+            cacheEnsAvatar(ensName, finalAvatar);
+            return finalAvatar;
+          }
         }
-        
-        // Cache the result
-        cacheEnsAvatar(ensName, resolvedAvatar);
-        return resolvedAvatar;
       }
     } catch (e) {
       console.warn(`ENS avatar lookup failed for ${rpcUrl}:`, e);

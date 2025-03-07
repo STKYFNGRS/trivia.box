@@ -42,9 +42,9 @@ export function validateTokenRecipient(
   valid: boolean
   error?: string
 } {
-  // Validate wallet address using ethers v6
+  // Validate wallet address using ethers v5
   try {
-    ethers.getAddress(recipient.wallet_address); // Will throw if invalid
+    ethers.utils.getAddress(recipient.wallet_address); // Will throw if invalid
   } catch {
     return {
       valid: false,
@@ -77,9 +77,9 @@ export function validatePOAPMintRequest(
   valid: boolean
   error?: string
 } {
-  // Validate recipient address using ethers v6
+  // Validate recipient address using ethers v5
   try {
-    ethers.getAddress(request.recipient); // Will throw if invalid
+    ethers.utils.getAddress(request.recipient); // Will throw if invalid
   } catch {
     return {
       valid: false,
@@ -152,13 +152,13 @@ export function verifyMerkleProof(
 
   for (const proofElement of proof) {
     if (computedHash < proofElement) {
-      // In ethers v6, keccak256 and concat are directly on ethers
-      computedHash = ethers.keccak256(
-        ethers.concat([computedHash, proofElement])
+      // In ethers v5, these functions are under utils
+      computedHash = ethers.utils.keccak256(
+        ethers.utils.concat([computedHash, proofElement])
       )
     } else {
-      computedHash = ethers.keccak256(
-        ethers.concat([proofElement, computedHash])
+      computedHash = ethers.utils.keccak256(
+        ethers.utils.concat([proofElement, computedHash])
       )
     }
   }

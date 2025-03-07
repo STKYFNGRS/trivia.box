@@ -86,65 +86,130 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
       const isLastQuestion = currentQuestionIndex + 1 >= questions.length;
       
       // Handle time-out case - ensure we have valid timing data
+      // Force timeRemaining to exactly 0 for null answers (timeouts)
       const effectiveTimeLeft = answer === null ? 0 : Math.max(0, timeLeft); 
-      const effectiveScore = score + (answer === currentQuestion.correct_answer ? effectiveTimeLeft : 0);
+      const isCorrect = answer === currentQuestion.correct_answer;
+      const pointsEarned = isCorrect ? effectiveTimeLeft : 0;
+      const effectiveScore = score + pointsEarned;
+      
+      // Ensure valid timing data by using start and end timestamps that make sense
+      const startDate = new Date(questionStartTime.current);
+      const endDate = new Date(endTime);
+      
+      // Always use valid timing data:
+      // 1. For timeouts: Force duration to be DURATION seconds
+      // 2. For normal answers: Use actual timing but ensure it's valid
+      let validStartTime = questionStartTime.current;
+      let validEndTime = endTime;
+      
+      // Force timing to be valid for all submissions
+      if (answer === null || endDate.getTime() - startDate.getTime() < 1000) {
+        // For timeouts or very quick answers, ensure at least 1 second duration
+        const adjustedStartDate = new Date(endDate.getTime() - (answer === null ? DURATION * 1000 : 1000));
+        validStartTime = adjustedStartDate.toISOString();
+      }
+      
+      console.log('Answer submission data:', { 
+        answer,
+        startTime: validStartTime,
+        endTime: validEndTime,
+        timeRemaining: effectiveTimeLeft,
+        pointsEarned,
+        newScore: effectiveScore,
+        isCorrect
+      });
+      
+      const payload = {
+        questionId: currentQuestion.id,
+        sessionId: parseInt(sessionId),
+        answer,
+        startTime: validStartTime,
+        endTime: validEndTime,
+        walletAddress: address,
+        isLastQuestion,
+        timeRemaining: effectiveTimeLeft,
+        finalStats: isLastQuestion ? {
+          bestStreak: Math.max(gameBestStreak, currentStreak + (isCorrect ? 1 : 0)),
+          finalScore: effectiveScore
+        } : undefined
+      };
       
       // Set up request with timeout
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
       
-      // Verify the data before sending to avoid invalid timing errors
-      const payload = {
-        questionId: currentQuestion.id,
-        sessionId: parseInt(sessionId),
-        answer,
-        startTime: questionStartTime.current,
-        endTime,
-        walletAddress: address,
-        isLastQuestion,
-        timeRemaining: effectiveTimeLeft,
-        finalStats: isLastQuestion ? {
-          bestStreak: Math.max(gameBestStreak, currentStreak + (answer === currentQuestion.correct_answer ? 1 : 0)),
-          finalScore: effectiveScore
-        } : undefined
-      };
+      // Retry logic for API calls
+      let retries = 2;
+      let response;
+      let result;
       
-      console.log("Submitting answer payload:", { 
-        answer, 
-        timeRemaining: effectiveTimeLeft,
-        score: effectiveScore
-      });
-      
-      const response = await fetch('/api/scores', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      });
+      while (retries >= 0) {
+        try {
+          response = await fetch('/api/scores', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+          });
+          
+          if (response.ok) {
+            result = await response.json();
+            break; // Success, exit retry loop
+          } else {
+            const errorData = await response.json();
+            console.error(`API error (attempt ${2-retries}/2):`, errorData);
+            retries--;
+            if (retries < 0) {
+              throw new Error(errorData.error || 'Failed to submit answer');
+            }
+            // Wait before retrying
+            await new Promise(res => setTimeout(res, 1000));
+          }
+        } catch (fetchError) {
+          console.error(`Fetch error (attempt ${2-retries}/2):`, fetchError);
+          retries--;
+          if (retries < 0) {
+            throw fetchError;
+          }
+          // Wait before retrying
+          await new Promise(res => setTimeout(res, 1000));
+        }
+      }
       
       clearTimeout(timeoutId);
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to submit answer');
+      
+      if (!result) {
+        throw new Error('Failed to get valid response from server');
       }
-      const result = await response.json();
+      
       const submitDuration = Date.now() - startSubmit;
       debugLog(`Answer submitted successfully in ${submitDuration}ms`);
       
+      // Update local state with server response
       sessionResponses.current[currentQuestionIndex] = {
         isCorrect: result.isCorrect
       };
-      const newScore = score + (result.score?.points || 0);
+      
+      // Use the points from the server if available, otherwise use our calculation
+      const pointsFromServer = result.score?.points || pointsEarned;
+      const newScore = score + pointsFromServer;
+      
+      console.log('Server response:', {
+        isCorrect: result.isCorrect, 
+        points: pointsFromServer,
+        newScore
+      });
+      
       setScore(newScore);
       
-      // No need to toggle score visibility since it's always visible now
+      // Update streak
       const newCurrentStreak = result.isCorrect ? currentStreak + 1 : 0;
       setCurrentStreak(newCurrentStreak);
       setGameBestStreak(Math.max(gameBestStreak, newCurrentStreak));
       
       try {
         // Only move to next question after all processing is complete
-        const moveDelay = Math.max(2000 - submitDuration, 1000); // At least 1 second delay, but aim for 2 seconds total
+        const moveDelay = Math.max(2000 - submitDuration, 1000); // At least 1 second delay
         debugLog(`Moving to next question in ${moveDelay}ms`);
         
         setTimeout(() => {
@@ -210,7 +275,7 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
     }
   }, [revealed, timeLeft]);
   
-  // Simple fix for timer expiration
+  // Handle timer expiration with improved error handling
   const handleTimeExpire = useCallback(() => {
     if (revealed) return;
     
@@ -218,31 +283,16 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
     setRevealed(true);
     setIsTimerActive(false);
     setTimeLeft(0);
+    setPotentialPoints(0);
     
-    // Move to the next question without trying to submit a score
-    const isLastQuestion = currentQuestionIndex + 1 >= questions.length;
-    
-    // Wait a moment for animation
-    setTimeout(() => {
-      if (isLastQuestion) {
-        setGameEnded(true);
-        setFinalStats({
-          correctAnswers: sessionResponses.current.filter(r => r?.isCorrect).length,
-          totalQuestions: questions.length,
-          bestStreak: gameBestStreak,
-          finalScore: score
-        });
-      } else {
-        setCurrentQuestionIndex(prev => prev + 1);
-        setRevealed(false);
-        setSelectedAnswer(null);
-        setTimeLeft(DURATION);
-        setPotentialPoints(MAX_POINTS);
-        setIsTimerActive(true);
-        questionStartTime.current = new Date().toISOString();
-      }
-    }, 1000);
-  }, [revealed, currentQuestionIndex, questions, score, gameBestStreak]);
+    try {
+      // Submit a null answer immediately with no delay
+      submitAnswer(null);
+    } catch (error) {
+      console.error('Error in timer expiration handler:', error);
+      setError('Timer expiration error');
+    }
+  }, [revealed, submitAnswer]);
   
   // Handle selecting an answer with proper error handling
   const handleAnswerSelect = useCallback(async (answer: string) => {
@@ -294,13 +344,37 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
           }
         }
         
+        // Explicitly refresh leaderboard data before completing game
+        try {
+          console.log('Refreshing leaderboard data...');
+          const leaderboardController = new AbortController();
+          const leaderboardTimeoutId = setTimeout(() => leaderboardController.abort(), 5000);
+          
+          // Fetch leaderboard data to trigger a refresh
+          await fetch('/api/scores/leaderboard', { 
+            method: 'GET',
+            headers: { 'Cache-Control': 'no-cache' },
+            signal: leaderboardController.signal
+          });
+          
+          clearTimeout(leaderboardTimeoutId);
+          console.log('Leaderboard data refreshed');
+        } catch (leaderboardError) {
+          // Don't block game completion if leaderboard refresh fails
+          console.warn('Failed to refresh leaderboard:', leaderboardError);
+        }
+        
         if (onGameComplete) {
           debugLog(`Submitting final score: ${finalStats.finalScore}`);
           await onGameComplete(finalStats.finalScore);
         }
         
         debugLog('Game completed successfully, closing modal');
-        onClose();
+        
+        // Short delay to ensure all data is processed before closing
+        setTimeout(() => {
+          onClose();
+        }, 300);
       } catch (error) {
         console.error('Error during game completion:', error);
         setError('Failed to complete game');
@@ -499,8 +573,6 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
               </div>
             )}
           </div>
-          
-          {/* No backdrop - particles are visible */}
         </motion.div>
       </div>
     </div>
