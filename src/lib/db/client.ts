@@ -15,15 +15,8 @@ const prismaClientSingleton = () => {
       }
     },
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
-    errorFormat: 'pretty',
-    // Important for serverless environments to prevent too many connections
-    // and connection exhaustion
-    connection: {
-      options: { 
-        keepAlive: 2000, // keep alive connections 
-        monitoring: false, // disable monitoring 
-      }
-    }
+    errorFormat: 'pretty'
+    // Connection options removed as they're not supported in this version
   })
 }
 
