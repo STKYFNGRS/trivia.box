@@ -5,6 +5,7 @@ import SkeletonLoader from '../ui/SkeletonLoader';
 interface StatsDisplayProps {
   stats: {
     totalPoints: number;
+    weeklyPoints?: number;
     bestStreak: number;
     gamesPlayed: number;
     rank?: number;
@@ -60,13 +61,13 @@ const StatsDisplay = memo(function StatsDisplay({ stats, isLoading = false }: St
           <span className="text-gray-400 text-xs hidden md:block">Games</span>
         </div>
         
-        {/* Rank */}
+        {/* Weekly Points */}
         <div className="text-center flex flex-col items-center px-1">
           <Trophy className="w-4 h-4 text-amber-500 mb-0.5" />
           <span className="text-amber-500 font-bold text-sm md:text-base">
-            {stats.rank || 1}
+            {stats.weeklyPoints || 0}
           </span>
-          <span className="text-gray-400 text-xs hidden md:block">Rank</span>
+          <span className="text-gray-400 text-xs hidden md:block">Weekly</span>
         </div>
       </div>
     </div>

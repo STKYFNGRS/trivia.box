@@ -7,6 +7,7 @@ const DEFAULT_DATA: WalletData = {
   ensAvatar: null,
   stats: {
     totalPoints: 1243, // Matching screenshot default
+    weeklyPoints: 50,  // Default weekly points
     rank: 1,
     bestStreak: 5,     // Matching screenshot default
     gamesPlayed: 33,   // Matching screenshot default

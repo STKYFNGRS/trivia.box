@@ -65,10 +65,39 @@ export async function GET(req: Request) {
       }
     }
 
+    // Calculate weekly points - points earned in the last 7 days
+    let weeklyPoints = 0;
+    if (walletAddress) {
+      try {
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        
+        const weeklyPointsResult = await prisma.trivia_player_responses.aggregate({
+          where: {
+            user: {
+              wallet_address: walletAddress
+            },
+            answered_at: {
+              gte: oneWeekAgo
+            }
+          },
+          _sum: {
+            points_earned: true
+          }
+        });
+        
+        weeklyPoints = Number(weeklyPointsResult._sum?.points_earned || 0);
+      } catch (weeklyError) {
+        console.warn('Error calculating weekly points:', weeklyError);
+        // Continue with zero weekly points if there's an error
+      }
+    }
+
     if (!user) {
       // Return default stats for new users
       return NextResponse.json({
         totalPoints: 0,
+        weeklyPoints: 0,
         gamesPlayed: 0,
         bestStreak: 0,
         rank: 1
@@ -85,6 +114,7 @@ export async function GET(req: Request) {
     return NextResponse.json(
       {
         totalPoints,
+        weeklyPoints,
         gamesPlayed: user.games_played,
         bestStreak: user.best_streak || 0,
         rank: rank + 1
