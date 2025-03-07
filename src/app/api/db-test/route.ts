@@ -45,11 +45,11 @@ export async function GET() {
     console.error('API: Database test error:', error);
     
     let errorMessage = 'Unknown error';
-    let errorDetails = null;
+    let errorDetails: string | null = null;
     
     if (error instanceof Error) {
       errorMessage = error.message;
-      errorDetails = error.stack;
+      errorDetails = error.stack || null;
     }
     
     return NextResponse.json({

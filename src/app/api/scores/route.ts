@@ -218,11 +218,11 @@ export async function POST(req: Request) {
     
     // Provide more detailed error information
     let errorMessage = 'Failed to process score submission';
-    let errorDetails = null;
+    let errorDetails: string | null = null;
     
     if (error instanceof Error) {
       errorMessage = error.message;
-      errorDetails = error.stack;
+      errorDetails = error.stack || null;
     } else if (typeof error === 'string') {
       errorMessage = error;
     } else if (error && typeof error === 'object') {
