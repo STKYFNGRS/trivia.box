@@ -444,14 +444,14 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
   }
   
   return (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex min-h-screen items-center justify-center p-4">
         <motion.div
           key="game-modal-panel"
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="relative w-full max-w-5xl mt-28 pt-16 md:pt-10 md:mt-24"
+          className="relative w-full max-w-5xl mt-8 mb-8 pt-8 md:pt-10 md:mt-24"
         >
           <div className="rounded-2xl bg-gray-900/90 p-8 border border-amber-500/20 overflow-hidden flex flex-col">
             {error ? (
@@ -503,7 +503,7 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
                 </button>
               </div>
             ) : (
-              <div className="space-y-6 h-[600px]">
+              <div className="space-y-6">
                 <div className="text-sm xs:text-base text-gray-200 py-1 px-3 bg-gray-800/50 rounded-full border border-gray-700/40 inline-block">
                   Question {currentQuestionIndex + 1} of {questions.length}
                 </div>

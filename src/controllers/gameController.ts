@@ -98,7 +98,7 @@ export class GameController extends EventEmitter {
 
       while (attempts < maxAttempts) {
         attempts++;
-        console.log(`🎲 Creating game session (attempt ${attempts}/${maxAttempts}) with wallet address:`, config.walletAddress?.slice(0, 8));
+        console.log(`🎲 Creating game session (attempt ${attempts}/${maxAttempts}) with wallet address: ${config.walletAddress?.slice(0, 8)}`);
         
         // Add request timeout - increased from 15s to 30s
         const controller = new AbortController();
@@ -108,18 +108,32 @@ export class GameController extends EventEmitter {
           console.log('🎲 Sending fetch request to /api/game/session');
           const startTime = performance.now();
           
+          // Add retry mechanism with exponential backoff
+          const backoffTime = attempts === 1 ? 0 : Math.min(2000 * Math.pow(1.5, attempts - 2), 5000);
+          if (backoffTime > 0) {
+            console.log(`🎲 Backoff wait for ${backoffTime}ms before attempt ${attempts}`);
+            await new Promise(resolve => setTimeout(resolve, backoffTime));
+          }
+          
           const response = await fetch('/api/game/session', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache'
+            },
             body: JSON.stringify({
               category: config.category,
               questionCount: config.questionCount,
               difficulty: config.difficulty || 'mixed',
               walletAddress: config.walletAddress,
               forceRefresh: true, // Always force a refresh
-              _t: Date.now() // Add timestamp to prevent caching
+              _t: Date.now(), // Add timestamp to prevent caching
+              retry: attempts // Tell server this is a retry
             }),
-            signal: controller.signal
+            signal: controller.signal,
+            // Force network fetch with no cache
+            cache: 'no-store'
           });
           
           const endTime = performance.now();
@@ -128,9 +142,18 @@ export class GameController extends EventEmitter {
           clearTimeout(timeoutId);
 
           if (!response.ok) {
-            const errorData = await response.json();
+            const errorText = await response.text();
+            let errorData;
+            try {
+              errorData = JSON.parse(errorText);
+            } catch (e) {
+              errorData = { error: errorText || 'Failed to create game session' };
+            }
+            
             if (attempts < maxAttempts) {
               console.log(`🎲 Session creation failed (attempt ${attempts}), retrying...`);
+              // Log the specific error to help debugging
+              console.log(`🎲 Error response: ${JSON.stringify(errorData)}`);
               await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
               continue;
             }
@@ -139,7 +162,18 @@ export class GameController extends EventEmitter {
 
           console.log('🎲 Parsing response JSON...');
           const parseStart = performance.now();
-          const data = await response.json();
+          let data;
+          try {
+            data = await response.json();
+          } catch (parseError) {
+            console.error('🎲 JSON parsing error:', parseError);
+            if (attempts < maxAttempts) {
+              console.log(`🎲 JSON parsing failed (attempt ${attempts}), retrying...`);
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              continue;
+            }
+            throw new Error('Failed to parse response from game server');
+          }
           console.log(`🎲 JSON parsing completed in ${Math.round(performance.now() - parseStart)}ms`);
           
           // Validate we have the correct number of questions
@@ -190,6 +224,13 @@ export class GameController extends EventEmitter {
             }
             throw new Error('Request timed out while creating game session');
           }
+          
+          console.error(`🎲 Fetch error on attempt ${attempts}:`, fetchError);
+          if (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+            continue;
+          }
+          
           throw fetchError;
         }
       }

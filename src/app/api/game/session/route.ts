@@ -99,34 +99,46 @@ export async function POST(req: Request) {
     finalQuestions = finalQuestions.slice(0, questionCount);
     
     // Create a new game session
-    const session = await prisma.trivia_game_sessions.create({
-      data: {
-        status: trivia_game_status.active,
-        question_sequence: JSON.stringify({
-          questions: finalQuestions.map((q: Question) => q.id),
-          metadata: {
-            timestamp,
-            uniqueId,
-            generatedAt: new Date().toISOString()
-          }
-        }),
-        player_count: 1,
-        current_index: 0
-      }
-    });
+    try {
+      const session = await prisma.trivia_game_sessions.create({
+        data: {
+          status: trivia_game_status.active,
+          question_sequence: JSON.stringify({
+            questions: finalQuestions.map((q: Question) => q.id),
+            metadata: {
+              timestamp,
+              uniqueId,
+              generatedAt: new Date().toISOString()
+            }
+          }),
+          player_count: 1,
+          current_index: 0
+        }
+      });
 
-    return NextResponse.json({
-      success: true,
-      sessionId: session.id,
-      hasQuestions: true,
-      questions: finalQuestions
-    }, {
-      headers: {
-        'Cache-Control': 'no-store, max-age=0',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      }
-    });
+      console.log(`Successfully created game session ${session.id} with ${finalQuestions.length} questions`);
+
+      return NextResponse.json({
+        success: true,
+        sessionId: session.id,
+        hasQuestions: true,
+        questions: finalQuestions
+      }, {
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
+    } catch (dbError) {
+      console.error('Failed to create session in database:', dbError);
+      return NextResponse.json({
+        success: false,
+        error: 'Database error: Failed to create game session',
+        errorDetails: dbError instanceof Error ? dbError.message : String(dbError),
+        hasQuestions: false
+      }, { status: 500 });
+    }
   } catch (error) {
     console.error('Game session creation error:', error);
     return NextResponse.json({
