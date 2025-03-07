@@ -251,6 +251,14 @@ class QuestionService {
     cacheBuster?: number // Add optional cache buster parameter
   ): Promise<APIResponse<Question[]>> {
     try {
+      // First verify database connection
+      try {
+        await prisma.$queryRaw`SELECT 1`;
+        console.log('QuestionService: Database connection verified');
+      } catch (dbError) {
+        console.error('QuestionService: Database connection failed:', dbError);
+        throw new Error(`Database connection error: ${dbError instanceof Error ? dbError.message : String(dbError)}`);
+      }
       const baseQuery = {
         validation_status: trivia_question_status.approved,
       };

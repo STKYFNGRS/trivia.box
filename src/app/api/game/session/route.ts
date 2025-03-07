@@ -16,6 +16,8 @@ export async function POST(req: Request) {
     const timestamp = Date.now();
     const uniqueId = Math.random().toString(36).substring(2, 10);
     
+    console.log(`API: Starting game session creation: ${uniqueId}`);
+    
     // Parse the request
     const jsonData = await req.json();
     const { 
@@ -25,47 +27,89 @@ export async function POST(req: Request) {
       walletAddress 
     } = jsonData;
     
+    console.log(`API: Request parsed - ${questionCount} questions, category: ${category}, difficulty: ${difficulty}`);
+    
+    // Database connectivity check
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      console.log('API: Database connection verified');
+    } catch (dbConnError) {
+      console.error('API: Database connection error:', dbConnError);
+      return NextResponse.json({
+        success: false,
+        error: 'Database connection failed',
+        errorDetails: dbConnError instanceof Error ? dbConnError.message : String(dbConnError),
+        hasQuestions: false
+      }, { status: 500 });
+    }
+    
     // Get questions user has recently answered to exclude
-    const repetitionManager = QuestionRepetitionManager.getInstance();
-    const recentQuestionIds = await repetitionManager.getQuestionsToExclude(walletAddress);
+    let recentQuestionIds = [];
+    try {
+      const repetitionManager = QuestionRepetitionManager.getInstance();
+      recentQuestionIds = await repetitionManager.getQuestionsToExclude(walletAddress);
+      console.log(`API: Retrieved ${recentQuestionIds.length} recently answered questions to exclude`);
+    } catch (repError) {
+      console.error('API: Error retrieving question repetition data:', repError);
+      // Continue with empty exclusion list
+    }
     
     // Get question service
     const questionService = QuestionService.getInstance();
+    console.log('API: Question service initialized');
 
     // Simplified question retrieval
     let finalQuestions: Question[] = [];
     
-    if (category === 'random') {
-      // For random category selection, get questions from a random selection of categories
-      const randomQuestions = await getRandomCategoryQuestions(
-        questionService,
-        questionCount,
-        difficulty,
-        recentQuestionIds,
-        timestamp
-      );
-      finalQuestions = randomQuestions;
-    } else if (difficulty === 'mixed') {
-      // For mixed difficulty, get questions across all difficulty levels
-      const mixedQuestions = await getMixedDifficultyQuestions(
-        questionService,
-        category as trivia_category,
-        questionCount,
-        recentQuestionIds,
-        timestamp
-      );
-      finalQuestions = mixedQuestions;
-    } else {
-      // Get questions for specific category and difficulty
-      const specificQuestions = await getSingleCategoryQuestions(
-        questionService,
-        category as trivia_category,
-        difficulty as trivia_difficulty,
-        questionCount,
-        recentQuestionIds,
-        timestamp
-      );
-      finalQuestions = specificQuestions;
+    try {
+      
+      if (category === 'random') {
+        // For random category selection, get questions from a random selection of categories
+        console.log('API: Getting random category questions');
+        const randomQuestions = await getRandomCategoryQuestions(
+          questionService,
+          questionCount,
+          difficulty,
+          recentQuestionIds,
+          timestamp
+        );
+        finalQuestions = randomQuestions;
+        console.log(`API: Retrieved ${finalQuestions.length} random category questions`);
+      } else if (difficulty === 'mixed') {
+        // For mixed difficulty, get questions across all difficulty levels
+        console.log(`API: Getting mixed difficulty questions for category: ${category}`);
+        const mixedQuestions = await getMixedDifficultyQuestions(
+          questionService,
+          category as trivia_category,
+          questionCount,
+          recentQuestionIds,
+          timestamp
+        );
+        finalQuestions = mixedQuestions;
+        console.log(`API: Retrieved ${finalQuestions.length} mixed difficulty questions`);
+      } else {
+        // Get questions for specific category and difficulty
+        console.log(`API: Getting questions for category: ${category}, difficulty: ${difficulty}`);
+        const specificQuestions = await getSingleCategoryQuestions(
+          questionService,
+          category as trivia_category,
+          difficulty as trivia_difficulty,
+          questionCount,
+          recentQuestionIds,
+          timestamp
+        );
+        finalQuestions = specificQuestions;
+        console.log(`API: Retrieved ${finalQuestions.length} specific category/difficulty questions`);
+      }
+      
+    } catch (questionError) {
+      console.error('API: Error retrieving questions:', questionError);
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to retrieve questions',
+        errorDetails: questionError instanceof Error ? questionError.message : String(questionError),
+        hasQuestions: false
+      }, { status: 500 });
     }
     
     // Check if we found enough questions
@@ -100,23 +144,34 @@ export async function POST(req: Request) {
     
     // Create a new game session
     try {
+      console.log(`API: Creating session with ${finalQuestions.length} questions`);
+      
+      // Log the session data structure for debugging
+      const sessionData = {
+        status: trivia_game_status.active,
+        question_sequence: JSON.stringify({
+          questions: finalQuestions.map((q: Question) => q.id),
+          metadata: {
+            timestamp,
+            uniqueId,
+            generatedAt: new Date().toISOString()
+          }
+        }),
+        player_count: 1,
+        current_index: 0
+      };
+      
+      console.log(`API: Session data prepared: ${JSON.stringify({
+        status: sessionData.status,
+        questionCount: finalQuestions.length,
+        uniqueId
+      })}`);
+      
       const session = await prisma.trivia_game_sessions.create({
-        data: {
-          status: trivia_game_status.active,
-          question_sequence: JSON.stringify({
-            questions: finalQuestions.map((q: Question) => q.id),
-            metadata: {
-              timestamp,
-              uniqueId,
-              generatedAt: new Date().toISOString()
-            }
-          }),
-          player_count: 1,
-          current_index: 0
-        }
+        data: sessionData
       });
 
-      console.log(`Successfully created game session ${session.id} with ${finalQuestions.length} questions`);
+      console.log(`API: Successfully created game session ${session.id} with ${finalQuestions.length} questions`);
 
       return NextResponse.json({
         success: true,
@@ -131,7 +186,7 @@ export async function POST(req: Request) {
         }
       });
     } catch (dbError) {
-      console.error('Failed to create session in database:', dbError);
+      console.error('API: Failed to create session in database:', dbError);
       return NextResponse.json({
         success: false,
         error: 'Database error: Failed to create game session',
@@ -140,10 +195,25 @@ export async function POST(req: Request) {
       }, { status: 500 });
     }
   } catch (error) {
-    console.error('Game session creation error:', error);
+    console.error('API: Game session creation error:', error);
+    
+    // Provide more detailed error information
+    let errorMessage = 'Failed to create game session';
+    let errorDetails = null;
+    
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      errorDetails = error.stack;
+    } else if (typeof error === 'string') {
+      errorMessage = error;
+    } else if (error && typeof error === 'object') {
+      errorMessage = JSON.stringify(error);
+    }
+    
     return NextResponse.json({
       success: false,
-      error: 'Failed to create game session',
+      error: errorMessage,
+      errorDetails: errorDetails,
       hasQuestions: false
     }, { status: 500 });
   }

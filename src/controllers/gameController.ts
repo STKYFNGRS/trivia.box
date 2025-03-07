@@ -144,8 +144,14 @@ export class GameController extends EventEmitter {
           if (!response.ok) {
             const errorText = await response.text();
             let errorData;
+            let errorDetails = '';
             try {
               errorData = JSON.parse(errorText);
+              // Extract detailed error information if available
+              if (errorData.errorDetails) {
+                errorDetails = errorData.errorDetails;
+                console.log('🎲 Server error details:', errorDetails);
+              }
             } catch (e) {
               errorData = { error: errorText || 'Failed to create game session' };
             }
