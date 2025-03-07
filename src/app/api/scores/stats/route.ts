@@ -39,6 +39,7 @@ export async function GET(req: Request) {
         user = await prisma.trivia_users.findFirst({
           where: { wallet_address: walletAddress },
           select: {
+            id: true,
             total_points: true,
             games_played: true,
             best_streak: true
