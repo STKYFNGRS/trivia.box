@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/dist/server/web/spec-extension/response';
 import { prisma } from '@/lib/db/client';
 import { AchievementService } from '@/services/achievements/AchievementService';
+import { trivia_category } from '@prisma/client';
 
 // Mark as dynamic route to avoid static generation errors
 export const dynamic = 'force-dynamic';
@@ -110,7 +111,7 @@ export async function POST(req: Request) {
       await achievementService.processGameEnd({
         userId: user.id,
         sessionId: parseInt(sessionId.toString()),
-        category: 'general', // Default to general
+        category: trivia_category.general, // Use the correct enum value
         correctAnswers: correctAnswers || 0,
         totalQuestions: totalQuestions || 0,
         bestStreak: bestStreak || 0,
