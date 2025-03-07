@@ -19,7 +19,7 @@
     "date-fns": "^2.30.0",
     "dotenv": "^16.3.1",
     "ethereum-identity-kit": "^0.1.7",
-    "ethers": "^6.8.1",
+    "ethers": "^5.7.2",
     "formik": "^2.4.5",
     "framer-motion": "^10.16.5",
     "lucide-react": "^0.474.0",

@@ -1,3 +1,6 @@
+// Place imports at the top of the file, before other code
+import { ethers } from 'ethers';
+
 // IPFS gateway URLs
 const IPFS_GATEWAYS = [
   'https://ipfs.io/ipfs/',
@@ -20,8 +23,6 @@ export function resolveIpfsUrl(ipfsUrl: string): string {
   return ipfsUrl;
 }
 
-// Direct ENS lookup using ethers v5
-import { providers } from 'ethers';
 
 // Cache duration in milliseconds (6 hours)
 const CACHE_DURATION = 1000 * 60 * 60 * 6;
@@ -58,8 +59,8 @@ export async function lookupEnsName(address: string): Promise<string | null> {
   for (const rpcUrl of RPC_PROVIDERS) {
     try {
       console.log(`Trying ENS lookup via ${rpcUrl}`);
-      // Using ethers v5 import structure
-      const provider = new providers.JsonRpcProvider(rpcUrl);
+      // Create provider
+      const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
       
       // Set a timeout to avoid hanging
       const timeoutPromise = new Promise<null>((_, reject) => {
@@ -108,8 +109,8 @@ export async function lookupEnsAvatar(ensName: string): Promise<string | null> {
   for (const rpcUrl of RPC_PROVIDERS) {
     try {
       console.log(`Trying ENS avatar lookup via ${rpcUrl}`);
-      // Using ethers v5 import structure
-      const provider = new providers.JsonRpcProvider(rpcUrl);
+      // Create provider
+      const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
       
       // Set a timeout to avoid hanging
       const timeoutPromise = new Promise<null>((_, reject) => {
