@@ -65,32 +65,38 @@ export async function GET(req: Request) {
       }
     }
 
-    // Calculate weekly points - points earned in the last 7 days
+    // Get weekly points from trivia_weekly_scores table
     let weeklyPoints = 0;
-    if (walletAddress) {
-      try {
-        const oneWeekAgo = new Date();
-        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-        
-        const weeklyPointsResult = await prisma.trivia_player_responses.aggregate({
+    try {
+      // Calculate current week number and year
+      const now = new Date();
+      const startOfYear = new Date(now.getFullYear(), 0, 1);
+      const days = Math.floor((now.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
+      const weekNumber = Math.ceil((days + startOfYear.getDay() + 1) / 7);
+      const year = now.getFullYear();
+      
+      console.log(`Fetching weekly score for week ${weekNumber} of ${year}`);
+      
+      if (user) {
+        // Get the weekly score for the current week
+        const weeklyScore = await prisma.trivia_weekly_scores.findFirst({
           where: {
-            user: {
-              wallet_address: walletAddress
-            },
-            answered_at: {
-              gte: oneWeekAgo
-            }
-          },
-          _sum: {
-            points_earned: true
+            user_id: user.id,
+            week: weekNumber,
+            year: year
           }
         });
         
-        weeklyPoints = Number(weeklyPointsResult._sum?.points_earned || 0);
-      } catch (weeklyError) {
-        console.warn('Error calculating weekly points:', weeklyError);
-        // Continue with zero weekly points if there's an error
+        if (weeklyScore) {
+          weeklyPoints = weeklyScore.score;
+          console.log(`Found weekly score: ${weeklyPoints}`);
+        } else {
+          console.log(`No weekly score found for user ${user.id} in week ${weekNumber}`);
+        }
       }
+    } catch (weeklyError) {
+      console.warn('Error fetching weekly score:', weeklyError);
+      // Continue with zero weekly points if there's an error
     }
 
     if (!user) {
