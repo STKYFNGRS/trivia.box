@@ -17,7 +17,6 @@ export interface WalletData {
   ensAvatar: string | null;
   stats: {
     totalPoints: number;
-    weeklyPoints?: number;
     rank: number;
     bestStreak: number;
     gamesPlayed: number;

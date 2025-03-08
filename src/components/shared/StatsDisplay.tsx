@@ -1,19 +1,27 @@
-import React, { memo } from 'react';
+import React, { memo, useEffect } from 'react';
 import { Hash, Flame, Target, Trophy } from 'lucide-react';
 import SkeletonLoader from '../ui/SkeletonLoader';
 
 interface StatsDisplayProps {
   stats: {
     totalPoints: number;
-    weeklyPoints?: number;
     bestStreak: number;
     gamesPlayed: number;
     rank?: number;
   } | null;
   isLoading?: boolean;
+  onRankClick?: () => void;
+  hasLeaderboard?: boolean;
 }
 
-const StatsDisplay = memo(function StatsDisplay({ stats, isLoading = false }: StatsDisplayProps) {
+const StatsDisplay = memo(function StatsDisplay({ stats, isLoading = false, onRankClick, hasLeaderboard = false }: StatsDisplayProps) {
+  // Add debug logging to see what stats are really being received
+  useEffect(() => {
+    if (stats) {
+      console.log('StatsDisplay received stats:', JSON.stringify(stats, null, 2));
+      console.log('Best streak value:', stats.bestStreak);
+    }
+  }, [stats]);
   // Loading state
   if (isLoading) {
     return (
@@ -43,12 +51,22 @@ const StatsDisplay = memo(function StatsDisplay({ stats, isLoading = false }: St
           <span className="text-gray-400 text-xs hidden md:block">Total</span>
         </div>
         
-        {/* Best Streak */}
+        {/* Best Streak - Complete overhaul to force proper rendering */}
         <div className="text-center flex flex-col items-center px-1">
           <Flame className="w-4 h-4 text-orange-500 mb-0.5" />
-          <span className="text-orange-500 font-bold text-sm md:text-base">
-            {stats.bestStreak || 0}
-          </span>
+          {/* Use a custom key to force react to re-render this component */}
+          <div 
+            key={`streak-value-${stats.bestStreak}`}
+            className="text-orange-500 font-bold text-sm md:text-base"
+            data-testid="player-best-streak"
+          >
+            {(() => {
+              // Use a function to ensure the value is dynamically computed
+              const streakValue = typeof stats.bestStreak === 'number' ? stats.bestStreak : 0;
+              console.log('Rendering streak value:', streakValue);
+              return streakValue;
+            })()}
+          </div>
           <span className="text-gray-400 text-xs hidden md:block">Streak</span>
         </div>
         
@@ -61,13 +79,20 @@ const StatsDisplay = memo(function StatsDisplay({ stats, isLoading = false }: St
           <span className="text-gray-400 text-xs hidden md:block">Games</span>
         </div>
         
-        {/* Weekly Points */}
-        <div className="text-center flex flex-col items-center px-1">
+        {/* Rank */}
+        <div 
+          className="text-center flex flex-col items-center px-1 cursor-pointer hover:opacity-80 transition-opacity"
+          onClick={hasLeaderboard ? onRankClick : undefined}
+          role={hasLeaderboard ? "button" : undefined}
+          tabIndex={hasLeaderboard ? 0 : undefined}
+          onKeyDown={hasLeaderboard && onRankClick ? (e) => e.key === 'Enter' && onRankClick() : undefined}
+          title={hasLeaderboard ? "View Leaderboard" : ""}
+        >
           <Trophy className="w-4 h-4 text-amber-500 mb-0.5" />
           <span className="text-amber-500 font-bold text-sm md:text-base">
-            {stats.weeklyPoints || 0}
+            {stats.rank || 1}
           </span>
-          <span className="text-gray-400 text-xs hidden md:block">Weekly</span>
+          <span className="text-gray-400 text-xs hidden md:block">Rank</span>
         </div>
       </div>
     </div>

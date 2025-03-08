@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { lookupEnsName, lookupEnsAvatar } from '@/lib/ens';
-import { getDirectEnsAvatar } from '@/lib/ensUtils';
+import { getPrefetchedEns } from '@/lib/ens/prefetch';
 
 interface LeaderboardModalProps {
   isOpen: boolean;
@@ -47,72 +47,140 @@ export default function LeaderboardModal({ isOpen, onClose, leaderboard, current
   const [visibleLeaderboard, setVisibleLeaderboard] = useState<typeof leaderboard>([]);
   const [currentPage, setCurrentPage] = useState(0);
 
-  // Load ENS profiles for players
+  // Load ENS profiles for players - more efficient version
   useEffect(() => {
     if (!isOpen || leaderboard.length === 0) return;
     
     setIsLoading(true);
     setError(null);
     
+    // Initialize empty profiles for all addresses immediately to prevent UI jumps
+    const initialProfiles: Record<string, ENSProfile> = {};
+    leaderboard.forEach(entry => {
+      initialProfiles[entry.address] = {
+        address: entry.address,
+        name: null,
+        avatar: null
+      };
+    });
+    
+    // Initialize with any prefetched data
+    leaderboard.forEach(entry => {
+      const prefetched = getPrefetchedEns(entry.address);
+      if (prefetched) {
+        initialProfiles[entry.address] = {
+          address: entry.address,
+          name: prefetched.name,
+          avatar: prefetched.avatar
+        };
+      }
+    });
+    
+    setPlayerProfiles(initialProfiles);
+    
+    // Only load top 3 players immediately, queue the rest
+    const addresses = leaderboard.map(entry => entry.address);
+    const topAddresses = addresses.slice(0, 3);
+    const remainingAddresses = addresses.slice(3);
+    
+    let isMounted = true;
+    
     const loadProfiles = async () => {
-      const profiles: Record<string, ENSProfile> = {};
-      
       try {
-        // Process in batches
-        const batchSize = 5;
-        const addresses = leaderboard.map(entry => entry.address);
-        
-        for (let i = 0; i < addresses.length; i += batchSize) {
-          const batch = addresses.slice(i, i + batchSize);
-          
-          await Promise.all(batch.map(async (address) => {
+        // Load top players first (in parallel)
+        if (topAddresses.length > 0) {
+          const topPromises = topAddresses.map(async (address) => {
             try {
-              if (profiles[address]) return;
-              
-              profiles[address] = {
-                address,
-                name: null,
-                avatar: null
-              };
+              // Skip if we already have data from prefetch
+              if (initialProfiles[address]?.name) return address;
               
               const name = await lookupEnsName(address);
               
-              if (name) {
-                profiles[address].name = name;
-                
-                try {
-                  const avatar = await lookupEnsAvatar(name);
-                  if (avatar) {
-                    profiles[address].avatar = avatar;
-                  } else {
-                    const directAvatar = await getDirectEnsAvatar(name);
-                    if (directAvatar) {
-                      profiles[address].avatar = directAvatar;
-                    }
+              if (name && isMounted) {
+                setPlayerProfiles(prev => ({
+                  ...prev,
+                  [address]: {
+                    ...prev[address],
+                    name
                   }
-                } catch (avatarError) {
-                  console.warn(`Error getting avatar for ${name}:`, avatarError);
-                }
+                }));
+                
+                // Then load avatar in background
+                lookupEnsAvatar(name).then(avatar => {
+                  if (avatar && isMounted) {
+                    setPlayerProfiles(prev => ({
+                      ...prev,
+                      [address]: {
+                        ...prev[address],
+                        avatar
+                      }
+                    }));
+                  }
+                }).catch(() => {/* Silently fail */});
               }
             } catch (error) {
-              console.warn(`Error resolving ENS for ${address}:`, error);
+              // Silently fail for individual address
             }
-          }));
+            return address;
+          });
           
-          setPlayerProfiles(prevProfiles => ({
-            ...prevProfiles,
-            ...profiles
-          }));
+          await Promise.all(topPromises);
+        }
+        
+        // Then load remaining players with limited concurrency
+        if (remainingAddresses.length > 0 && isMounted) {
+          // Process three at a time
+          const concurrentBatch = 3;
+          
+          for (let i = 0; i < remainingAddresses.length; i += concurrentBatch) {
+            if (!isMounted) break;
+            
+            const batch = remainingAddresses.slice(i, i + concurrentBatch);
+            await Promise.all(batch.map(async (address) => {
+              try {
+                // Skip if we already have data from prefetch
+                if (initialProfiles[address]?.name) return address;
+                
+                const name = await lookupEnsName(address);
+                
+                if (name && isMounted) {
+                  setPlayerProfiles(prev => ({
+                    ...prev,
+                    [address]: {
+                      ...prev[address],
+                      name
+                    }
+                  }));
+                }
+              } catch (error) {
+                // Silently fail for individual address
+              }
+              return address;
+            }));
+            
+            // Small delay between batches to prevent overwhelming the network
+            if (i + concurrentBatch < remainingAddresses.length) {
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+          }
         }
       } catch (err) {
         console.error('Error loading ENS profiles:', err);
-        setError('Failed to load player profiles');
+        if (isMounted) {
+          setError('Failed to load player profiles');
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
     
     loadProfiles();
+    
+    return () => {
+      isMounted = false;
+    };
   }, [isOpen, leaderboard]);
 
   const sortedLeaderboard = useMemo(() => {
@@ -159,6 +227,8 @@ export default function LeaderboardModal({ isOpen, onClose, leaderboard, current
                     // Close both the PlayerProfileCard and LeaderboardModal
                     setSelectedPlayer(null);
                     onClose();
+                    // Dispatch event to show game settings
+                    window.dispatchEvent(new CustomEvent('showGameSettings'));
                   }}
                   className="rounded-lg p-1.5 text-amber-400 transition-colors hover:text-white"
                 >
@@ -307,7 +377,7 @@ export default function LeaderboardModal({ isOpen, onClose, leaderboard, current
             <div className="mt-6 p-4 rounded-lg bg-gradient-to-br from-gray-800/50 to-gray-900/50 border border-amber-600/10">
               <h3 className="text-lg font-semibold text-amber-400 mb-2">Ethereum Name Service (ENS)</h3>
               <p className="text-sm text-gray-300 mb-2">
-                ENS provides human-readable names for cryptocurrency addresses and lets users set up public profiles with avatars and social links.
+                ENS provides human-readable names for cryptocurrency addresses and lets users set up public profiles. Your ENS profile will display your name, avatar, and social links on the leaderboard. Select a user name above and click on their folower count to view their <a href="https://efp.app/" target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:text-amber-300 underline">Ethereum Follow Protocol</a> information.
               </p>
               <div className="flex flex-col items-center mt-3 space-y-2">
                 <span className="text-sm text-gray-300">Don&apos;t have an ENS name yet?</span>
@@ -337,7 +407,11 @@ export default function LeaderboardModal({ isOpen, onClose, leaderboard, current
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 -z-10 bg-black/70 backdrop-blur-sm"
-              onClick={onClose}
+              onClick={() => {
+                setSelectedPlayer(null);
+                onClose();
+                window.dispatchEvent(new CustomEvent('showGameSettings'));
+              }}
             />
           </div>
         </motion.div>

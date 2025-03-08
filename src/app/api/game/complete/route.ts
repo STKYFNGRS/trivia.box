@@ -91,12 +91,13 @@ export async function POST(req: Request) {
         });
       }
       
-      // Update user stats
+      // To fix the duplicate games_played count, don't increment it again here
+      // Uncomment this if you want to update game_played count only here and not in the score submission API
       await tx.trivia_users.update({
         where: { id: user.id },
         data: {
-          total_points: { increment: finalScore || 0 },
-          games_played: { increment: 1 },
+          // No points update here - points already added during gameplay
+          // No games_played increment here - we'll handle this in the scores API instead
           best_streak: bestStreak > (user.best_streak || 0) ? bestStreak : undefined,
           last_played_at: new Date()
         }

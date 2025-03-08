@@ -43,20 +43,20 @@ export const ACHIEVEMENT_DISPLAY: Record<string, AchievementDisplay> = {
     category: 'STREAK',
     total: 5
   },
+  // Perfect Game achievements
   'PERFECT_GAME': {
     name: 'Perfect Game',
     description: 'Answer all questions correctly in a game',
     icon: 'STAR',
     category: 'MASTERY',
-    total: 10
+    total: 1
   },
-  // Keep PERFECT_ROUND as an alias for backward compatibility
   'PERFECT_ROUND': {
     name: 'Perfect Game',
-    description: 'Answer all questions correctly in a game',
+    description: 'Number of perfect games completed',
     icon: 'STAR',
     category: 'MASTERY',
-    total: 10
+    total: 1
   },
   'BLOCKCHAIN_PIONEER': {
     name: 'Blockchain Pioneer',
@@ -72,13 +72,7 @@ export const ACHIEVEMENT_DISPLAY: Record<string, AchievementDisplay> = {
     category: 'SPEED',
     total: 10
   },
-  'CATEGORY_MASTER': {
-    name: 'Category Master',
-    description: 'Answer 50 questions correctly in any category',
-    icon: 'MEDAL',
-    category: 'MASTERY',
-    total: 50
-  },
+
   'STREAK_MASTER': {
     name: 'Streak Master',
     description: 'Achieve a streak of 10 correct answers',
@@ -93,7 +87,7 @@ export const ACHIEVEMENT_DISPLAY: Record<string, AchievementDisplay> = {
     category: 'STREAK',
     total: 7
   },
-  // Category achievements updated to match the database naming pattern (lowercase_master)
+// Category achievements with consistent naming pattern (always lowercase for DB lookups)
   'science_master': {
     name: 'Science Master',
     description: 'Answer 50 science questions correctly',
@@ -171,20 +165,8 @@ export const ACHIEVEMENT_DISPLAY: Record<string, AchievementDisplay> = {
     category: 'MASTERY',
     total: 50
   },
-  'general_master': {
-    name: 'General Knowledge Master',
-    description: 'Answer 50 general knowledge questions correctly',
-    icon: 'MEDAL',
-    category: 'MASTERY',
-    total: 50
-  },
-  'random_master': {
-    name: 'Random Master',
-    description: 'Answer 50 random category questions correctly',
-    icon: 'MEDAL',
-    category: 'MASTERY',
-    total: 50
-  },
+
+
   'TRIVIA_MASTER': {
     name: 'Trivia Master',
     description: 'Complete at least 5 category-specific achievements',
@@ -213,13 +195,7 @@ export const ACHIEVEMENT_DISPLAY: Record<string, AchievementDisplay> = {
     category: 'COLLECTION',
     total: 3
   },
-  'PERFECT_STREAK': {
-    name: 'Perfect Streak',
-    description: 'Maintain a perfect streak for an entire game',
-    icon: 'FLAME',
-    category: 'STREAK',
-    total: 1
-  },
+
   // Add aliases for backwards compatibility if needed
   'SCIENCE_MASTER': {
     name: 'Science Master',

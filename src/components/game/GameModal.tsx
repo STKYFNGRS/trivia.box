@@ -382,8 +382,19 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
               const result = await completeResponse.json();
               debugLog('Game completion successful:', result);
               
-              // Trigger wallet stats refresh after successful game completion
-              console.log('Triggering wallet stats refresh');
+              // Clear any cached stats to ensure fresh data
+              if (typeof localStorage !== 'undefined') {
+                const cacheKeys = Object.keys(localStorage);
+                cacheKeys.forEach(key => {
+                  if (key.startsWith('trivia-user-stats') || key.startsWith('trivia-leaderboard')) {
+                    console.log('Clearing cached stats:', key);
+                    localStorage.removeItem(key);
+                  }
+                });
+              }
+              
+              // Force the app to refresh stats
+              console.log('Triggering stats refresh after game completion');
               window.dispatchEvent(new CustomEvent('refreshWalletStats'));
             } else {
               console.warn('Game completion API returned error status:', completeResponse.status);

@@ -1,18 +1,20 @@
 import { NextResponse } from 'next/dist/server/web/spec-extension/response';
 import { prisma } from '@/lib/db/client';
 
-export const dynamic = 'force-dynamic'; // Mark as dynamic route
+// Add caching while still allowing revalidation
+export const dynamic = 'force-dynamic';
+export const revalidate = 120; // Revalidate every 2 minutes
 
 export async function GET() {
   try {
     // Add retry mechanism for database connection issues
-    let retries = 3;
+    let retries = 2;
     let leaderboard: any[] = [];
     let totalPlayers = 0;
 
     while (retries > 0) {
       try {
-        // Try to fetch leaderboard and total player count
+        // Try to fetch leaderboard data
         [leaderboard, totalPlayers] = await Promise.all([
           prisma.trivia_users.findMany({
             select: {
@@ -34,17 +36,19 @@ export async function GET() {
           prisma.trivia_users.count()
         ]);
 
-        break; // Success, exit the retry loop
+        // Success, exit retry loop
+        break;
       } catch (dbError) {
-        console.warn(`Database error fetching leaderboard (retries left: ${retries}):`, dbError);
+        console.warn(`Database error (retries left: ${retries}):`, dbError);
         retries--;
-        // Wait before retrying
-        if (retries > 0) await new Promise(resolve => setTimeout(resolve, 500));
         
-        // If this is the last retry and still failing, return default data
+        // Wait before retrying
+        if (retries > 0) await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // If final retry fails, use default data
         if (retries === 0) {
           leaderboard = [
-            { id: 1, wallet_address: '0xea...37da', total_points: 584, games_played: 11, _count: { trivia_achievements: 3 } }
+            { id: 1, wallet_address: '0xea...37da', total_points: 584n, games_played: 11, _count: { trivia_achievements: 3 } }
           ];
           totalPlayers = 1;
         }

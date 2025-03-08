@@ -1,16 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import WalletDataService, { WalletData } from '@/services/wallet/WalletDataService';
 
-// Default state for when no wallet is connected
+// Default state for when no wallet is connected or data is loading
 const DEFAULT_DATA: WalletData = {
   ensName: null,
   ensAvatar: null,
   stats: {
-    totalPoints: 1243, // Matching screenshot default
-    weeklyPoints: 50,  // Default weekly points
+    totalPoints: 0,
     rank: 1,
-    bestStreak: 5,     // Matching screenshot default
-    gamesPlayed: 33,   // Matching screenshot default
+    bestStreak: 0,
+    gamesPlayed: 0,
     trivia_achievements: []
   },
   leaderboard: [],
@@ -56,6 +55,12 @@ export function useWalletData(address: string | undefined) {
     
     try {
       const walletData = await walletService.fetchWalletData(address);
+      
+      // Debug log to check what's coming back from the API
+      console.log('Wallet data received:', JSON.stringify(walletData, null, 2));
+      if (walletData.stats) {
+        console.log('Best streak from API:', walletData.stats.bestStreak);
+      }
       
       if (isMounted.current) {
         // Performance optimization: only update state with the values that changed

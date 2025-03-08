@@ -16,6 +16,7 @@ export default function GameOptions({ onStartGame, isVisible = true }: GameOptio
   // Handle hiding game settings when leaderboard is shown
   useEffect(() => {
     const handleHideGameSettings = () => {
+      console.log('GameOptions: hideGameSettings event received');
       setInternallyVisible(false);
     };
     
@@ -28,6 +29,7 @@ export default function GameOptions({ onStartGame, isVisible = true }: GameOptio
   // Handle showing game settings when other modals are closed
   useEffect(() => {
     const handleShowGameSettings = () => {
+      console.log('GameOptions: showGameSettings event received');
       setInternallyVisible(true);
     };
     

@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import { prisma } from '@/lib/db/client';
 import { type trivia_category } from '@prisma/client';
-import { ACHIEVEMENT_DISPLAY } from '@/types/achievements';
+import { ACHIEVEMENT_DISPLAY, Achievement } from '@/types/achievements';
 
 export interface GameStats {
   userId: number;
@@ -13,873 +13,470 @@ export interface GameStats {
   averageResponseTime: number;
   startTime: Date;
   endTime: Date;
-  categories?: Record<string, number>; // Optional category-specific correct counts
+  categories?: Record<string, number>;
 }
 
 export class AchievementService extends EventEmitter {
-  private static instance: AchievementService | null = null;
-
-  private constructor() {
+  // Increase max listeners to prevent warnings
+  constructor() {
     super();
+    // Set maximum number of listeners to avoid warnings
+    this.setMaxListeners(20);
   }
 
+  private static instance: AchievementService | null = null;
+  
+  private readonly CATEGORY_MAP: Record<string, string> = {
+    'pop_culture': 'popculture',
+    'general_knowledge': 'general',
+    'general': 'general',
+    'technology': 'technology',
+    'science': 'science',
+    'history': 'history',
+    'geography': 'geography',
+    'sports': 'sports',
+    'gaming': 'gaming',
+    'literature': 'literature',
+    'internet': 'internet',
+    'movies': 'movies',
+    'music': 'music',
+    'art': 'art',
+    'random': 'random'
+  };
+
+  // Private constructor handled above
+
   public static getInstance(): AchievementService {
-    if (!this.instance) {
-      this.instance = new AchievementService();
-    }
+    if (!this.instance) this.instance = new AchievementService();
     return this.instance;
   }
   
-  /**
-   * Process all achievements for a game
-   */
-  async processGameEnd(stats: GameStats) {
-    try {
-      console.log(`Processing achievements for user ${stats.userId}, session ${stats.sessionId}`);
-      
-      // Run all achievement checks within a transaction for consistency
-      const achievedAchievements: Array<{
-        type: string;
-        display: typeof ACHIEVEMENT_DISPLAY[keyof typeof ACHIEVEMENT_DISPLAY];
-        userId: number;
-        isNewAchievement?: boolean;
-        progress?: number;
-      } | null> = await prisma.$transaction(async (tx) => {
-        // Always grant BLOCKCHAIN_PIONEER on first game completion
-        const blockchainPioneerAchievement = await this.grantAchievement(
-          stats.userId, 
-          'BLOCKCHAIN_PIONEER', 
-          { score: 1 },
-          tx
-        );
-        
-        // Run all achievement checks in parallel
-        const results = await Promise.all([
-          this.updateCategoryProgress(stats, tx),
-          this.checkStreakAchievements(stats, tx),
-          this.checkSpeedAchievements(stats, tx),
-          this.checkTimeBasedAchievements(stats, tx),
-          this.checkCompletionAchievements(stats, tx),
-          this.checkPerfectGameAchievement(stats, tx),
-          this.checkFirstWinAchievement(stats, tx)
-        ]);
-        
-        // Combine and return all achievements that were granted
-        const allAchievements = results.flat().filter(Boolean);
-        if (blockchainPioneerAchievement) {
-          allAchievements.push(blockchainPioneerAchievement);
-        }
-        
-        return allAchievements;
-      });
-      
-      // Emit events for any achievements that were earned
-      for (const achievement of achievedAchievements) {
-        // Skip null achievements
-        if (!achievement) continue;
-        
-        // Emit event for server-side listeners
-        this.emit('achievement_unlocked', {
-          userId: achievement.userId,
-          type: achievement.type,
-          display: achievement.display
-        });
-        
-        // Dispatch browser event for client-side notification
-        if (typeof window !== 'undefined') {
-          const achievementEvent = new CustomEvent('achievementUnlocked', {
-            detail: {
-              type: achievement.type,
-              display: achievement.display,
-              userId: achievement.userId
-            }
-          });
-          window.dispatchEvent(achievementEvent);
-        }
-      }
-      
-      return achievedAchievements;
-    } catch (error) {
-      console.error('Error in processGameEnd:', error);
-      return [];
-    }
+  // Helpers
+  private normalizeCategory(category: string): string {
+    const normalized = category.toLowerCase().replace(/\s+/g, '_');
+    return this.CATEGORY_MAP[normalized] || normalized;
   }
   
-  /**
-   * Find an achievement ID by user and type
-   */
-  private async findAchievementId(userId: number, achievementType: string, tx: any): Promise<number> {
-    // Find existing achievement by user_id and achievement_type
-    const existingAchievement = await tx.trivia_achievements.findFirst({
+  private async findAchievementId(userId: number, type: string): Promise<number> {
+    // Converting to lowercase for case-insensitive matching
+    const lowercaseType = type.toLowerCase();
+    
+    const achievements = await prisma.trivia_achievements.findMany({
       where: {
-        user_id: userId,
-        achievement_type: achievementType
+        user_id: userId
       },
-      select: { id: true }
+      select: { id: true, achievement_type: true }
     });
     
-    // Return the ID if found, or a placeholder ID that won't match any record
-    return existingAchievement?.id ?? -1;
+    // Manual filtering for case-insensitive matching
+    const match = achievements.find(a => a.achievement_type.toLowerCase() === lowercaseType);
+    return match?.id ?? -1;
   }
-  
-  /**
-   * Update progress for category-based achievements
-   */
-  private async updateCategoryProgress(stats: GameStats, tx: any) {
+
+  // Achievement checks
+  async checkPerfectGames(userId: number): Promise<number> {
     try {
-      // If categories data is provided, use that instead of single category
-      if (stats.categories) {
-        const results: Array<{
-          type: string;
-          display: typeof ACHIEVEMENT_DISPLAY[keyof typeof ACHIEVEMENT_DISPLAY];
-          userId: number;
-          progress: number;
-        } | null> = [];
-        
-        // Process each category
-        for (const [category, correctCount] of Object.entries(stats.categories)) {
-          if (correctCount <= 0) continue;
-          
-          const result = await this.updateSingleCategoryProgress(
-            stats.userId,
-            category as trivia_category,
-            correctCount,
-            tx
-          );
-          
-          if (result) results.push(result);
-        }
-        
-        return results;
-      } else {
-        // Fall back to single category if categories map not provided
-        return await this.updateSingleCategoryProgress(
-          stats.userId,
-          stats.category,
-          stats.correctAnswers,
-          tx
-        );
-      }
-    } catch (error) {
-      console.error('Error updating category progress:', error);
-      return null;
-    }
-  }
-  
-  /**
-   * Update progress for a single category
-   * @returns Achievement data or null if not earned
-   */
-  private async updateSingleCategoryProgress(
-    userId: number, 
-    category: trivia_category, 
-    correctCount: number,
-    tx: any
-  ): Promise<{
-    type: string;
-    display: typeof ACHIEVEMENT_DISPLAY[keyof typeof ACHIEVEMENT_DISPLAY];
-    userId: number;
-    progress: number;
-  } | null> {
-    try {
-      const achievementType = `${category.toLowerCase()}_master`;
+      // First check if user has any perfect games (10/10 questions correct)
+      const perfectGames = await prisma.$queryRaw<{count: bigint}[]>`
+        SELECT COUNT(*) as count FROM trivia_game_sessions tgs
+        WHERE tgs.id IN (
+          SELECT tpr.game_session_id
+          FROM trivia_player_responses tpr
+          WHERE tpr.user_id = ${userId}
+          GROUP BY tpr.game_session_id
+          HAVING COUNT(*) = 10 AND COUNT(CASE WHEN tpr.is_correct THEN 1 END) = 10
+        )
+      `;
       
-      const result = await tx.trivia_achievements.upsert({
-        where: {
-          id: await this.findAchievementId(userId, achievementType, tx)
-        },
-        update: {
-          score: { increment: correctCount },
-          week_number: Math.ceil((new Date().getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 604800000),
-          year: new Date().getFullYear()
-        },
-        create: {
-          user_id: userId,
-          achievement_type: achievementType,
-          week_number: Math.ceil((new Date().getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 604800000),
-          year: new Date().getFullYear(),
-          score: correctCount,
-          streak_milestone: 0
-        }
-      });
+      const perfectGameCount = Number(perfectGames[0].count);
       
-      // Return achievement data if applicable
-      if (ACHIEVEMENT_DISPLAY[achievementType]) {
-        const existingScore = result.score - correctCount;
-        const newScore = result.score;
-        const threshold = ACHIEVEMENT_DISPLAY[achievementType].total;
-        
-        // Only return the achievement if we've just crossed the threshold
-        if (existingScore < threshold && newScore >= threshold) {
-          return {
-            type: achievementType,
-            display: ACHIEVEMENT_DISPLAY[achievementType],
-            userId,
-            progress: newScore
-          };
-        }
-      }
-      return null;
-    } catch (error) {
-      console.error(`Error updating category progress for ${category}:`, error);
-      return null;
-    }
-  }
-  
-  /**
-   * Check and grant streak-based achievements
-   * @returns Array of achievement data objects or empty array
-   */
-  private async checkStreakAchievements(stats: GameStats, tx: any): Promise<Array<{
-    type: string;
-    display: typeof ACHIEVEMENT_DISPLAY[keyof typeof ACHIEVEMENT_DISPLAY];
-    userId: number;
-    isNewAchievement?: boolean;
-  } | null>> {
-    const streakTiers = [
-      ['STREAK_3', 3],
-      ['STREAK_5', 5],
-      ['STREAK_MASTER', 10]
-    ] as const;
-
-    const achievements: Array<{
-      type: string;
-      display: typeof ACHIEVEMENT_DISPLAY[keyof typeof ACHIEVEMENT_DISPLAY];
-      userId: number;
-      isNewAchievement?: boolean;
-    } | null> = [];
-    
-    for (const [code, required] of streakTiers) {
-      if (stats.bestStreak >= required) {
-        const result = await this.grantAchievement(
-          stats.userId, 
-          code as keyof typeof ACHIEVEMENT_DISPLAY, 
-          { streak: stats.bestStreak },
-          tx
-        );
-        if (result) achievements.push(result);
-      }
-    }
-    
-    return achievements;
-  }
-  
-  /**
-   * Check and grant speed-based achievements
-   * @returns Array of achievement data objects or empty array
-   */
-  private async checkSpeedAchievements(stats: GameStats, tx: any): Promise<Array<{
-    type: string;
-    display: typeof ACHIEVEMENT_DISPLAY[keyof typeof ACHIEVEMENT_DISPLAY];
-    userId: number;
-    isNewAchievement?: boolean;
-  } | null>> {
-    if (stats.averageResponseTime <= 3000 && stats.correctAnswers >= 5) {
-      const result = await this.grantAchievement(
-        stats.userId, 
-        'SPEED_DEMON', 
-        { time: stats.averageResponseTime },
-        tx
-      );
-      return result ? [result] : [];
-    }
-    return [];
-  }
-  
-  /**
-   * Check and grant time-of-day based achievements
-   * @returns Array of achievement data objects or empty array
-   */
-  private async checkTimeBasedAchievements(stats: GameStats, tx: any): Promise<Array<{
-    type: string;
-    display: typeof ACHIEVEMENT_DISPLAY[keyof typeof ACHIEVEMENT_DISPLAY];
-    userId: number;
-    isNewAchievement?: boolean;
-  } | null>> {
-    const hour = stats.startTime.getHours();
-    const achievements: Array<{
-      type: string;
-      display: typeof ACHIEVEMENT_DISPLAY[keyof typeof ACHIEVEMENT_DISPLAY];
-      userId: number;
-      isNewAchievement?: boolean;
-    } | null> = [];
-    
-    if (hour < 9) {
-      const result = await this.grantAchievement(
-        stats.userId, 
-        'EARLY_BIRD', 
-        { hour },
-        tx
-      );
-      if (result) achievements.push(result);
-    }
-    
-    if (hour >= 0 && hour < 4) {
-      const result = await this.grantAchievement(
-        stats.userId, 
-        'NIGHT_OWL', 
-        { hour },
-        tx
-      );
-      if (result) achievements.push(result);
-    }
-    
-    return achievements;
-  }
-  
-  /**
-   * Check and grant game completion count achievements
-   * @returns Array of achievement data objects or empty array
-   */
-  private async checkCompletionAchievements(stats: GameStats, tx: any): Promise<Array<{
-    type: string;
-    display: typeof ACHIEVEMENT_DISPLAY[keyof typeof ACHIEVEMENT_DISPLAY];
-    userId: number;
-    isNewAchievement?: boolean;
-  } | null>> {
-    const user = await tx.trivia_users.findUnique({
-      where: { id: stats.userId },
-      select: { games_played: true }
-    });
-
-    if (!user) return [];
-
-    const completionTiers = [
-      ['GAME_STARTER', 1],
-      ['GAME_ENTHUSIAST', 10],
-      ['GAME_EXPERT', 50],
-      ['GAME_MASTER', 100]
-    ] as const;
-
-    const achievements: Array<{
-      type: string;
-      display: typeof ACHIEVEMENT_DISPLAY[keyof typeof ACHIEVEMENT_DISPLAY];
-      userId: number;
-      isNewAchievement?: boolean;
-    } | null> = [];
-    
-    for (const [code, required] of completionTiers) {
-      if (user.games_played >= required) {
-        const result = await this.grantAchievement(
-          stats.userId, 
-          code as keyof typeof ACHIEVEMENT_DISPLAY, 
-          { games_played: user.games_played },
-          tx
-        );
-        if (result) achievements.push(result);
-      }
-    }
-    
-    return achievements;
-  }
-  
-  /**
-   * Check and grant perfect game achievements
-   * @returns Array of achievement data objects or empty array
-   */
-  private async checkPerfectGameAchievement(stats: GameStats, tx: any): Promise<Array<{
-    type: string;
-    display: typeof ACHIEVEMENT_DISPLAY[keyof typeof ACHIEVEMENT_DISPLAY];
-    userId: number;
-    isNewAchievement?: boolean;
-  } | null>> {
-    // Give both PERFECT_ROUND and PERFECT_GAME achievements if all questions are correct
-    if (stats.correctAnswers === stats.totalQuestions && stats.totalQuestions >= 10) {
-      console.log(`User ${stats.userId} got a perfect game! ${stats.correctAnswers}/${stats.totalQuestions} correct answers`);
-      
-      const achievements: Array<{
-        type: string;
-        display: typeof ACHIEVEMENT_DISPLAY[keyof typeof ACHIEVEMENT_DISPLAY];
-        userId: number;
-        isNewAchievement?: boolean;
-      } | null> = [];
-
-      // Grant the PERFECT_ROUND achievement
-      const perfectRound = await this.grantAchievement(
-        stats.userId, 
-        'PERFECT_ROUND', 
-        { questions: stats.totalQuestions },
-        tx
-      );
-      
-      if (perfectRound) achievements.push(perfectRound);
-      
-      // Also grant the PERFECT_GAME achievement 
-      const perfectGame = await this.grantAchievement(
-        stats.userId, 
-        'PERFECT_GAME', 
-        { questions: stats.totalQuestions },
-        tx
-      );
-      
-      if (perfectGame) achievements.push(perfectGame);
-      
-      return achievements;
-    }
-    return [];
-  }
-  
-  /**
-   * Check and grant first win achievement
-   * @returns Array of achievement data objects or empty array
-   */
-  private async checkFirstWinAchievement(stats: GameStats, tx: any): Promise<Array<{
-    type: string;
-    display: typeof ACHIEVEMENT_DISPLAY[keyof typeof ACHIEVEMENT_DISPLAY];
-    userId: number;
-    isNewAchievement?: boolean;
-  } | null>> {
-    // If they answered any questions correctly, consider it a win
-    if (stats.correctAnswers > 0) {
-      const result = await this.grantAchievement(
-        stats.userId, 
-        'FIRST_WIN', 
-        { score: 1 },
-        tx
-      );
-      return result ? [result] : [];
-    }
-    return [];
-  }
-  
-  /**
-   * Grant an achievement and return its data
-   * @returns Achievement data object or null if not granted
-   */
-  private async grantAchievement(
-    userId: number, 
-    type: keyof typeof ACHIEVEMENT_DISPLAY, 
-    progress: Record<string, number>,
-    tx: any
-  ): Promise<{
-    type: string;
-    display: typeof ACHIEVEMENT_DISPLAY[keyof typeof ACHIEVEMENT_DISPLAY];
-    userId: number;
-    isNewAchievement?: boolean;
-  } | null> {
-    try {
-      if (!ACHIEVEMENT_DISPLAY[type]) {
-        console.warn(`Achievement type "${type}" not found in ACHIEVEMENT_DISPLAY`);
-        return null;
-      }
-      
-      const display = ACHIEVEMENT_DISPLAY[type];
-      
-      // Check if achievement already exists
-      const existingId = await this.findAchievementId(userId, type, tx);
-      const isNewAchievement = existingId === -1;
-      const progressValue = progress.score || progress.streak || 0;
-      const achievementThreshold = display.total;
-      
-      // Only update if this is a new achievement or we've made progress
-      await tx.trivia_achievements.upsert({
-        where: {
-          id: existingId
-        },
-        update: {
-          score: progress.score || { increment: 0 },
-          streak_milestone: progress.streak || 0,
-          fastest_response: progress.time || undefined,
-          week_number: Math.ceil((new Date().getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 604800000),
-          year: new Date().getFullYear()
-        },
-        create: {
-          user_id: userId,
-          achievement_type: type,
-          score: progress.score || 0,
-          streak_milestone: progress.streak || 0,
-          fastest_response: progress.time,
-          week_number: Math.ceil((new Date().getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 604800000),
-          year: new Date().getFullYear(),
-          minted_at: new Date()
-        }
-      });
-
-      // Return achievement data if it's new or meets criteria
-      if (isNewAchievement || progressValue >= achievementThreshold) {
-        return {
-          type,
-          display,
-          userId,
-          isNewAchievement
-        };
-      }
-      
-      return null;
-    } catch (error) {
-      console.error(`Error granting achievement (${type}):`, error);
-      return null;
-    }
-  }
-  
-  /**
-   * Verify all achievements for a user
-   */
-  async verifyUserAchievements(userId: number) {
-    try {
-      console.log(`Verifying achievements for user ${userId}`);
-      
-      // Get user data with responses
-      const user = await prisma.trivia_users.findUnique({
-        where: { id: userId },
-        include: {
-          trivia_achievements: true,
-          trivia_player_responses: {
-            include: {
-              trivia_questions: true
-            },
-            take: 100,
-            orderBy: {
-              answered_at: 'desc'
-            }
-          }
-        }
-      });
-      
-      if (!user) {
-        console.error(`User ${userId} not found`);
-        return { error: 'User not found' };
-      }
-      
-      const results = {
-        verified: [],
-        repaired: [],
-        userId
-      };
-      
-      // Run verification checks
-      await prisma.$transaction(async (tx) => {
-        // Verify streak achievements
-        await this.verifyStreakAchievements(userId, user.best_streak || 0, tx, results);
-        
-        // Verify category achievements
-        await this.verifyCategoryAchievements(userId, user.trivia_player_responses, tx, results);
-        
-        // Verify special achievements
-        await this.verifySpecialAchievements(userId, user, tx, results);
-      });
-      
-      return results;
-    } catch (error) {
-      console.error('Error verifying user achievements:', error);
-      return { error: 'Failed to verify achievements' };
-    }
-  }
-  
-  /**
-   * Verify streak achievements
-   */
-  private async verifyStreakAchievements(
-    userId: number,
-    bestStreak: number,
-    tx: any,
-    results: any
-  ) {
-    const streakTiers = [
-      { code: 'STREAK_3', threshold: 3 },
-      { code: 'STREAK_5', threshold: 5 },
-      { code: 'STREAK_MASTER', threshold: 10 }
-    ];
-    
-    for (const { code, threshold } of streakTiers) {
-      if (bestStreak >= threshold) {
-        const hasAchievement = await tx.trivia_achievements.findFirst({
-          where: {
-            user_id: userId,
-            achievement_type: code
-          }
+      // If no perfect games found directly, check if user has a streak of 10+
+      // which would imply they've had a perfect game
+      if (perfectGameCount === 0) {
+        const topStreak = await prisma.trivia_streak_history.findFirst({
+          where: { user_id: userId },
+          orderBy: { streak_count: 'desc' }
         });
         
-        if (!hasAchievement) {
-          // Create the missing achievement
-          const now = new Date();
-          const weekNumber = Math.ceil((now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / 604800000);
-          
-          await tx.trivia_achievements.create({
-            data: {
-              user_id: userId,
-              achievement_type: code,
-              score: bestStreak,
-              streak_milestone: bestStreak,
-              week_number: weekNumber,
-              year: now.getFullYear(),
-              minted_at: now
-            }
-          });
-          
-          results.repaired.push({
-            code,
-            status: 'created',
-            threshold,
-            bestStreak
-          });
-        } else {
-          results.verified.push({
-            code,
-            status: 'verified',
-            threshold,
-            bestStreak
-          });
+        if (topStreak && Number(topStreak.streak_count) >= 10) {
+          return 1; // They've had at least one perfect game based on streak
         }
       }
+      
+      return perfectGameCount;
+    } catch (error) {
+      console.error('Error checking perfect games:', error);
+      return 0;
     }
   }
   
-  /**
-   * Verify category achievements
-   */
-  private async verifyCategoryAchievements(
-    userId: number,
-    responses: any[],
-    tx: any,
-    results: any
-  ) {
-    // Count correct answers by category
-    const categoryCounts: Record<string, number> = {};
-    
-    for (const response of responses) {
-      if (response.is_correct) {
-        const category = response.trivia_questions.category;
-        categoryCounts[category] = (categoryCounts[category] || 0) + 1;
-      }
+  async checkDifficultyMaster(userId: number): Promise<number> {
+    try {
+      const difficulties = await prisma.$queryRaw<{count: bigint}[]>`
+        SELECT COUNT(DISTINCT tq.difficulty) as count 
+        FROM trivia_player_responses tpr
+        JOIN trivia_questions tq ON tpr.question_id = tq.id
+        WHERE tpr.user_id = ${userId} AND tpr.is_correct = true
+      `;
+      return Number(difficulties[0].count);
+    } catch (error) {
+      console.error('Error checking difficulty master:', error);
+      return 0;
     }
-    
-    // Check each category against its achievement
-    for (const [category, count] of Object.entries(categoryCounts)) {
-      const achievementType = `${category.toLowerCase()}_master`;
-      const display = ACHIEVEMENT_DISPLAY[achievementType];
-      
-      if (!display) continue;
-      
-      const hasAchievement = await tx.trivia_achievements.findFirst({
+  }
+  
+  async checkQuickThinker(userId: number): Promise<number> {
+    try {
+      return await prisma.trivia_player_responses.count({
         where: {
           user_id: userId,
-          achievement_type: achievementType
+          is_correct: true,
+          response_time_ms: { lt: 5000 }
         }
       });
-      
-      if (!hasAchievement && count > 0) {
-        // Create the missing achievement
-        const now = new Date();
-        const weekNumber = Math.ceil((now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / 604800000);
-        
-        await tx.trivia_achievements.create({
-          data: {
-            user_id: userId,
-            achievement_type: achievementType,
-            score: count,
-            week_number: weekNumber,
-            year: now.getFullYear(),
-            minted_at: now
-          }
-        });
-        
-        results.repaired.push({
-          code: achievementType,
-          status: 'created',
-          category,
-          count
-        });
-      } else if (hasAchievement && hasAchievement.score !== count) {
-        // Update incorrect count
-        await tx.trivia_achievements.update({
-          where: { id: hasAchievement.id },
-          data: { score: count }
-        });
-        
-        results.repaired.push({
-          code: achievementType,
-          status: 'updated',
-          category,
-          oldCount: hasAchievement.score,
-          newCount: count
-        });
-      } else {
-        results.verified.push({
-          code: achievementType,
-          status: 'verified',
-          category,
-          count
-        });
-      }
+    } catch (error) {
+      console.error('Error checking quick thinker:', error);
+      return 0;
     }
   }
   
-  /**
-   * Verify special achievements like FIRST_WIN and BLOCKCHAIN_PIONEER
-   */
-  private async verifySpecialAchievements(
-    userId: number,
-    user: any,
-    tx: any,
-    results: any
-  ) {
-    // BLOCKCHAIN_PIONEER - Always granted for connected users
-    const hasPioneerAchievement = user.trivia_achievements.some(
-      (a:any) => a.achievement_type === 'BLOCKCHAIN_PIONEER'
-    );
-    
-    if (!hasPioneerAchievement) {
-      // Create the achievement
-      const now = new Date();
-      const weekNumber = Math.ceil((now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / 604800000);
-      
-      await tx.trivia_achievements.create({
-        data: {
-          user_id: userId,
-          achievement_type: 'BLOCKCHAIN_PIONEER',
-          score: 1,
-          week_number: weekNumber,
-          year: now.getFullYear(),
-          minted_at: now
-        }
-      });
-      
-      results.repaired.push({
-        code: 'BLOCKCHAIN_PIONEER',
-        status: 'created'
-      });
-    } else {
-      results.verified.push({
-        code: 'BLOCKCHAIN_PIONEER',
-        status: 'verified'
-      });
-    }
-    
-    // FIRST_WIN - Granted if they've played any games
-    const hasFirstWinAchievement = user.trivia_achievements.some(
-      (a:any) => a.achievement_type === 'FIRST_WIN'
-    );
-    
-    if (!hasFirstWinAchievement && user.games_played > 0) {
-      // Create the achievement
-      const now = new Date();
-      const weekNumber = Math.ceil((now.getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 604800000);
-      
-      await tx.trivia_achievements.create({
-        data: {
-          user_id: userId,
-          achievement_type: 'FIRST_WIN',
-          score: 1,
-          week_number: weekNumber,
-          year: now.getFullYear(),
-          minted_at: now
-        }
-      });
-      
-      results.repaired.push({
-        code: 'FIRST_WIN',
-        status: 'created'
-      });
-    } else if (hasFirstWinAchievement) {
-      results.verified.push({
-        code: 'FIRST_WIN',
-        status: 'verified'
-      });
-    }
-  }
-  
-  /**
-   * Get achievements for a specific user
-   */
-  async getUserAchievements(userId: number) {
+  async checkCategoryMaster(userId: number): Promise<number> {
     try {
-      // Get all default achievements as a base
-      const achievements = Object.entries(ACHIEVEMENT_DISPLAY).map(([code, definition]) => {
-        return {
-          code,
-          name: definition.name,
-          description: definition.description,
-          icon: definition.icon,
-          category: definition.category,
-          achieved: false,
-          progress: 0,
-          total: definition.total,
-          unlockedAt: null as Date | null
-        };
+      const result = await prisma.trivia_player_responses.count({
+        where: { user_id: userId, is_correct: true }
       });
+      return Number(result);
+    } catch (error) {
+      console.error('Error checking category master:', error);
+      return 0;
+    }
+  }
+  
+  async checkCategoryAchievement(userId: number, category: string): Promise<number> {
+    try {
+      // Special mapping for pop culture which might be stored differently
+      if (category.toLowerCase() === 'popculture' || category.toLowerCase() === 'pop_culture') {
+        const result = await prisma.$queryRaw<{count: number}[]>`
+          SELECT COUNT(*) as count
+          FROM trivia_player_responses tpr
+          JOIN trivia_questions tq ON tpr.question_id = tq.id
+          WHERE tpr.user_id = ${userId} AND tpr.is_correct = true
+          AND (LOWER(tq.category::text) LIKE '%pop%' OR LOWER(tq.category::text) LIKE '%culture%')
+        `;
+        return result[0].count;
+      }
       
-      // Get user's achievements from the database
+      if (category.toLowerCase() === 'general' || category.toLowerCase() === 'general_knowledge') {
+        const result = await prisma.$queryRaw<{count: number}[]>`
+          SELECT COUNT(*) as count
+          FROM trivia_player_responses tpr
+          JOIN trivia_questions tq ON tpr.question_id = tq.id
+          WHERE tpr.user_id = ${userId} AND tpr.is_correct = true
+          AND (LOWER(tq.category::text) = 'general' OR LOWER(tq.category::text) = 'general_knowledge')
+        `;
+        return result[0].count;
+      }
+      
+      // Use a cast to text for case-insensitive comparison
+      const result = await prisma.$queryRaw<{count: number}[]>`
+        SELECT COUNT(*) as count
+        FROM trivia_player_responses tpr
+        JOIN trivia_questions tq ON tpr.question_id = tq.id
+        WHERE tpr.user_id = ${userId} AND tpr.is_correct = true
+        AND LOWER(tq.category::text) = LOWER(${category})
+      `;
+      return Number(result[0].count); // Convert BigInt to Number
+    } catch (error) {
+      console.error(`Error checking category achievement for ${category}:`, error);
+      return 0;
+    }
+  }
+  
+  // Main methods
+  async getUserAchievements(userId: number): Promise<Achievement[] | { error: string }> {
+    try {
+      // Get base achievements
+      const achievements = Object.entries(ACHIEVEMENT_DISPLAY).map(([code, def]) => ({
+        code,
+        name: def.name,
+        description: def.description,
+        icon: def.icon,
+        category: def.category,
+        achieved: false,
+        progress: 0, total: def.total,
+        unlockedAt: null as Date | null
+      }));
+      
+      // Get stored achievements and user data
       const userAchievements = await prisma.trivia_achievements.findMany({
-        where: {
-          user_id: userId
-        }
+        where: { user_id: userId }
       });
       
-      // Get user data for any missing achievements
       const userData = await prisma.trivia_users.findUnique({
         where: { id: userId },
-        include: {
-          trivia_player_responses: {
-            include: {
-              trivia_questions: true
-            },
-            take: 100,
-            orderBy: {
-              answered_at: 'desc'
-            }
-          }
-        }
+        select: { games_played: true }
       });
       
-      if (!userData) {
-        return { error: 'User not found' };
-      }
+      if (!userData) return { error: 'User not found' };
       
-      // Update achievement progress information
-      achievements.forEach(achievement => {
-        // Find matching user achievement if exists
-        const userAchievement = userAchievements.find(
-          a => a.achievement_type === achievement.code
+      // Get metrics
+      const topStreak = await prisma.trivia_streak_history.findFirst({
+        where: { user_id: userId },
+        orderBy: { streak_count: 'desc' }
+      });
+      
+      const perfectGamesCount = await this.checkPerfectGames(userId);
+      const perfectGames = perfectGamesCount > 0;
+      const categoryMasterCount = await this.checkCategoryMaster(userId);
+      const difficultyCount = await this.checkDifficultyMaster(userId);
+      const quickAnswers = await this.checkQuickThinker(userId);
+      const maxStreakValue = topStreak ? Number(topStreak.streak_count) || 0 : 0;
+      
+      // Map to store final achievements
+      const processedAchievements = new Map();
+      
+      // Process all achievements
+      for (const achievement of achievements) {
+        const normalizedCode = achievement.code.toLowerCase();
+        const storedAchievements = userAchievements.filter(a => 
+          a.achievement_type.toLowerCase() === normalizedCode
         );
         
-        if (userAchievement) {
-          achievement.progress = userAchievement.score || 0;
+        // If found in database
+        if (storedAchievements.length > 0) {
+          const highestScore = Math.max(...storedAchievements.map(a => Number(a.score) || 0));
+          achievement.progress = highestScore;
           achievement.achieved = achievement.progress >= achievement.total;
-          // Handle the Date assignment with proper type checking
-          achievement.unlockedAt = userAchievement.minted_at || null;
+          
+          const unlockDates = storedAchievements
+            .map(a => a.minted_at)
+            .filter(date => date !== null) as Date[];
+            
+          if (unlockDates.length > 0) {
+            achievement.unlockedAt = new Date(Math.min(...unlockDates.map(d => d.getTime())));
+          }
         } else {
-          // Calculate progress based on user data
-          switch (achievement.code) {
-            case 'STREAK_3':
-            case 'STREAK_5':
-            case 'STREAK_MASTER':
-              achievement.progress = userData.best_streak || 0;
-              achievement.achieved = achievement.progress >= achievement.total;
+          // Calculate from metrics
+          switch (normalizedCode) {
+            case 'streak_3':
+            case 'streak_5':
+            case 'streak_master':
+              achievement.progress = maxStreakValue;
               break;
               
-            case 'BLOCKCHAIN_PIONEER':
-              achievement.progress = 1;  // Connected wallet = completed
-              achievement.achieved = true;
+            case 'blockchain_pioneer':
+              achievement.progress = 1;
               break;
               
-            case 'FIRST_WIN':
+            case 'first_win':
               achievement.progress = userData.games_played ? 1 : 0;
-              achievement.achieved = achievement.progress >= 1;
               break;
               
-            // Check for category achievements
+            case 'perfect_game':
+              achievement.progress = await this.checkPerfectGames(userId);
+              break;
+              
+            case 'perfect_round':
+              achievement.progress = await this.checkPerfectGames(userId);
+              break;
+              
+            case 'marathon_player':
+              achievement.progress = Number(userData.games_played) || 0;
+              break;
+            
+            case 'difficulty_master':
+              achievement.progress = difficultyCount;
+              break;
+              
+            case 'quick_thinker':
+              achievement.progress = quickAnswers;
+              break;
+              
             default:
-              if (achievement.code.endsWith('_master')) {
-                const category = achievement.code.replace('_master', '');
-                const correctCount = userData.trivia_player_responses.filter(r => 
-                  r.is_correct && 
-                  r.trivia_questions.category.toLowerCase() === category
-                ).length;
-                
-                achievement.progress = correctCount;
-                achievement.achieved = correctCount >= achievement.total;
+              if (normalizedCode.endsWith('_master')) {
+                const category = normalizedCode.replace('_master', '');
+                achievement.progress = await this.checkCategoryAchievement(userId, category);
               }
           }
+          
+          achievement.achieved = achievement.progress >= achievement.total;
         }
-      });
+        
+        processedAchievements.set(normalizedCode, achievement);
+      }
       
-      return achievements;
+      return Array.from(processedAchievements.values());
     } catch (error) {
       console.error('Error getting user achievements:', error);
       return { error: 'Failed to get achievements' };
     }
   }
-}
+  
+  async verifyUserAchievements(userId: number) {
+    try {
+      console.log(`Verifying achievements for user ID: ${userId}`);
+      
+      // Get current achievements
+      const achievements = await this.getUserAchievements(userId);
+      if ('error' in achievements) {
+        return { error: achievements.error };
+      }
+      
+      // Simply return the verified achievements
+      // We've already recalculated everything in getUserAchievements
+      return { 
+        verified: achievements, 
+        repaired: [], 
+        userId 
+      };
+    } catch (error) {
+      console.error('Error verifying user achievements:', error);
+      return { error: 'Failed to verify achievements', userId };
+    }
+  }
+  
+  async processGameEnd(stats: GameStats): Promise<Achievement[]> {
+    try {
+      const achievementsList: Achievement[] = [];
+      const userId = stats.userId;
+      
+      // Update BLOCKCHAIN_PIONEER
+      await prisma.trivia_achievements.upsert({
+        where: { id: await this.findAchievementId(userId, 'BLOCKCHAIN_PIONEER') },
+        update: { score: 1 },
+        create: {
+          user_id: userId,
+          achievement_type: 'BLOCKCHAIN_PIONEER',
+          score: 1,
+          week_number: Math.ceil((new Date().getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 604800000),
+          year: new Date().getFullYear(),
+          streak_milestone: 0
+        }
+      });
+      
+      achievementsList.push({
+        code: 'BLOCKCHAIN_PIONEER',
+        ...ACHIEVEMENT_DISPLAY['BLOCKCHAIN_PIONEER'],
+        achieved: true,
+        progress: 1,
+        total: 1,
+        unlockedAt: new Date()
+      });
+      
+      // Check for PERFECT_GAME
+      if (stats.correctAnswers === stats.totalQuestions && stats.totalQuestions === 10) {
+        // Count existing perfect games
+        const existingPerfectGames = await this.checkPerfectGames(userId);
+        
+        await prisma.trivia_achievements.upsert({
+          where: { id: await this.findAchievementId(userId, 'PERFECT_GAME') },
+          update: { score: existingPerfectGames + 1 },
+          create: {
+            user_id: userId,
+            achievement_type: 'PERFECT_GAME',
+            score: 1,
+            week_number: Math.ceil((new Date().getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 604800000),
+            year: new Date().getFullYear(),
+            streak_milestone: 0
+          }
+        });
+        
+        achievementsList.push({
+          code: 'PERFECT_GAME',
+          ...ACHIEVEMENT_DISPLAY['PERFECT_GAME'],
+          achieved: true,
+          progress: existingPerfectGames + 1,
+          total: 1,
+          unlockedAt: new Date()
+        });
+      }
+      
+      // Update game counts
+      const userData = await prisma.trivia_users.findUnique({
+        where: { id: userId },
+        select: { games_played: true }
+      });
+      
+      if (userData) {
+        await prisma.trivia_achievements.upsert({
+          where: { id: await this.findAchievementId(userId, 'MARATHON_PLAYER') },
+          update: { score: Number(userData.games_played) },
+          create: {
+            user_id: userId,
+            achievement_type: 'MARATHON_PLAYER',
+            score: Number(userData.games_played),
+            week_number: Math.ceil((new Date().getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 604800000),
+            year: new Date().getFullYear(),
+            streak_milestone: 0
+          }
+        });
+        
+        achievementsList.push({
+          code: 'MARATHON_PLAYER',
+          ...ACHIEVEMENT_DISPLAY['MARATHON_PLAYER'],
+          achieved: userData.games_played >= 50,
+          progress: userData.games_played,
+          total: 50,
+          unlockedAt: userData.games_played >= 50 ? new Date() : null
+        });
+      }
+      
+      // Update difficulty
+      const difficultyCount = await this.checkDifficultyMaster(userId);
+      
+      await prisma.trivia_achievements.upsert({
+        where: { id: await this.findAchievementId(userId, 'DIFFICULTY_MASTER') },
+        update: { score: difficultyCount },
+        create: {
+          user_id: userId,
+          achievement_type: 'DIFFICULTY_MASTER',
+          score: difficultyCount,
+          week_number: Math.ceil((new Date().getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 604800000),
+          year: new Date().getFullYear(),
+          streak_milestone: 0
+        }
+      });
 
-export default AchievementService;
+      achievementsList.push({
+        code: 'DIFFICULTY_MASTER',
+        ...ACHIEVEMENT_DISPLAY['DIFFICULTY_MASTER'],
+        achieved: difficultyCount >= 3,
+        progress: difficultyCount,
+        total: 3,
+        unlockedAt: difficultyCount >= 3 ? new Date() : null
+      });
+      
+      // Update category achievements based on the stats from this game
+      if (stats.categories) {
+        for (const [category, count] of Object.entries(stats.categories)) {
+          if (count > 0) {
+            const normalizedCategory = this.normalizeCategory(category);
+            const achievementType = `${normalizedCategory}_master`;
+            
+            // Get current total for this category
+            const currentCount = await this.checkCategoryAchievement(userId, normalizedCategory);
+            
+            // Update the achievement
+            await prisma.trivia_achievements.upsert({
+              where: { id: await this.findAchievementId(userId, achievementType) },
+              update: { score: currentCount },
+              create: {
+                user_id: userId,
+                achievement_type: achievementType,
+                score: currentCount,
+                week_number: Math.ceil((new Date().getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 604800000),
+                year: new Date().getFullYear(),
+                streak_milestone: 0
+              }
+            });
+          }
+        }
+      }
+      
+      return achievementsList;
+    } catch (error) {
+      console.error('Error processing achievements:', error);
+      return [];
+    }
+  }
+}

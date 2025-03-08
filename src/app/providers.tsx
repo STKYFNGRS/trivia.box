@@ -5,6 +5,7 @@ import { type ReactNode } from 'react';
 import QueryProviders from '@/components/providers/QueryProviders';
 import SWRProviders from '@/components/providers/SWRProviders';
 import AchievementProvider from '@/components/providers/AchievementProvider';
+import EnsPrefetchProvider from '@/components/providers/EnsPrefetchProvider';
 
 /**
  * Root providers component that wraps the application.
@@ -16,7 +17,9 @@ export default function Providers({ children }: { children: ReactNode }) {
     <QueryProviders>
       <SWRProviders>
         <AchievementProvider>
-          {children}
+          <EnsPrefetchProvider>
+            {children}
+          </EnsPrefetchProvider>
         </AchievementProvider>
       </SWRProviders>
     </QueryProviders>

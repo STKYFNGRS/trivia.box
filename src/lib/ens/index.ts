@@ -44,27 +44,26 @@ const RPC_PROVIDERS = [
  * Direct ENS name lookup using ethers.js
  */
 export async function lookupEnsName(address: string): Promise<string | null> {
-  console.log(`Direct ENS lookup for address: ${address}`);
+  // Lookup ENS name silently
   
   if (!address) return null;
   
   // Check cache first
   const cached = getCachedEnsName(address);
   if (cached) {
-    console.log(`Found cached ENS name for ${address}: ${cached}`);
+    // Return cached name
     return cached;
   }
   
-  // Try each provider until successful
-  for (const rpcUrl of RPC_PROVIDERS) {
+  // Try multiple providers in parallel
+  const providerPromises = RPC_PROVIDERS.map(async (rpcUrl) => {
     try {
-      console.log(`Trying ENS lookup via ${rpcUrl}`);
-      // Create provider
+      // Create provider (minimized logging)
       const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
       
       // Set a timeout to avoid hanging
       const timeoutPromise = new Promise<null>((_, reject) => {
-        setTimeout(() => reject(new Error('ENS lookup timeout')), 5000);
+        setTimeout(() => reject(new Error('ENS lookup timeout')), 8000);
       });
       
       // Race the name lookup against the timeout
@@ -74,19 +73,29 @@ export async function lookupEnsName(address: string): Promise<string | null> {
       ]);
       
       if (name) {
-        console.log(`Found ENS name for ${address}: ${name}`);
-        
         // Cache the result
         cacheEnsName(address, name);
         return name;
       }
+      return null;
     } catch (e) {
-      console.warn(`ENS lookup failed for ${rpcUrl}:`, e);
-      // Continue to next provider
+      // Silent failure for individual provider
+      return null;
     }
+  });
+  
+  // Wait for first successful result
+  try {
+    const results = await Promise.allSettled(providerPromises);
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value) {
+        return result.value;
+      }
+    }
+  } catch (error) {
+    console.warn('All ENS providers failed');
   }
   
-  console.log(`No ENS name found for ${address}`);
   return null;
 }
 
@@ -94,47 +103,43 @@ export async function lookupEnsName(address: string): Promise<string | null> {
  * Direct ENS avatar lookup using ethers.js
  */
 export async function lookupEnsAvatar(ensName: string): Promise<string | null> {
-  console.log(`Direct ENS avatar lookup for name: ${ensName}`);
-  
   if (!ensName) return null;
   
   // Check cache first
   const cached = getCachedEnsAvatar(ensName);
   if (cached) {
-    console.log(`Found cached ENS avatar for ${ensName}: ${cached}`);
     return cached;
   }
   
-  // Try each provider until successful
-  for (const rpcUrl of RPC_PROVIDERS) {
+  // Try multiple providers in parallel
+  const providerPromises = RPC_PROVIDERS.map(async (rpcUrl) => {
     try {
-      console.log(`Trying ENS avatar lookup via ${rpcUrl}`);
       // Create provider
       const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
       
       // Set a timeout to avoid hanging
       const timeoutPromise = new Promise<null>((_, reject) => {
-        setTimeout(() => reject(new Error('ENS lookup timeout')), 5000);
+        setTimeout(() => reject(new Error('ENS lookup timeout')), 8000);
       });
       
-      // Get the resolver
-      const resolverAddress = await provider.getResolver(ensName);
+      // Race against timeout
+      const resolver = await Promise.race([
+        provider.getResolver(ensName),
+        timeoutPromise
+      ]);
       
-      if (resolverAddress) {
+      if (resolver) {
         try {
           // Get the avatar
           const avatar = await provider.getAvatar(ensName);
           
           if (avatar) {
-            console.log(`Found ENS avatar for ${ensName}: ${avatar}`);
-            
             // Process the avatar URL
             let finalAvatar = avatar;
             
             if (typeof avatar === 'string') {
               // Handle string avatar
               finalAvatar = avatar.startsWith('ipfs://') ? resolveIpfsUrl(avatar) : avatar;
-              console.log(`Resolved string avatar: ${finalAvatar}`);
             }
             
             if (finalAvatar) {
@@ -144,16 +149,28 @@ export async function lookupEnsAvatar(ensName: string): Promise<string | null> {
             }
           }
         } catch (avatarError) {
-          console.warn(`Avatar fetch failed for ${ensName}:`, avatarError);
+          // Silent failure for avatar fetch
         }
       }
+      return null;
     } catch (e) {
-      console.warn(`ENS avatar lookup failed for ${rpcUrl}:`, e);
-      // Continue to next provider
+      // Silent failure for individual provider
+      return null;
     }
+  });
+  
+  // Wait for first successful result
+  try {
+    const results = await Promise.allSettled(providerPromises);
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value) {
+        return result.value;
+      }
+    }
+  } catch (error) {
+    console.warn('All ENS avatar providers failed');
   }
   
-  console.log(`No ENS avatar found for ${ensName}`);
   return null;
 }
 

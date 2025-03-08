@@ -95,60 +95,88 @@ const PROGRESS_GRADIENTS: Record<string, string> = {
 
 // Define multi-tier achievements and their thresholds
 const ACHIEVEMENT_TIERS: Record<string, { name: string, thresholds: number[] }> = {
-  'STREAK_3': { 
+  'streak_3': { 
     name: 'Streak', 
     thresholds: [3, 5, 10] 
   },
-  'STREAK_5': { 
+  'streak_5': { 
     name: 'Streak', 
     thresholds: [3, 5, 10] 
   },
-  'STREAK_MASTER': { 
+  'streak_master': { 
     name: 'Streak', 
     thresholds: [3, 5, 10] 
   },
-  'SCIENCE_MASTER': { 
+  'science_master': { 
     name: 'Science', 
     thresholds: [10, 25, 50] 
   },
-  'TECH_GURU': { 
+  'technology_master': { 
     name: 'Technology', 
     thresholds: [10, 25, 50] 
   },
-  'POP_CULTURE_EXPERT': { 
+  'popculture_master': { 
     name: 'Pop Culture', 
     thresholds: [10, 25, 50] 
   },
-  'HISTORY_BUFF': { 
+  'history_master': { 
     name: 'History', 
     thresholds: [10, 25, 50] 
   },
-  'GEOGRAPHY_WHIZ': { 
+  'geography_master': { 
     name: 'Geography', 
     thresholds: [10, 25, 50] 
   },
-  'SPORTS_FANATIC': { 
+  'sports_master': { 
     name: 'Sports', 
     thresholds: [10, 25, 50] 
   },
-  'GAMING_LEGEND': { 
+  'gaming_master': { 
     name: 'Gaming', 
     thresholds: [10, 25, 50] 
   },
-  'SPEED_DEMON': { 
+  'speed_demon': { 
     name: 'Speed', 
     thresholds: [5, 10, 20] 
   },
+  'random_master': { 
+    name: 'Random', 
+    thresholds: [10, 25, 50] 
+  },
+  'general_master': { 
+    name: 'General Knowledge', 
+    thresholds: [10, 25, 50] 
+  },
+  'internet_master': { 
+    name: 'Internet', 
+    thresholds: [10, 25, 50] 
+  },
+  'movies_master': { 
+    name: 'Movies', 
+    thresholds: [10, 25, 50] 
+  },
+  'music_master': { 
+    name: 'Music', 
+    thresholds: [10, 25, 50] 
+  },
+  'literature_master': { 
+    name: 'Literature', 
+    thresholds: [10, 25, 50] 
+  }
 };
 
 // Check if an achievement has multiple tiers
 function isMultiTierAchievement(code: string): boolean {
-  return !!ACHIEVEMENT_TIERS[code];
+  // Normalize the code to lowercase for consistent lookups
+  const normalizedCode = code.toLowerCase();
+  return !!ACHIEVEMENT_TIERS[normalizedCode];
 }
 
 // Get tier thresholds for multi-tier achievements
 function getTierThresholds(code: string): number[] {
-  return ACHIEVEMENT_TIERS[code]?.thresholds || [];
+  // Normalize the code to lowercase for consistent lookups
+  const normalizedCode = code.toLowerCase();
+  return ACHIEVEMENT_TIERS[normalizedCode]?.thresholds || [];
 }
 
 export default function AchievementsDropdown({ isOpen, onClose, walletAddress }: AchievementsDropdownProps) {
@@ -168,12 +196,52 @@ export default function AchievementsDropdown({ isOpen, onClose, walletAddress }:
         console.log(`Fetching achievements for wallet: ${walletAddress}`);
         const response = await fetch(`/api/achievements?wallet=${walletAddress}`);
         if (!response.ok) {
-          throw new Error(response.statusText);
+          const errorText = await response.text();
+          console.error(`API response error: ${response.status} - ${errorText}`);
+          throw new Error(`API error: ${response.status} - ${response.statusText}`);
         }
         
         const data = await response.json();
-        console.log('All achievements data:', data);
-        setAchievements(data.achievements);
+        console.log(`Retrieved ${data.achievements?.length || 0} achievements:`);
+        
+        // Log a summary of achievements
+        const achievedCount = data.achievements?.filter((a: any) => a.achieved).length || 0;
+        const inProgressCount = data.achievements?.filter((a: any) => !a.achieved && a.progress > 0).length || 0;
+        console.log(`Achieved: ${achievedCount}, In Progress: ${inProgressCount}`);
+        
+        // Log achieved achievements
+        const achievedAchievements = data.achievements?.filter((a: any) => a.achieved) || [];
+        console.log('Achieved achievements:', achievedAchievements.map((a: any) => `${a.code}: ${a.progress}/${a.total}`));
+        
+        // Log in-progress achievements
+        const inProgressAchievements = data.achievements?.filter((a: any) => !a.achieved && a.progress > 0) || [];
+        console.log('In-progress achievements:', inProgressAchievements.map((a: any) => `${a.code}: ${a.progress}/${a.total}`));
+        
+        if (data.achievements) {
+          // Deduplicate achievements with the same name and description
+          const uniqueMap = new Map<string, Achievement>();
+          
+          data.achievements.forEach((achievement: Achievement) => {
+            // Use name+description as a unique key for deduplication
+            const key = `${achievement.name}|${achievement.description}`;
+            
+            if (uniqueMap.has(key)) {
+              const existing = uniqueMap.get(key)!;
+              // Keep the achievement with higher progress percentage
+              if ((achievement.progress / achievement.total) > (existing.progress / existing.total)) {
+                uniqueMap.set(key, achievement);
+              }
+            } else {
+              uniqueMap.set(key, achievement);
+            }
+          });
+          
+          // Convert back to array
+          setAchievements(Array.from(uniqueMap.values()));
+        } else {
+          console.error('No achievements array in response:', data);
+          setError('Failed to load achievements. Invalid response format.');
+        }
       } catch (err) {
         console.error('Error fetching achievements:', err);
         setError('Failed to load achievements');
@@ -221,10 +289,15 @@ export default function AchievementsDropdown({ isOpen, onClose, walletAddress }:
     return [...new Set(achievements.map(a => a.category))];
   }, [achievements]);
 
+  // Log when opening/closing for debugging
+  useEffect(() => {
+    console.log(`AchievementsDropdown isOpen changed to: ${isOpen}`);
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-50" data-testid="achievements-modal">
       <div className="flex min-h-screen items-center justify-center p-4">
         <motion.div
           key="achievements-panel"
@@ -242,7 +315,7 @@ export default function AchievementsDropdown({ isOpen, onClose, walletAddress }:
               </div>
               <div className="absolute right-0 top-0">
                 <button
-                  onClick={onClose}
+                  onClick={() => onClose()}
                   className="rounded-lg p-1.5 text-amber-400 transition-colors hover:text-white"
                 >
                   <X className="h-5 w-5" />
@@ -268,7 +341,7 @@ export default function AchievementsDropdown({ isOpen, onClose, walletAddress }:
                     key={category}
                     className={`px-3 py-1 rounded-full text-xs border transition-all ${
                       selectedCategory === category
-                        ? `bg-${category.toLowerCase()}-500/20 border-${category.toLowerCase()}-500/40 text-${category.toLowerCase()}-300`
+                        ? `bg-amber-500/20 border-amber-500/40 text-amber-300`
                         : 'border-gray-700/30 text-gray-400 hover:border-gray-600'
                     }`}
                     onClick={() => setSelectedCategory(category)}
@@ -357,7 +430,7 @@ export default function AchievementsDropdown({ isOpen, onClose, walletAddress }:
                                     <div 
                                       className={`h-2 w-2 rounded-full ${
                                         achievement.progress >= threshold 
-                                          ? `bg-${achievement.category.toLowerCase()}-500 animate-pulse-slow` 
+                                          ? `bg-gray-300 animate-pulse-slow` 
                                           : 'bg-gray-700'
                                       }`}
                                     />
@@ -393,7 +466,7 @@ export default function AchievementsDropdown({ isOpen, onClose, walletAddress }:
                                   {achievement.progress} / {achievement.total}
                                 </span>
                                 {achievement.achieved && (
-                                  <span className={`bg-gradient-to-r from-${achievement.category.toLowerCase()}-800/40 to-${achievement.category.toLowerCase()}-600/40 text-${achievement.category.toLowerCase()}-200 px-2 py-0.5 rounded-full text-xs border border-${achievement.category.toLowerCase()}-400/40 shadow-sm shadow-${achievement.category.toLowerCase()}-500/20 animate-pulse`}>
+                                  <span className="bg-gray-800/40 text-gray-300 px-2 py-0.5 rounded-full text-xs border border-gray-700/40 shadow-sm animate-pulse">
                                     Completed! 🎉
                                   </span>
                                 )}
@@ -414,7 +487,7 @@ export default function AchievementsDropdown({ isOpen, onClose, walletAddress }:
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 -z-10 bg-black/70 backdrop-blur-sm"
-              onClick={onClose}
+              onClick={() => onClose()}
             />
           </div>
         </motion.div>

@@ -81,26 +81,9 @@ const WalletButton = memo(({
 
 WalletButton.displayName = 'WalletButton';
 
-// Memoize the rank button to prevent unnecessary re-renders
-const RankButton = memo(({ 
-  rank, 
-  onClick 
-}: { 
-  rank: number; 
-  onClick: () => void;
-}) => (
-  <div 
-    className="px-2 sm:px-3 py-1.5 rounded-xl bg-[#1a1c2b] hover:bg-[#252838] border border-amber-600/20 hover:border-amber-600/40 transition-all flex items-center cursor-pointer" 
-    onClick={onClick}
-  >
-    <span className="text-gray-300 text-xs sm:text-sm mr-1 hidden sm:inline">Rank</span>
-    <span className="text-amber-500 font-bold text-sm">#{rank}</span>
-  </div>
-));
 
-RankButton.displayName = 'RankButton';
 
-export default function WalletDisplay({ onAchievementsClick }: WalletDisplayProps) {
+export default function WalletDisplay({ onAchievementsClick, onLeaderboardOpen }: { onAchievementsClick: () => void, onLeaderboardOpen?: (isOpen: boolean) => void }) {
   const { address } = useAccount();
   
   // Use AppKit state for debugging purposes
@@ -123,6 +106,14 @@ export default function WalletDisplay({ onAchievementsClick }: WalletDisplayProp
       nextSibling.style.display = 'block';
     }
   }, []);
+
+  // Make achievements and leaderboard mutually exclusive
+  useEffect(() => {
+    if (showLeaderboard && isAchievementsOpen) {
+      // If leaderboard is shown, hide achievements
+      setIsAchievementsOpen(false);
+    }
+  }, [showLeaderboard, isAchievementsOpen]);
   
   // Handler for wallet button click
   const handleClick = useCallback(async () => {
@@ -135,9 +126,18 @@ export default function WalletDisplay({ onAchievementsClick }: WalletDisplayProp
 
   // Show leaderboard handler
   const handleShowLeaderboard = useCallback(() => {
+    // Always close achievements first before showing leaderboard
+    setIsAchievementsOpen(false);
+    
+    // Then show leaderboard
     setShowLeaderboard(true);
     window.dispatchEvent(new CustomEvent('hideGameSettings'));
-  }, []);
+    
+    // Notify parent component about leaderboard state change
+    if (onLeaderboardOpen) {
+      onLeaderboardOpen(true);
+    }
+  }, [onLeaderboardOpen]);
 
   if (!address) return null;
 
@@ -161,43 +161,51 @@ export default function WalletDisplay({ onAchievementsClick }: WalletDisplayProp
           </h1>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-1.5">
-          {/* Only show rank button when we have leaderboard data */}
-          {leaderboard.length > 0 && (
-            <RankButton 
-              rank={stats?.rank || 1} 
-              onClick={handleShowLeaderboard} 
-            />
+        {/* Achievements button */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => {
+            // First close leaderboard if it's open
+            if (showLeaderboard) {
+              setShowLeaderboard(false);
+              if (onLeaderboardOpen) {
+                onLeaderboardOpen(false);
+              }
+            }
+            
+            // Let parent handle the achievements opening logic
+            onAchievementsClick();
+          }}
+          onKeyDown={(e) => e.key === 'Enter' && onAchievementsClick()}
+          className={cn(
+            "flex items-center justify-center px-2 py-1.5 rounded-xl cursor-pointer",
+            "bg-[#1a1c2b] hover:bg-[#252838] transition-all",
+            "border border-amber-600/20 hover:border-amber-600/40",
+            "text-amber-500 hover:text-amber-400"
           )}
-          
-          {/* Achievements button */}
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={onAchievementsClick}
-            onKeyDown={(e) => e.key === 'Enter' && onAchievementsClick()}
-            className={cn(
-              "flex items-center justify-center px-2 py-1.5 rounded-xl cursor-pointer",
-              "bg-[#1a1c2b] hover:bg-[#252838] transition-all",
-              "border border-amber-600/20 hover:border-amber-600/40",
-              "text-amber-500 hover:text-amber-400"
-            )}
-          >
-            <Award className="w-5 h-5" />
-          </div>
+        >
+          <Award className="w-5 h-5" />
         </div>
       </div>
 
       {/* Stats Bar - Using the optimized memoized component */}
-      <StatsDisplay stats={stats} isLoading={isLoading} />
+      <StatsDisplay 
+        stats={stats} 
+        isLoading={isLoading} 
+        onRankClick={handleShowLeaderboard}
+        hasLeaderboard={leaderboard.length > 0}
+      />
 
       {/* Modals */}
       {isAchievementsOpen && address && (
         <AchievementsDropdown 
           isOpen={isAchievementsOpen} 
           onClose={() => {
+            // First close achievements in local state
             setIsAchievementsOpen(false);
+            
+            // Then dispatch event to show game settings
             window.dispatchEvent(new CustomEvent('showGameSettings'));
           }}
           walletAddress={address}
@@ -208,8 +216,16 @@ export default function WalletDisplay({ onAchievementsClick }: WalletDisplayProp
         <LeaderboardModal
           isOpen={showLeaderboard}
           onClose={() => {
+            // First update local state
             setShowLeaderboard(false);
+            
+            // Then show game settings
             window.dispatchEvent(new CustomEvent('showGameSettings'));
+            
+            // Notify parent component about leaderboard state change
+            if (onLeaderboardOpen) {
+              onLeaderboardOpen(false);
+            }
           }}
           leaderboard={leaderboard}
           currentUserAddress={address}

@@ -1,6 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { About, PrivacyPolicy, TermsOfService } from '../legal';
 
 export default function Footer() {
+  const [showAbout, setShowAbout] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
   return (
     <footer className="w-full px-4 sm:px-6 py-4 z-40 safe-bottom">
       <div className="max-w-5xl mx-auto">
@@ -14,9 +18,24 @@ export default function Footer() {
             </div>
             
             <div className="flex space-x-4 xs:space-x-8">
-              <a href="#" className="text-xs xs:text-sm text-gray-400 hover:text-amber-600 transition-colors mobile-touch-target">About</a>
-              <a href="#" className="text-sm text-gray-400 hover:text-amber-600 transition-colors">Privacy</a>
-              <a href="#" className="text-sm text-gray-400 hover:text-amber-600 transition-colors">Terms</a>
+              <button
+                onClick={() => setShowAbout(true)}
+                className="text-xs xs:text-sm text-gray-400 hover:text-amber-600 transition-colors mobile-touch-target"
+              >
+                About
+              </button>
+              <button
+                onClick={() => setShowPrivacy(true)}
+                className="text-xs xs:text-sm text-gray-400 hover:text-amber-600 transition-colors mobile-touch-target"
+              >
+                Privacy
+              </button>
+              <button
+                onClick={() => setShowTerms(true)}
+                className="text-xs xs:text-sm text-gray-400 hover:text-amber-600 transition-colors mobile-touch-target"
+              >
+                Terms
+              </button>
             </div>
 
             <div className="text-xs sm:text-sm text-gray-400">
@@ -33,6 +52,10 @@ export default function Footer() {
           </div>
         </div>
       </div>
+
+      {showAbout && <About onClose={() => setShowAbout(false)} />}
+      {showPrivacy && <PrivacyPolicy onClose={() => setShowPrivacy(false)} />}
+      {showTerms && <TermsOfService onClose={() => setShowTerms(false)} />}
     </footer>
   );
 }

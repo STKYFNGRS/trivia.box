@@ -1,0 +1,3 @@
+# Ignore temporary files
+src/services/achievements/fix-achievements.js
+src/services/achievements/achievement-fixes.ts

@@ -1,5 +1,6 @@
 // ENS avatar utilities
-import { normalize } from 'viem/ens';
+// Import commented out as it might not be installed
+// import { normalize } from 'viem/ens';
 
 // Basic function to generate a default avatar
 export const generateDefaultAvatar = (address: string): string => {

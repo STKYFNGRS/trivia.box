@@ -16,7 +16,7 @@ const prismaClientSingleton = () => {
     },
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
     errorFormat: 'pretty'
-    // Connection options removed as they're not supported in this version
+    // Connection pool configuration not supported in this Prisma version
   })
 }
 
@@ -26,9 +26,15 @@ export const prisma = global.prisma ?? prismaClientSingleton()
 // This helps prevent connection pool exhaustion
 if (process.env.NODE_ENV !== 'production') global.prisma = prisma
 
-// Handle graceful shutdown in production environments
-if (process.env.NODE_ENV === 'production') {
+// Handle graceful shutdown for all environments
+if (typeof process !== 'undefined') {
   process.on('beforeExit', async () => {
-    await prisma.$disconnect()
-  })
+    await prisma.$disconnect();
+  });
+  
+  // Also handle SIGINT (e.g., Ctrl+C)
+  process.on('SIGINT', async () => {
+    await prisma.$disconnect();
+    process.exit(0);
+  });
 }

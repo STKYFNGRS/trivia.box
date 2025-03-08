@@ -41,6 +41,7 @@ const ParticleBackground = dynamic(() => import('@/components/ui/ParticleBackgro
 });
 
 export default function ClientPage() {
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [isAchievementsOpen, setIsAchievementsOpen] = useState(false);
   const { address, isConnected, chainId } = useAccount();
   const { gameState, initGame, isLoading, error } = useGameState();
@@ -107,6 +108,7 @@ export default function ClientPage() {
   useEffect(() => {
     if (!gameState) {
       // When returning to main screen, refresh wallet stats
+      console.log('Refreshing wallet stats after game');
       window.dispatchEvent(new CustomEvent('refreshWalletStats'));
     }
   }, [gameState]);
@@ -125,20 +127,45 @@ export default function ClientPage() {
       <LoadingAnimation isLoading={isLoading} />
       
       {isFullyConnected && (
-        <Header onAchievementsClick={() => setIsAchievementsOpen(true)} />
+        <Header 
+          onAchievementsClick={() => {
+            // First close leaderboard (if open)
+            if (isLeaderboardOpen) {
+              setIsLeaderboardOpen(false);
+            }
+            // Then open achievements - this is the source of truth
+            setIsAchievementsOpen(true);
+            // Prevent game options from showing
+            window.dispatchEvent(new CustomEvent('hideGameSettings'));
+          }} 
+          onLeaderboardOpen={(isOpen) => {
+            // Update leaderboard state
+            setIsLeaderboardOpen(isOpen);
+            // If opening leaderboard, make sure achievements are closed
+            if (isOpen && isAchievementsOpen) {
+              setIsAchievementsOpen(false);
+            }
+          }}
+        />
       )}
       
       <main className={`flex-1 flex flex-col ${isFullyConnected ? 'pt-12' : ''} relative z-10`}>
         {isFullyConnected ? (
           <div className="flex-1 container mx-auto px-4 py-8">
-            <div className={(gameState || isAchievementsOpen || isLoading) ? 'invisible' : 'visible'}>
+            <div className={(gameState || isAchievementsOpen || isLoading || isLeaderboardOpen) ? 'invisible' : 'visible'}>
               <GameOptions onStartGame={handleStartGame} />
             </div>
             
             {isAchievementsOpen && address && (
               <AchievementsDropdown
                 isOpen={isAchievementsOpen}
-                onClose={() => setIsAchievementsOpen(false)}
+                onClose={() => {
+                  console.log('ClientPage: AchievementsDropdown onClose called');
+                  // First set state to false
+                  setIsAchievementsOpen(false);
+                  // Then show game settings
+                  window.dispatchEvent(new CustomEvent('showGameSettings'));
+                }}
                 walletAddress={address}
               />
             )}
