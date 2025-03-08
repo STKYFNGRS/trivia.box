@@ -130,10 +130,23 @@ export function useWalletData(address: string | undefined) {
   useEffect(() => {
     isMounted.current = true;
     
+    // Set environment type first
+    if (typeof window !== 'undefined') {
+      const isDevelopment = window.location.hostname === 'localhost' || 
+                           window.location.hostname === '127.0.0.1';
+      (window as any).ENV_TYPE = isDevelopment ? 'development' : 'production';
+      console.log(`useWalletData: Setting environment to ${isDevelopment ? 'development' : 'production'} mode before fetch`);
+    }
+    
     if (address && !hasInitiallyFetched.current) {
       hasInitiallyFetched.current = true;
-      // Start fetch immediately - no delay
-      fetchData();
+      // Give a brief delay to ensure environment setting has propagated
+      setTimeout(() => {
+        if (isMounted.current) {
+          console.log('Starting initial fetch with environment type set');
+          fetchData();
+        }
+      }, 100);
     }
     
     return () => {

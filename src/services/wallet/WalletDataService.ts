@@ -96,19 +96,25 @@ class WalletDataService {
       
       // Only fetch ENS if not cached - we'll run this in parallel now
       if (!cachedEns) {
+        console.log('No cached ENS data found for', address, 'fetching...');
         fetchPromises.push(
           this.resolveEns(address)
             .then(ensData => {
               result.ensName = ensData.name;
               result.ensAvatar = ensData.avatar;
               
+              console.log('Successfully resolved ENS for', address, ':', ensData.name, ensData.avatar ? '(with avatar)' : '(no avatar)');
+              
               // Cache immediately
               this.cacheEnsData(address, ensData);
             })
-            .catch(() => {
-              // Keep defaults on error
+            .catch((error) => {
+              // Log errors but keep defaults
+              console.error('Error resolving ENS:', error);
             })
         );
+      } else {
+        console.log('Using cached ENS data for', address, ':', cachedEns.name, cachedEns.avatar ? '(with avatar)' : '(no avatar)');
       }
       
       // Only fetch stats if not cached

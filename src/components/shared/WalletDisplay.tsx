@@ -40,7 +40,9 @@ const WalletButton = memo(({
 }) => {
   // Format address display
   const displayName = ensName || (address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null);
-  console.log('WalletButton render with ensName:', ensName, 'ensAvatar:', ensAvatar);
+  console.log('WalletButton render with address:', address);
+  console.log('WalletButton render with ensName:', ensName);
+  console.log('WalletButton render with ensAvatar:', ensAvatar);
 
   return (
     <button
@@ -98,20 +100,6 @@ export default function WalletDisplay({ onAchievementsClick, onLeaderboardOpen }
   const [isAchievementsOpen, setIsAchievementsOpen] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   
-  // Detect and set environment type
-  useEffect(() => {
-    try {
-      const isDevelopment = window.location.hostname === 'localhost' || 
-                           window.location.hostname === '127.0.0.1';
-      
-      // Set a global flag for ENS resolution modules to use
-      (window as any).ENV_TYPE = isDevelopment ? 'development' : 'production';
-      console.log(`WalletDisplay: Setting environment to ${isDevelopment ? 'development' : 'production'} mode`);
-    } catch (error) {
-      console.error('Error detecting environment:', error);
-    }
-  }, []);
-  
   // Handle image loading error
   const handleImageError = useCallback((event: React.SyntheticEvent<HTMLImageElement>) => {
     console.warn('Avatar image failed to load, using fallback');
@@ -130,6 +118,26 @@ export default function WalletDisplay({ onAchievementsClick, onLeaderboardOpen }
       setIsAchievementsOpen(false);
     }
   }, [showLeaderboard, isAchievementsOpen]);
+  
+  // Add a forced refresh on initial render
+  useEffect(() => {
+    if (address) {
+      // Clear any existing ENS cache for this address to force fresh resolution
+      console.log('WalletDisplay: Forcing fresh ENS resolution for initial render');
+      
+      // Small timeout to ensure everything is ready
+      const refreshTimer = setTimeout(() => {
+        try {
+          // Force a refresh of wallet data
+          window.dispatchEvent(new CustomEvent('refreshWalletStats'));
+        } catch (error) {
+          console.error('Error triggering refresh:', error);
+        }
+      }, 500);
+      
+      return () => clearTimeout(refreshTimer);
+    }
+  }, [address]);
   
   // Handler for wallet button click
   const handleClick = useCallback(async () => {

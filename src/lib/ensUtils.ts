@@ -11,23 +11,34 @@ export const generateDefaultAvatar = (address: string): string => {
 // Function to directly get the ENS avatar URL for a given ENS name
 export const getDirectEnsAvatar = async (ensName: string): Promise<string | null> => {
   try {
-    // In a production environment, you would connect to an Ethereum node
-    // and query the ENS Registry directly using ethers.js or viem
-    
-    // Example of how this would be implemented with ethers.js:
-    // const provider = new ethers.providers.JsonRpcProvider("https://mainnet.infura.io/v3/YOUR_INFURA_KEY");
-    // const resolver = await provider.getResolver(ensName);
-    // const avatar = await resolver.getText("avatar");
-    // return avatar;
+    console.log('Attempting direct ENS avatar fetch for', ensName);
     
     // For now, we'll use a third-party API to get avatar information
-    // This should be replaced with direct blockchain queries in production
-    const response = await fetch(`https://metadata.ens.domains/mainnet/avatar/${ensName}`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10-second timeout
     
-    if (response.ok) {
-      // The API returns the avatar image directly
-      const avatarUrl = response.url;
-      return avatarUrl;
+    try {
+      const response = await fetch(`https://metadata.ens.domains/mainnet/avatar/${ensName}`, {
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        // The API returns the avatar image directly
+        const avatarUrl = response.url;
+        console.log('Successfully fetched ENS avatar for', ensName, ':', avatarUrl);
+        return avatarUrl;
+      } else {
+        console.warn(`ENS avatar API returned status ${response.status} for ${ensName}`);
+      }
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if ((fetchError as Error).name === 'AbortError') {
+        console.warn(`ENS avatar fetch timed out for ${ensName}`);
+      } else {
+        console.warn(`ENS avatar fetch failed for ${ensName}:`, fetchError);
+      }
     }
     
     return null;
