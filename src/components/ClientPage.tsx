@@ -179,7 +179,7 @@ export default function ClientPage() {
     
     window.addEventListener('gameClose', handleGameClose);
     return () => window.removeEventListener('gameClose', handleGameClose);
-  }, []);
+  }, [initGame]); // Added initGame to dependencies
   
   // Consider connected when wallet is connected and on Base chain
   const isFullyConnected = isConnected && chainId === 8453;

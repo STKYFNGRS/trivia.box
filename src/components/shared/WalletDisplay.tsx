@@ -105,7 +105,7 @@ export default function WalletDisplay({ onAchievementsClick, onLeaderboardOpen }
                            window.location.hostname === '127.0.0.1';
       
       // Set a global flag for ENS resolution modules to use
-      window.ENV_TYPE = isDevelopment ? 'development' : 'production';
+      (window as any).ENV_TYPE = isDevelopment ? 'development' : 'production';
       console.log(`WalletDisplay: Setting environment to ${isDevelopment ? 'development' : 'production'} mode`);
     } catch (error) {
       console.error('Error detecting environment:', error);
