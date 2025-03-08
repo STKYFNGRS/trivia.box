@@ -148,30 +148,41 @@ class WalletDataService {
    */
   private async resolveEns(address: string): Promise<{ name: string | null, avatar: string | null }> {
     try {
+      console.log('Starting ENS resolution for address:', address);
+      
       // First try to get the ENS name
       const name = await lookupEnsName(address);
+      console.log('ENS name lookup result:', name);
       
       if (!name) {
         return { name: null, avatar: null };
       }
       
-      // If we have a name, try to get avatar synchronously first - modified from original
+      // If we have a name, try to get avatar synchronously 
       let avatarResult: string | null = null;
       try {
+        console.log('Looking up ENS avatar for name:', name);
         avatarResult = await lookupEnsAvatar(name);
+        console.log('ENS avatar lookup result:', avatarResult);
       } catch (avatarError) {
         console.warn('Initial ENS avatar resolution error:', avatarError);
       }
       
       // If we couldn't get the avatar, return just the name and fetch avatar asynchronously
       if (!avatarResult) {
+        console.log('No avatar found immediately, scheduling async lookup');
         // This allows the UI to show the name faster
         setTimeout(async () => {
           try {
             // Try to get the avatar with alternative method
-            const directAvatar = await getDirectEnsAvatar(name).catch(() => null);
+            console.log('Attempting alternative avatar lookup for:', name);
+            const directAvatar = await getDirectEnsAvatar(name).catch((err) => {
+              console.error('Alternative avatar lookup failed:', err);
+              return null;
+            });
             
             if (directAvatar) {
+              console.log('Alternative avatar lookup succeeded:', directAvatar);
               // Update the cache with the avatar
               const cachedEns = this.getCachedEnsData(address);
               if (cachedEns) {
@@ -180,6 +191,7 @@ class WalletDataService {
                   avatar: directAvatar 
                 });
                 
+                console.log('Dispatching ensAvatarUpdated event for:', address);
                 // Dispatch event to notify the UI of the avatar update
                 window.dispatchEvent(new CustomEvent('ensAvatarUpdated', { 
                   detail: { address, avatar: directAvatar } 

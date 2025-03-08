@@ -132,8 +132,8 @@ export async function lookupEnsAvatar(ensName: string): Promise<string | null> {
       
       if (resolver) {
         try {
-          // Get the avatar
-          const avatar = await resolver.getText('avatar');
+          // Get the avatar - use provider.getAvatar again
+          const avatar = await provider.getAvatar(ensName);
           
           if (avatar) {
             // Process the avatar URL

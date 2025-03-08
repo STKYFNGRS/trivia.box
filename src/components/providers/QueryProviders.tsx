@@ -1,11 +1,13 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { type ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import { WagmiConfig } from 'wagmi';
 import { config } from '@/config/wagmi';
 import { getAppKit } from '@reown/appkit/react';
 import { modal } from '@/config/appkit';
+import { isMobileDevice } from '@/utils/deviceDetect';
+import { saveConnectionState, shouldRestoreConnection, clearConnectionState } from '@/utils/persistConnection';
 
 // Create a QueryClient with settings optimized for wallet connection and ENS
 const queryClient = new QueryClient({
@@ -28,6 +30,47 @@ if (typeof window !== 'undefined') {
 }
 
 export default function QueryProviders({ children }: { children: ReactNode }) {
+  // Handle connection persistence across refreshes on mobile
+  useEffect(() => {
+    // Check if this is a mobile device
+    const isMobile = isMobileDevice();
+    
+    // Capture refresh events
+    const handleBeforeUnload = () => {
+      // Store connection state on mobile devices
+      if (isMobile) {
+        saveConnectionState();
+      }
+    };
+
+    // Restore connection after refresh
+    const checkSavedConnection = () => {
+      if (isMobile && shouldRestoreConnection()) {
+        console.log('Found recent connection state, reconnecting wallet');
+        // Trigger wallet reconnect after a short delay
+        setTimeout(() => {
+          try {
+            modal.open().catch(err => console.error('Error reopening connection modal:', err));
+          } catch (err) {
+            console.error('Error reconnecting wallet:', err);
+          }
+          // Clear the state only after successful reconnect attempt
+          clearConnectionState();
+        }, 1000);
+      }
+    };
+
+    // Add event listeners
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    // Check for saved connection on page load
+    checkSavedConnection();
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+  
   return (
     <WagmiConfig config={config}>
       <QueryClientProvider client={queryClient}>

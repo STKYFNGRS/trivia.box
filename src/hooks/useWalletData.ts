@@ -57,7 +57,17 @@ export function useWalletData(address: string | undefined) {
       const walletData = await walletService.fetchWalletData(address);
       
       // Debug log to check what's coming back from the API
-      console.log('Wallet data received:', JSON.stringify(walletData, null, 2));
+      console.log('Wallet data received:', JSON.stringify({
+        ensName: walletData.ensName,
+        ensAvatar: walletData.ensAvatar ? 'Avatar present' : 'No avatar',
+        stats: walletData.stats ? {
+          totalPoints: walletData.stats.totalPoints,
+          rank: walletData.stats.rank,
+          bestStreak: walletData.stats.bestStreak,
+          gamesPlayed: walletData.stats.gamesPlayed
+        } : null,
+        leaderboardCount: walletData.leaderboard?.length || 0
+      }, null, 2));
       if (walletData.stats) {
         console.log('Best streak from API:', walletData.stats.bestStreak);
       }

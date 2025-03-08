@@ -39,6 +39,7 @@ const WalletButton = memo(({
 }) => {
   // Format address display
   const displayName = ensName || (address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null);
+  console.log('WalletButton render with ensName:', ensName, 'ensAvatar:', ensAvatar);
 
   return (
     <button
