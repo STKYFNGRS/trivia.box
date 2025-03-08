@@ -515,7 +515,7 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
           exit={{ opacity: 0, scale: 0.95 }}
           className="relative w-full max-w-5xl mt-8 mb-8 pt-8 md:pt-10 md:mt-24"
         >
-          <div className="rounded-2xl bg-gray-900/90 p-8 border border-amber-500/20 overflow-hidden flex flex-col">
+          <div className="rounded-2xl bg-gradient-to-br from-gray-900/90 to-gray-800/90 p-8 border border-amber-500/20 overflow-hidden flex flex-col">
             {error ? (
               <div className="text-center p-8">
                 <h2 className="text-xl font-bold mb-4 text-red-500">{error}</h2>
@@ -528,26 +528,26 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
                   <div className="space-y-4 mb-8">
                     <p className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-600">Final Score: {finalStats.finalScore}</p>
                     
-                    <div className="flex items-center justify-center gap-4 mb-4">
-                      <div className="bg-gradient-to-br from-blue-900/30 to-blue-800/20 p-4 rounded-xl border border-blue-500/40 hover:shadow-md hover:shadow-blue-500/10 transition-all w-1/3">
-                        <p className="text-gray-300 mb-1 text-center">Correct Answers</p>
-                        <p className="text-xl font-bold text-white text-center">
-                          {finalStats.correctAnswers}/{finalStats.totalQuestions}
-                        </p>
-                      </div>
-                      <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/20 p-4 rounded-xl border border-amber-500/40 hover:shadow-md hover:shadow-amber-500/10 transition-all w-1/3">
-                        <p className="text-gray-300 mb-1 text-center">Game Best Streak</p>
-                        <p className="text-xl font-bold text-orange-400 text-center">
-                          {finalStats.bestStreak}<span className="ml-1">🔥</span>
-                        </p>
-                      </div>
-                      <div className="bg-gradient-to-br from-green-900/30 to-green-800/20 p-4 rounded-xl border border-green-500/40 hover:shadow-md hover:shadow-green-500/10 transition-all w-1/3">
-                        <p className="text-gray-300 mb-1 text-center">Points Earned</p>
-                        <p className="text-xl font-bold text-green-400 text-center">
-                          +{finalStats.finalScore}
-                        </p>
-                      </div>
-                    </div>
+                <div className="flex items-center justify-center gap-4 mb-4 flex-wrap sm:flex-nowrap">
+                  <div className="sm:w-1/3 w-full p-4 rounded-xl border border-blue-500/30 bg-gradient-to-br from-blue-900/30 to-blue-800/20 hover:shadow-md hover:shadow-blue-500/10 transition-all mb-2 sm:mb-0">
+                    <p className="text-gray-300 mb-1 text-center">Correct Answers</p>
+                    <p className="text-xl font-bold text-white text-center">
+                      {finalStats.correctAnswers}/{finalStats.totalQuestions}
+                    </p>
+                  </div>
+                  <div className="sm:w-1/3 w-full p-4 rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-900/30 to-amber-800/20 hover:shadow-md hover:shadow-amber-500/10 transition-all mb-2 sm:mb-0">
+                    <p className="text-gray-300 mb-1 text-center">Game Best Streak</p>
+                    <p className="text-xl font-bold text-orange-400 text-center">
+                      {finalStats.bestStreak}<span className="ml-1">🔥</span>
+                    </p>
+                  </div>
+                  <div className="sm:w-1/3 w-full p-4 rounded-xl border border-green-500/30 bg-gradient-to-br from-green-900/30 to-green-800/20 hover:shadow-md hover:shadow-green-500/10 transition-all">
+                    <p className="text-gray-300 mb-1 text-center">Points Earned</p>
+                    <p className="text-xl font-bold text-green-400 text-center">
+                      +{finalStats.finalScore}
+                    </p>
+                  </div>
+                </div>
                   </div>
                 )}
                 
@@ -566,7 +566,7 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
               </div>
             ) : (
               <div className="space-y-6">
-                <div className="text-sm xs:text-base text-gray-200 py-1 px-3 bg-gray-800/50 rounded-full border border-gray-700/40 inline-block">
+                <div className="text-sm xs:text-base text-gray-200 py-2 px-4 bg-gray-800/60 rounded-lg border border-gray-700/40 inline-block shadow-sm">
                   Question {currentQuestionIndex + 1} of {questions.length}
                 </div>
                 {!gameEnded && currentQuestion && (
@@ -581,31 +581,31 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
                       />
                     </div>
                     
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="w-1/3">
-                        <div className="text-gray-300 py-1 px-3 bg-green-900/20 rounded-full border border-green-500/30 inline-block">
+                    <div className="flex items-center justify-between mb-4 gap-2 flex-wrap sm:flex-nowrap">
+                      <div className="sm:w-1/3 w-full mb-2 sm:mb-0">
+                        <div className="text-gray-300 py-2 px-4 bg-green-900/20 rounded-lg border border-green-500/30 inline-block sm:text-sm text-xs">
                           Points Available: <span className="font-bold text-green-400">{potentialPoints}</span>
                         </div>
                       </div>
                       
                       {/* Score display - always visible and centered */}
-                      <div className="w-1/3 flex justify-center">
-                        <div className="text-gray-300 py-1 px-3 bg-blue-900/20 rounded-full border border-blue-500/30 inline-block">
+                      <div className="sm:w-1/3 w-full mb-2 sm:mb-0 flex sm:justify-center justify-start">
+                        <div className="text-gray-300 py-2 px-4 bg-blue-900/20 rounded-lg border border-blue-500/30 inline-block sm:text-sm text-xs">
                           Score: <span className="font-bold text-amber-400">{score}</span>
                         </div>
                       </div>
                       
                       {/* Show streak if present - always on the right, or empty placeholder */}
-                      <div className="w-1/3 flex justify-end">
+                      <div className="sm:w-1/3 w-full flex sm:justify-end justify-start">
                         {currentStreak > 0 && (
-                          <div className="text-orange-400 font-bold flex items-center gap-1 py-1 px-3 bg-amber-900/20 rounded-full border border-amber-500/30">
+                          <div className="text-orange-400 font-bold flex items-center gap-1 py-2 px-4 bg-amber-900/20 rounded-lg border border-amber-500/30 sm:text-sm text-xs">
                             <span>Streak:</span> {currentStreak}<span className="ml-0.5">🔥</span>
                           </div>
                         )}
                       </div>
                     </div>
-                    <div className="bg-gray-800/50 p-4 rounded-xl border border-blue-500/20 mb-4 md:mb-6">
-                      <h3 className="text-base xs:text-lg md:text-xl text-gray-200">{currentQuestion.content}</h3>
+                    <div className="bg-gray-800/60 p-5 rounded-xl border border-gray-700/40 mb-4 md:mb-6 shadow-md">
+                      <h3 className="text-base xs:text-lg md:text-xl text-white">{currentQuestion.content}</h3>
                     </div>
                     
                     <div className="grid grid-cols-1 gap-4">
@@ -615,14 +615,14 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
                           onClick={() => handleAnswerSelect(answer)}
                           disabled={revealed}
                           className={`
-                            w-full p-4 text-left rounded-xl transition-all duration-300
+                            w-full p-4 text-left rounded-xl transition-all duration-300 shadow-sm
                             ${revealed
                               ? answer === currentQuestion.correct_answer
                                 ? 'bg-gradient-to-br from-green-600/80 to-green-700/80 text-white shadow-lg shadow-green-500/20 transform scale-105 border border-green-400/30'
                                 : answer === selectedAnswer
                                   ? 'bg-gradient-to-br from-red-600/80 to-red-700/80 text-white shadow-lg shadow-red-500/20 border border-red-400/30'
-                                  : 'bg-gray-800/50 text-gray-400 border border-gray-700/20'
-                              : 'bg-gray-800/50 hover:bg-gray-800/70 hover:shadow-lg hover:shadow-amber-500/10 hover:translate-y-[-2px] hover:scale-[1.01] text-gray-300 active:scale-[0.99] border border-gray-700/20 hover:border-gray-700/30'
+                                  : 'bg-gray-800/60 text-gray-400 border border-gray-700/40'
+                              : 'bg-gray-800/60 hover:bg-gray-700/60 hover:shadow-md hover:shadow-amber-500/5 hover:translate-y-[-2px] hover:scale-[1.01] text-gray-200 active:scale-[0.99] border border-gray-700/40 hover:border-gray-600/40'
                             }
                           `}
                         >

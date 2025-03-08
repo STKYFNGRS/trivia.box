@@ -82,7 +82,7 @@ export default function CyberTimer({ timeLeft, duration, isActive, onTimeUpdate,
     : Math.max(0, Math.min(100, (timeLeft / duration) * 100));
 
   return (
-    <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+    <div className="w-full h-2 bg-gray-800/80 rounded-full overflow-hidden border border-amber-500/10 shadow-sm">
       <div 
         className="h-full bg-gradient-to-r from-yellow-500 to-orange-500 transition-all ease-linear duration-100"
         style={{ width: `${progress}%` }}
