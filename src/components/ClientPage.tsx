@@ -143,14 +143,43 @@ export default function ClientPage() {
   // This helps ensure the component is properly mounted
   const gameModalKey = gameState ? `game-modal-${gameState.sessionId}-${Date.now()}` : 'no-game';
   
-  // Trigger stats refresh when game state changes
+  // Listen for resetGameState events from GameModal
   useEffect(() => {
-    if (!gameState) {
-      // When returning to main screen, refresh wallet stats
-      console.log('Refreshing wallet stats after game');
-      window.dispatchEvent(new CustomEvent('refreshWalletStats'));
-    }
-  }, [gameState]);
+    const handleResetGameState = () => {
+      console.log('Resetting game state from event');
+      setShouldRenderGame(false);
+    };
+    
+    window.addEventListener('resetGameState', handleResetGameState);
+    return () => window.removeEventListener('resetGameState', handleResetGameState);
+  }, []);
+  
+  // Add listener for gameClose events to properly clean up
+  useEffect(() => {
+    const handleGameClose = () => {
+      console.log('Game close event received, cleaning up game state');
+      // Use GameState hook to properly reset the game state
+      if (typeof initGame === 'function') {
+        try {
+          // Refresh wallet stats when returning to main screen
+          console.log('Refreshing wallet stats after game close');
+          window.dispatchEvent(new CustomEvent('refreshWalletStats'));
+          
+          // Delay the state reset slightly to ensure UI transitions properly
+          setTimeout(() => {
+            // Reset internal state
+            setShouldRenderGame(false);
+            setSessionRestored(false);
+          }, 50);
+        } catch (error) {
+          console.error('Error during game state cleanup:', error);
+        }
+      }
+    };
+    
+    window.addEventListener('gameClose', handleGameClose);
+    return () => window.removeEventListener('gameClose', handleGameClose);
+  }, []);
   
   // Consider connected when wallet is connected and on Base chain
   const isFullyConnected = isConnected && chainId === 8453;
@@ -220,10 +249,21 @@ export default function ClientPage() {
             {gameState && gameState.questions && gameState.questions.length > 0 && (
               <div key={gameModalKey} className="game-modal-container">
                 <GameModal
-                  questions={gameState.questions}
-                  sessionId={gameState.sessionId}
-                  onClose={() => window.location.reload()}
-                />
+                questions={gameState.questions}
+                sessionId={gameState.sessionId}
+                onClose={() => {
+                    // Use a cleaner approach to reset game state without forced reload
+                  console.log('Game closing, resetting state without page reload');
+                  setShouldRenderGame(false);
+                  // Allow a short delay before resetting the game state completely
+                  setTimeout(() => {
+                    // Reset game state to null to fully close the game
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new CustomEvent('gameClose'));
+                    }
+                  }, 100);
+                }}
+              />
               </div>
             )}
             

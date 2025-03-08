@@ -9,6 +9,7 @@ import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import useWalletData from '@/hooks/useWalletData';
 import StatsDisplay from './StatsDisplay';
+import WalletDataService from '@/services/wallet/WalletDataService';
 
 // Dynamically load modal components to reduce initial bundle size
 const AchievementsDropdown = dynamic(() => import('../achievements/AchievementsDropdown'), {
@@ -97,6 +98,20 @@ export default function WalletDisplay({ onAchievementsClick, onLeaderboardOpen }
   const [isAchievementsOpen, setIsAchievementsOpen] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   
+  // Detect and set environment type
+  useEffect(() => {
+    try {
+      const isDevelopment = window.location.hostname === 'localhost' || 
+                           window.location.hostname === '127.0.0.1';
+      
+      // Set a global flag for ENS resolution modules to use
+      window.ENV_TYPE = isDevelopment ? 'development' : 'production';
+      console.log(`WalletDisplay: Setting environment to ${isDevelopment ? 'development' : 'production'} mode`);
+    } catch (error) {
+      console.error('Error detecting environment:', error);
+    }
+  }, []);
+  
   // Handle image loading error
   const handleImageError = useCallback((event: React.SyntheticEvent<HTMLImageElement>) => {
     console.warn('Avatar image failed to load, using fallback');
@@ -154,6 +169,22 @@ export default function WalletDisplay({ onAchievementsClick, onLeaderboardOpen }
           handleClick={handleClick}
           handleImageError={handleImageError}
         />
+
+        {/* Hidden debug button for ENS data refresh (only in development environment) */}
+        {typeof window !== 'undefined' && window.location.hostname === 'localhost' && (
+          <button
+            onClick={() => {
+              console.log('Manually refreshing wallet data');
+              if (WalletDataService.getInstance) {
+                WalletDataService.getInstance().invalidateCache(address);
+              }
+              window.dispatchEvent(new CustomEvent('refreshWalletStats'));
+            }}
+            className="text-xs text-gray-600 hover:text-amber-400 absolute -bottom-4 left-0"
+          >
+            (Debug: Refresh)
+          </button>
+        )}
 
         {/* Logo */}
         <div className="text-center">

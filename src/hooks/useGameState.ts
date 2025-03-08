@@ -136,6 +136,45 @@ export function useGameState() {
     }
   );
 
+  // Add a resetStateAndCleanup function that will cleanly reset everything without needing a page reload
+  const resetStateAndCleanup = useCallback(() => {
+    console.log('🎮 Performing complete game state cleanup');
+    
+    // Reset all state in a coordinated way
+    try {
+      // First reset the controller
+      gameController.reset();
+      
+      // Then update React state
+      setGameState(null);
+      setError(null);
+      setIsLoading(false);
+      
+      // Reset all refs
+      initAttempts.current = 0;
+      initializationComplete.current = false;
+      lastAttemptedOptions.current = null;
+      
+      // Clear any localStorage/sessionStorage game data
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.removeItem('triviabox_gamestate');
+          localStorage.removeItem('triviabox_current_session');
+          
+          // Trigger a refreshWalletStats event to update stats
+          window.dispatchEvent(new CustomEvent('refreshWalletStats'));
+          
+          console.log('🎮 Game state cleanup complete - all state reset');
+        } catch (storageError) {
+          console.warn('Error clearing storage during cleanup:', storageError);
+        }
+      }
+    } catch (error) {
+      console.error('Error during game state cleanup:', error);
+    }
+  }, [gameController]);
+  
+  // Regular reset function (uses the new resetStateAndCleanup internally)
   const resetGame = useCallback(() => {
     const now = Date.now();
     if (now - lastResetTime.current < RESET_COOLDOWN) {
@@ -145,14 +184,19 @@ export function useGameState() {
 
     console.log('🎮 Resetting game state...');
     lastResetTime.current = now;
-    gameController.reset();
-    setGameState(null);
-    setError(null);
-    initAttempts.current = 0;
-    initializationComplete.current = false;
-  }, [gameController]);
+    resetStateAndCleanup();
+  }, [resetStateAndCleanup]);
 
-  // Key function for starting the game - direct implementation (no debounce)
+  // Add event listener for game close events
+  useEffect(() => {
+    const handleGameClose = () => {
+      console.log('🎮 Game close event received in useGameState');
+      resetStateAndCleanup();
+    };
+    
+    window.addEventListener('gameClose', handleGameClose);
+    return () => window.removeEventListener('gameClose', handleGameClose);
+  }, [resetStateAndCleanup]);
   const initGame = useCallback(async (options: Partial<GameConfig> = {}) => {
     if (isLoading) {
       console.log('🎮 Game initialization already in loading state');

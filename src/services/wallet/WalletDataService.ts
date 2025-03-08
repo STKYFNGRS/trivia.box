@@ -4,6 +4,34 @@ import { getDirectEnsAvatar } from '@/lib/ensUtils';
 // Pre-import fetcher to avoid dynamic import during data fetching
 import { fetcher } from '@/lib/fetcher';
 
+// Create safe storage utility for cache management
+const safeStorage = (() => {
+  let inMemoryStorage: Record<string, string> = {};
+  
+  return {
+    getItem: (key: string): string | null => {
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          return window.localStorage.getItem(key);
+        }
+      } catch (e) {
+        console.warn('localStorage access failed in WalletDataService, using in-memory fallback');
+      }
+      return inMemoryStorage[key] || null;
+    },
+    setItem: (key: string, value: string): void => {
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.setItem(key, value);
+        }
+      } catch (e) {
+        console.warn('localStorage write failed in WalletDataService, using in-memory fallback');
+      }
+      inMemoryStorage[key] = value;
+    }
+  };
+})();
+
 // Cache durations
 const STATS_CACHE_KEY = 'trivia-user-stats';
 const LEADERBOARD_CACHE_KEY = 'trivia-leaderboard';
@@ -150,6 +178,11 @@ class WalletDataService {
     try {
       console.log('Starting ENS resolution for address:', address);
       
+      // Check for environment type - this ensures we use the correct RPC providers
+      const isProd = typeof window !== 'undefined' && 
+                    (window as any).ENV_TYPE === 'production';
+      console.log(`ENS resolution running in ${isProd ? 'production' : 'development'} mode`);
+      
       // First try to get the ENS name
       const name = await lookupEnsName(address);
       console.log('ENS name lookup result:', name);
@@ -162,8 +195,18 @@ class WalletDataService {
       let avatarResult: string | null = null;
       try {
         console.log('Looking up ENS avatar for name:', name);
-        avatarResult = await lookupEnsAvatar(name);
-        console.log('ENS avatar lookup result:', avatarResult);
+        // Use a longer timeout for avatar lookups in production
+        const avatarTimeout = isProd ? 15000 : 8000;
+        
+        // Create a promise with timeout
+        const avatarPromise = lookupEnsAvatar(name);
+        const timeoutPromise = new Promise<null>((_, reject) => {
+          setTimeout(() => reject(new Error(`ENS avatar lookup timeout after ${avatarTimeout}ms`)), avatarTimeout);
+        });
+        
+        // Race against timeout
+        avatarResult = await Promise.race([avatarPromise, timeoutPromise]) as string | null;
+        console.log('ENS avatar lookup result:', avatarResult ? 'Found' : 'Not found');
       } catch (avatarError) {
         console.warn('Initial ENS avatar resolution error:', avatarError);
       }
@@ -219,7 +262,7 @@ class WalletDataService {
     if (!address) return null;
     
     try {
-      const cache = localStorage.getItem(`${ENS_CACHE_KEY}-${address}`);
+      const cache = safeStorage.getItem(`${ENS_CACHE_KEY}-${address}`);
       if (!cache) return null;
       
       const { data, timestamp } = JSON.parse(cache);
@@ -236,7 +279,7 @@ class WalletDataService {
     if (!address) return null;
     
     try {
-      const cache = localStorage.getItem(`${STATS_CACHE_KEY}-${address}`);
+      const cache = safeStorage.getItem(`${STATS_CACHE_KEY}-${address}`);
       if (!cache) return null;
       
       const { data, timestamp } = JSON.parse(cache);
@@ -251,7 +294,7 @@ class WalletDataService {
   
   private getCachedLeaderboard() {
     try {
-      const cache = localStorage.getItem(LEADERBOARD_CACHE_KEY);
+      const cache = safeStorage.getItem(LEADERBOARD_CACHE_KEY);
       if (!cache) return null;
       
       const { data, timestamp } = JSON.parse(cache);
@@ -268,7 +311,7 @@ class WalletDataService {
     if (!address || !data) return;
     
     try {
-      localStorage.setItem(`${ENS_CACHE_KEY}-${address}`, JSON.stringify({
+      safeStorage.setItem(`${ENS_CACHE_KEY}-${address}`, JSON.stringify({
         data,
         timestamp: Date.now()
       }));
@@ -281,7 +324,7 @@ class WalletDataService {
     if (!address || !data) return;
     
     try {
-      localStorage.setItem(`${STATS_CACHE_KEY}-${address}`, JSON.stringify({
+      safeStorage.setItem(`${STATS_CACHE_KEY}-${address}`, JSON.stringify({
         data,
         timestamp: Date.now()
       }));
@@ -294,7 +337,7 @@ class WalletDataService {
     if (!data || !Array.isArray(data)) return;
     
     try {
-      localStorage.setItem(LEADERBOARD_CACHE_KEY, JSON.stringify({
+      safeStorage.setItem(LEADERBOARD_CACHE_KEY, JSON.stringify({
         data,
         timestamp: Date.now()
       }));
@@ -309,10 +352,38 @@ class WalletDataService {
   invalidateCache(address: string) {
     try {
       if (address) {
-        localStorage.removeItem(`${ENS_CACHE_KEY}-${address}`);
-        localStorage.removeItem(`${STATS_CACHE_KEY}-${address}`);
+        // Try to use safeStorage, but have a fallback to localStorage for compatibility
+        try {
+          safeStorage.setItem(`${ENS_CACHE_KEY}-${address}`, '');
+          safeStorage.setItem(`${STATS_CACHE_KEY}-${address}`, '');
+        } catch (e) {
+          // If safeStorage fails, try direct localStorage as a fallback
+          console.warn('Failed to invalidate cache with safeStorage:', e);
+          try {
+            if (typeof window !== 'undefined' && window.localStorage) {
+              localStorage.removeItem(`${ENS_CACHE_KEY}-${address}`);
+              localStorage.removeItem(`${STATS_CACHE_KEY}-${address}`);
+            }
+          } catch (e2) {
+            console.warn('Failed to invalidate cache with localStorage:', e2);
+          }
+        }
       }
-      localStorage.removeItem(LEADERBOARD_CACHE_KEY);
+      
+      // Same pattern for leaderboard cache
+      try {
+        safeStorage.setItem(LEADERBOARD_CACHE_KEY, '');
+      } catch (e) {
+        try {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            localStorage.removeItem(LEADERBOARD_CACHE_KEY);
+          }
+        } catch (e2) {
+          console.warn('Failed to invalidate leaderboard cache:', e2);
+        }
+      }
+      
+      console.log('Cache invalidation completed');
     } catch (e) {
       console.warn('Failed to invalidate cache:', e);
     }

@@ -433,9 +433,16 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
         
         debugLog('Game completed successfully, closing modal');
         
-        // Short delay to ensure all data is processed before closing
+        // Use a clean approach to reset the game state without forcing a page reload
+        // This prevents the "Reload site?" message
         setTimeout(() => {
-          onClose();
+          // Reset the game state instead of forcing a page reload
+          if (typeof window !== 'undefined') {
+            // Dispatch event for state reset in parent components
+            window.dispatchEvent(new CustomEvent('resetGameState'));
+            // Call onClose without forcing a page reload
+            onClose();
+          }
         }, 300);
       } catch (error) {
         console.error('Error during game completion:', error);
