@@ -1,6 +1,57 @@
 // Place imports at the top of the file, before other code
 import { ethers } from 'ethers';
 
+// Safe localStorage implementation with in-memory fallback
+const safeStorage = (() => {
+  let inMemoryStorage: Record<string, string> = {};
+  
+  return {
+    getItem: (key: string): string | null => {
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          return window.localStorage.getItem(key);
+        }
+      } catch (e) {
+        console.warn('localStorage access failed, using in-memory fallback');
+      }
+      return inMemoryStorage[key] || null;
+    },
+    setItem: (key: string, value: string): void => {
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.setItem(key, value);
+        }
+      } catch (e) {
+        console.warn('localStorage write failed, using in-memory fallback');
+      }
+      inMemoryStorage[key] = value;
+    }
+  };
+})();
+
+// Enhanced error logging
+function logENSError(operation: string, error: Error): void {
+  console.warn(`ENS ${operation} failed:`, error);
+  
+  // In production, send error data to monitoring
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    try {
+      fetch('/api/log-error', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: 'ENS_RESOLUTION',
+          operation,
+          error: error.message,
+          timestamp: Date.now()
+        })
+      }).catch(() => {/* Ignore errors from error logging */});
+    } catch (e) {
+      // Silently fail if fetch isn't available
+    }
+  }
+}
+
 // IPFS gateway URLs
 const IPFS_GATEWAYS = [
   'https://ipfs.io/ipfs/',
@@ -34,13 +85,35 @@ const ENS_NAME_CACHE_KEY = 'trivia-ens-names';
 const ENS_AVATAR_CACHE_KEY = 'trivia-ens-avatars';
 
 // RPC endpoints to try
-const RPC_PROVIDERS = [
-  'https://rpc.ankr.com/eth',
-  'https://eth.llamarpc.com',
-  'https://eth.meowrpc.com',
-  'https://ethereum.publicnode.com',
-  'https://eth.api.onfinality.io/public'
-];
+const getRpcProviders = () => {
+  // Use environment type to select appropriate providers
+  const isProd = typeof window !== 'undefined' && 
+                (window as any).ENV_TYPE === 'production';
+  
+  // Base providers - reliable but may have rate limits
+  const baseProviders = [
+    'https://rpc.ankr.com/eth',
+    'https://eth.llamarpc.com'
+  ];
+  
+  // Extended providers - more options but potentially less reliable
+  const extendedProviders = [
+    'https://eth.meowrpc.com',
+    'https://ethereum.publicnode.com',
+    'https://eth.api.onfinality.io/public',
+    'https://eth.rpc.blxrbdn.com'
+  ];
+  
+  // For production, use more providers and different order to improve reliability
+  return isProd ? 
+    // Production: Prioritize more reliable providers
+    [...baseProviders, ...extendedProviders] : 
+    // Development: Fewer providers to avoid rate limits during testing
+    baseProviders;
+};
+
+// Get the appropriate RPC providers list
+const RPC_PROVIDERS = getRpcProviders();
 
 /**
  * Direct ENS name lookup using ethers.js
@@ -63,9 +136,12 @@ export async function lookupEnsName(address: string): Promise<string | null> {
       // Create provider (minimized logging)
       const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
       
-      // Set a timeout to avoid hanging
+      // Set a timeout to avoid hanging - longer in production
+      const timeoutDuration = typeof window !== 'undefined' && 
+                            (window as any).ENV_TYPE === 'production' ? 12000 : 8000;
+      
       const timeoutPromise = new Promise<null>((_, reject) => {
-        setTimeout(() => reject(new Error('ENS lookup timeout')), 8000);
+        setTimeout(() => reject(new Error(`ENS lookup timeout after ${timeoutDuration}ms`)), timeoutDuration);
       });
       
       // Race the name lookup against the timeout
@@ -119,9 +195,12 @@ export async function lookupEnsAvatar(ensName: string): Promise<string | null> {
       // Create provider
       const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
       
-      // Set a timeout to avoid hanging
+      // Set a timeout to avoid hanging - longer in production
+      const timeoutDuration = typeof window !== 'undefined' && 
+                           (window as any).ENV_TYPE === 'production' ? 12000 : 8000;
+      
       const timeoutPromise = new Promise<null>((_, reject) => {
-        setTimeout(() => reject(new Error('ENS lookup timeout')), 8000);
+        setTimeout(() => reject(new Error(`ENS avatar lookup timeout after ${timeoutDuration}ms`)), timeoutDuration);
       });
       
       // Race against timeout
@@ -184,7 +263,7 @@ export function cacheEnsName(address: string, name: string): void {
   
   try {
     // Get existing cache
-    const cacheJson = localStorage.getItem(ENS_NAME_CACHE_KEY) || '{}';
+    const cacheJson = safeStorage.getItem(ENS_NAME_CACHE_KEY) || '{}';
     const cache = JSON.parse(cacheJson);
     
     // Update cache
@@ -194,9 +273,9 @@ export function cacheEnsName(address: string, name: string): void {
     };
     
     // Save cache
-    localStorage.setItem(ENS_NAME_CACHE_KEY, JSON.stringify(cache));
+    safeStorage.setItem(ENS_NAME_CACHE_KEY, JSON.stringify(cache));
   } catch (e) {
-    console.warn('Failed to cache ENS name:', e);
+    logENSError('cacheEnsName', e as Error);
   }
 }
 
@@ -208,7 +287,7 @@ export function getCachedEnsName(address: string): string | null {
   
   try {
     // Get existing cache
-    const cacheJson = localStorage.getItem(ENS_NAME_CACHE_KEY) || '{}';
+    const cacheJson = safeStorage.getItem(ENS_NAME_CACHE_KEY) || '{}';
     const cache = JSON.parse(cacheJson);
     
     // Check if address is in cache and not expired
@@ -217,7 +296,7 @@ export function getCachedEnsName(address: string): string | null {
       return entry.name;
     }
   } catch (e) {
-    console.warn('Failed to read ENS name cache:', e);
+    logENSError('getCachedEnsName', e as Error);
   }
   
   return null;
@@ -231,7 +310,7 @@ export function cacheEnsAvatar(name: string, avatarUrl: string): void {
   
   try {
     // Get existing cache
-    const cacheJson = localStorage.getItem(ENS_AVATAR_CACHE_KEY) || '{}';
+    const cacheJson = safeStorage.getItem(ENS_AVATAR_CACHE_KEY) || '{}';
     const cache = JSON.parse(cacheJson);
     
     // Update cache
@@ -241,9 +320,9 @@ export function cacheEnsAvatar(name: string, avatarUrl: string): void {
     };
     
     // Save cache
-    localStorage.setItem(ENS_AVATAR_CACHE_KEY, JSON.stringify(cache));
+    safeStorage.setItem(ENS_AVATAR_CACHE_KEY, JSON.stringify(cache));
   } catch (e) {
-    console.warn('Failed to cache ENS avatar:', e);
+    logENSError('cacheEnsAvatar', e as Error);
   }
 }
 
@@ -255,7 +334,7 @@ export function getCachedEnsAvatar(name: string): string | null {
   
   try {
     // Get existing cache
-    const cacheJson = localStorage.getItem(ENS_AVATAR_CACHE_KEY) || '{}';
+    const cacheJson = safeStorage.getItem(ENS_AVATAR_CACHE_KEY) || '{}';
     const cache = JSON.parse(cacheJson);
     
     // Check if name is in cache and not expired
@@ -264,7 +343,7 @@ export function getCachedEnsAvatar(name: string): string | null {
       return entry.avatarUrl;
     }
   } catch (e) {
-    console.warn('Failed to read ENS avatar cache:', e);
+    logENSError('getCachedEnsAvatar', e as Error);
   }
   
   return null;
