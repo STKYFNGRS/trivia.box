@@ -11,6 +11,7 @@ import LoadingAnimation from '@/components/ui/LoadingAnimation';
 import FeatureIcons from '@/components/FeatureIcons';
 import Footer from '@/components/shared/Footer';
 import GameModalFallback from '@/components/game/GameModalFallback';
+import MobileRestoreNotification from '@/components/ui/MobileRestoreNotification';
 
 // Configuration
 const DEBUG_MODE = true; // Enable for better debugging
@@ -44,9 +45,47 @@ export default function ClientPage() {
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [isAchievementsOpen, setIsAchievementsOpen] = useState(false);
   const { address, isConnected, chainId } = useAccount();
-  const { gameState, initGame, isLoading, error } = useGameState();
+  const { gameState, initGame, isLoading, error, isMobile } = useGameState();
   const [shouldRenderGame, setShouldRenderGame] = useState(false);
   const [initializationAttempts, setInitializationAttempts] = useState(0);
+  const [sessionRestored, setSessionRestored] = useState(false);
+  
+  // Track session restoration state
+  useEffect(() => {
+    // If we're on mobile and game state becomes available, but wasn't before,
+    // this might be the result of a session restore
+    if (isMobile && gameState && !shouldRenderGame) {
+      console.log('🎮 ClientPage: Game session appears to have been restored on mobile');
+      setSessionRestored(true);
+      
+      // Make sure to update the render flag
+      setShouldRenderGame(true);
+    }
+  }, [isMobile, gameState, shouldRenderGame]);
+  
+  // Handle beforeunload event differently on mobile vs desktop
+  useEffect(() => {
+    // Only set up if we have an active game
+    if (gameState) {
+      const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+        // On mobile, we want to allow refreshes (which will restore state)
+        // On desktop, we show the confirmation dialog
+        if (!isMobile) {
+          // Desktop behavior - show confirmation dialog
+          e.preventDefault();
+          e.returnValue = '';
+          return '';
+        } else {
+          // Mobile behavior - just let it refresh naturally
+          // No need to show confirmation dialog
+          console.log('🎮 ClientPage: Page refresh on mobile detected, state will be restored');
+        }
+      };
+      
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }
+  }, [gameState, isMobile]);
   
   // Enhanced debugging for game state changes
   useEffect(() => {
@@ -125,6 +164,13 @@ export default function ClientPage() {
     <div className="flex flex-col min-h-screen">
       <ParticleBackground gameLoading={isLoading} />
       <LoadingAnimation isLoading={isLoading} />
+      
+      {/* Mobile session restore notification */}
+      <MobileRestoreNotification 
+        show={sessionRestored} 
+        onClose={() => setSessionRestored(false)}
+        message="Your game has been restored after refresh"
+      />
       
       {isFullyConnected && (
         <Header 

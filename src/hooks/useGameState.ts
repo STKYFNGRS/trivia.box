@@ -6,6 +6,7 @@ import { modal } from '@/config/appkit';
 import useSWR from 'swr';
 import { GameController } from '@/controllers/gameController';
 import type { GameState, GameConfig } from '@/types/game';
+import { isMobileDevice } from '@/utils/deviceDetect';
 
 // Configuration
 const RESET_COOLDOWN = 500; // 0.5 seconds cooldown between resets
@@ -28,6 +29,18 @@ export function useGameState() {
   const lastInitTime = useRef<number>(0);
   const initAttempts = useRef(0);
   const initializationComplete = useRef(false);
+  const [mobileDetected, setMobileDetected] = useState(false);
+
+  // Detect mobile on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isMobile = isMobileDevice();
+      setMobileDetected(isMobile);
+      if (isMobile) {
+        console.log('🎮 useGameState: Mobile device detected, enabling enhanced persistence');
+      }
+    }
+  }, []);
 
   // Add a ref to directly track attempted initialization options
   const lastAttemptedOptions = useRef<Partial<GameConfig> | null>(null);
@@ -60,6 +73,18 @@ export function useGameState() {
     if (currentState) {
       console.log('🎮 useGameState: Found existing game state in controller');
       handleStateChange(currentState);
+      
+      // Handle mobile refresh case by showing a toast or notification
+      if (typeof window !== 'undefined') {
+        try {
+          if (sessionStorage.getItem('triviabox_gamestate')) {
+            console.log('🎮 useGameState: Detected restored game state after page refresh');
+            // Here you could show a toast notification that the game was restored
+          }
+        } catch (e) {
+          // Ignore errors with sessionStorage
+        }
+      }
     }
     
     return () => {
@@ -67,6 +92,25 @@ export function useGameState() {
       gameController.off('stateChange', handleStateChange);
     };
   }, [gameController]);
+
+  // Attempt to recover session on mount, especially important for mobile browsers
+  useEffect(() => {
+    const attemptRecovery = async () => {
+      if (!gameState && user) {
+        console.log('🎮 useGameState: Attempting to recover session on page load/refresh');
+        try {
+          const recovered = await gameController.attemptSessionRecovery();
+          if (recovered) {
+            console.log('🎮 useGameState: Successfully recovered session after page refresh');
+          }
+        } catch (error) {
+          console.error('🎮 useGameState: Error recovering session:', error);
+        }
+      }
+    };
+    
+    attemptRecovery();
+  }, [gameController, gameState, user]);
 
   // Use SWR for efficient data fetching and caching - only fetch when user is connected
   const { data: stats } = useSWR(
@@ -192,9 +236,6 @@ export function useGameState() {
     }
   }, [gameController, isLoading, user]);
 
-  // We're not using debouncing which was causing issues
-  // const initGame = initGameUnbounced;
-
   const submitScore = useCallback(async (score: number) => {
     if (!user) {
       try {
@@ -247,6 +288,7 @@ export function useGameState() {
     initGame,
     resetGame,
     submitScore,
-    isAuthenticated: !!user
+    isAuthenticated: !!user,
+    isMobile: mobileDetected
   };
 }

@@ -312,6 +312,19 @@ export default function LeaderboardModal({ isOpen, onClose, leaderboard, current
                                     className="w-full h-full object-cover"
                                     referrerPolicy="no-referrer"
                                     unoptimized
+                                    onError={(e) => {
+                                      // Fallback if image fails to load
+                                      console.warn('Avatar image failed to load, using fallback');
+                                      e.currentTarget.style.display = 'none';
+                                      const parent = e.currentTarget.parentElement;
+                                      if (parent) {
+                                        // Create fallback element
+                                        const fallback = document.createElement('div');
+                                        fallback.className = 'w-full h-full flex items-center justify-center bg-gradient-to-r from-amber-600 to-orange-600 text-gray-900 font-medium';
+                                        fallback.innerText = playerProfiles[player.address]?.name?.slice(0, 1).toUpperCase() || player.address.slice(2, 4).toUpperCase();
+                                        parent.appendChild(fallback);
+                                      }
+                                    }}
                                   />
                                 ) : playerProfiles[player.address]?.name ? (
                                     <div className="w-full h-full flex items-center justify-center bg-gradient-to-r from-amber-600 to-orange-600 text-gray-900 font-medium">

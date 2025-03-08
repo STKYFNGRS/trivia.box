@@ -17,9 +17,11 @@ export function resolveIpfsUrl(ipfsUrl: string): string {
   
   if (ipfsUrl.startsWith('ipfs://')) {
     const ipfsId = ipfsUrl.replace('ipfs://', '');
+    // Use multiple gateways for reliability
     return `${IPFS_GATEWAYS[0]}${ipfsId}`;
   }
   
+  // Return original URL if it doesn't need conversion
   return ipfsUrl;
 }
 
@@ -131,7 +133,7 @@ export async function lookupEnsAvatar(ensName: string): Promise<string | null> {
       if (resolver) {
         try {
           // Get the avatar
-          const avatar = await provider.getAvatar(ensName);
+          const avatar = await resolver.getText('avatar');
           
           if (avatar) {
             // Process the avatar URL

@@ -4,6 +4,7 @@ import { GameQuestionService } from '../services/client/GameQuestionService';
 import { AchievementService } from '@/services/achievements/AchievementService';
 import { EventEmitter } from 'events';
 import { GameState, GameConfig } from '@/types/game';
+import { safelyStoreSessionData, safelyGetSessionData, isMobileDevice } from '@/utils/deviceDetect';
 
 const RETRY_DELAY = 2000; // 2 seconds between retries
 const MAX_RETRIES = 2; // Maximum 2 retries
@@ -41,6 +42,40 @@ export class GameController extends EventEmitter {
     
     // Log constructor for debugging
     console.log('🎲 GameController: constructor called');
+    
+    // Try to restore game state from sessionStorage
+    try {
+      if (typeof window !== 'undefined') {
+        const savedState = safelyGetSessionData<GameState | null>('triviabox_gamestate', null);
+        if (savedState) {
+          console.log('🎲 GameController: Found saved game state, attempting to restore');
+          
+          // Validate the state has required properties
+          if (savedState.sessionId && savedState.questions && 
+              Array.isArray(savedState.questions) && savedState.questions.length > 0) {
+            console.log('🎲 GameController: Restored valid game state with session ID:', savedState.sessionId);
+            
+            // Extra logging for mobile devices
+            if (isMobileDevice()) {
+              console.log('🎲 GameController: Mobile device detected, ensuring proper state restoration');
+            }
+            
+            this.gameState = savedState;
+          } else {
+            console.warn('🎲 GameController: Saved state was invalid, clearing it');
+            sessionStorage.removeItem('triviabox_gamestate');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('🎲 GameController: Error restoring game state:', error);
+      // Clear potentially corrupted state
+      try {
+        sessionStorage.removeItem('triviabox_gamestate');
+      } catch (e) {
+        // Ignore
+      }
+    }
   }
 
   public static getInstance(): GameController {
@@ -59,6 +94,46 @@ export class GameController extends EventEmitter {
     // Update the internal state
     this.gameState = newState;
     
+    // Save current state to sessionStorage for persistence across refreshes
+    if (newState) {
+      // Detect mobile browsers for special handling
+      const isMobile = isMobileDevice();
+      if (isMobile) {
+        console.log('🎲 GameController: Mobile device detected, using enhanced storage methods');
+      }
+      
+      try {
+        console.log('🎲 GameController: Persisting game state to sessionStorage');
+        const success = safelyStoreSessionData('triviabox_gamestate', newState);
+        if (!success && isMobile) {
+          console.warn('🎲 GameController: Failed to persist state on mobile, trying alternative approach');
+          // Fallback for problematic mobile browsers
+          try {
+            // Store minimal session info that's enough to reconnect
+            const minimalState = {
+              sessionId: newState.sessionId,
+              walletAddress: newState.walletAddress
+            };
+            sessionStorage.setItem('triviabox_minimal_state', JSON.stringify(minimalState));
+          } catch (fallbackErr) {
+            console.warn('Even minimal state storage failed:', fallbackErr);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to persist game state:', err);
+      }
+    } else {
+      // Clear stored state if we're setting to null
+      try {
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('triviabox_gamestate');
+          sessionStorage.removeItem('triviabox_minimal_state');
+        }
+      } catch (err) {
+        console.warn('Failed to clear game state from sessionStorage:', err);
+      }
+    }
+    
     console.log('🎲 GameController: Emitting stateChange event with state:', newState ? 'Valid Game State' : 'Null');
     if (newState) {
       console.log(`🎲 GameController: emitted state has sessionId: ${newState.sessionId} and ${newState.questions?.length || 0} questions`);
@@ -71,6 +146,95 @@ export class GameController extends EventEmitter {
       // If we're clearing state that previously existed, ensure we emit this change
       console.log(`🎲 GameController: Clearing previous game state with session ID: ${previousSessionId}`);
       this.emit('stateChange', null);
+    }
+  }
+
+  /**
+   * Attempt to recover a minimally stored session state - especially useful for mobile browsers
+   */
+  public async attemptSessionRecovery(): Promise<boolean> {
+    if (this.gameState) {
+      // We already have a game state, no need to recover
+      return true;
+    }
+    
+    try {
+      if (typeof window === 'undefined') return false;
+      
+      // First check for full game state
+      const savedState = safelyGetSessionData<GameState | null>('triviabox_gamestate', null);
+      if (savedState && savedState.sessionId && savedState.questions && 
+          Array.isArray(savedState.questions) && savedState.questions.length > 0) {
+        console.log('🎲 GameController: Found full saved game state, restoring');
+        this.gameState = savedState;
+        this.emit('stateChange', savedState);
+        return true;
+      }
+      
+      // If no full state, try to find minimal state
+      const minimalState = safelyGetSessionData<{sessionId: string, walletAddress?: string} | null>(
+        'triviabox_minimal_state', 
+        null
+      );
+      
+      if (!minimalState || !minimalState.sessionId) {
+        return false;
+      }
+      
+      // Found minimal state, try to recover by fetching the session data
+      console.log('🎲 GameController: Found minimal saved state, attempting recovery');
+      
+      const response = await fetch(`/api/game/session/${minimalState.sessionId}`, {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        },
+        cache: 'no-store'
+      });
+      
+      if (!response.ok) {
+        console.warn('🎲 Session recovery failed: Session not found or expired');
+        sessionStorage.removeItem('triviabox_minimal_state');
+        return false;
+      }
+      
+      const sessionData = await response.json();
+      if (!sessionData.questions || !Array.isArray(sessionData.questions) || 
+          sessionData.questions.length === 0) {
+        console.warn('🎲 Session recovery failed: Invalid session data received');
+        sessionStorage.removeItem('triviabox_minimal_state');
+        return false;
+      }
+      
+      // Reconstruct game state
+      const recoveredState: GameState = {
+        sessionId: minimalState.sessionId,
+        questions: sessionData.questions,
+        gamePhase: 'playing',
+        currentQuestionIndex: 0, // Will reset to the beginning - not ideal but workable
+        timeRemaining: 15,
+        score: 0,
+        combo: 0,
+        status: 'active',
+        walletAddress: minimalState.walletAddress || '',
+        startTime: Date.now()
+      };
+      
+      console.log('🎲 GameController: Successfully recovered session');
+      this.gameState = recoveredState;
+      this.emit('stateChange', recoveredState);
+      
+      // Now store the full state to avoid future recovery needs
+      safelyStoreSessionData('triviabox_gamestate', recoveredState);
+      sessionStorage.removeItem('triviabox_minimal_state');
+      
+      return true;
+    } catch (error) {
+      console.error('🎲 Error during session recovery:', error);
+      try {
+        sessionStorage.removeItem('triviabox_minimal_state');
+      } catch (e) {}
+      return false;
     }
   }
 
