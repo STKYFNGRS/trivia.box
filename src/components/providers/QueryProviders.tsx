@@ -7,7 +7,7 @@ import { config } from '@/config/wagmi';
 import { getAppKit } from '@reown/appkit/react';
 import { modal } from '@/config/appkit';
 import { isMobileDevice } from '@/utils/deviceDetect';
-import { saveConnectionState, shouldRestoreConnection, clearConnectionState } from '@/utils/persistConnection';
+import { saveConnectionState, shouldRestoreConnection, clearConnectionState, getSavedConnectionDetails, markConnectionRestored } from '@/utils/persistConnection';
 
 // Create a QueryClient with settings optimized for wallet connection and ENS
 const queryClient = new QueryClient({
