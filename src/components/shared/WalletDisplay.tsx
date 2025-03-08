@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import useWalletData from '@/hooks/useWalletData';
 import StatsDisplay from './StatsDisplay';
 import WalletDataService from '@/services/wallet/WalletDataService';
+import { lookupEnsName, lookupEnsAvatar } from '@/lib/ens';
 
 // Dynamically load modal components to reduce initial bundle size
 const AchievementsDropdown = dynamic(() => import('../achievements/AchievementsDropdown'), {
@@ -96,6 +97,55 @@ export default function WalletDisplay({ onAchievementsClick, onLeaderboardOpen }
   // Use the optimized wallet data hook
   const { ensName, ensAvatar, stats, leaderboard, isLoading } = useWalletData(address);
   
+  // Direct ENS resolution as backup for when useWalletData fails
+  const [directEnsName, setDirectEnsName] = useState<string | null>(null);
+  const [directEnsAvatar, setDirectEnsAvatar] = useState<string | null>(null);
+  
+  // Attempt direct ENS resolution as a fallback
+  useEffect(() => {
+    let mounted = true;
+    
+    async function resolveEnsDirectly() {
+      if (!address || ensName) return; // Don't run if we have ensName from useWalletData
+      
+      try {
+        // Set environment for correct RPC selection
+        if (typeof window !== 'undefined') {
+          const isDevelopment = window.location.hostname === 'localhost' || 
+                            window.location.hostname === '127.0.0.1';
+          (window as any).ENV_TYPE = isDevelopment ? 'development' : 'production';
+        }
+        
+        console.log('Direct ENS resolution attempt for address:', address);
+        const name = await lookupEnsName(address);
+        
+        if (name && mounted) {
+          console.log('Direct ENS name resolved:', name);
+          setDirectEnsName(name);
+          
+          // Now try to get avatar
+          const avatar = await lookupEnsAvatar(name);
+          if (avatar && mounted) {
+            console.log('Direct ENS avatar resolved:', avatar);
+            setDirectEnsAvatar(avatar);
+          }
+        }
+      } catch (error) {
+        console.error('Direct ENS resolution error:', error);
+      }
+    }
+    
+    resolveEnsDirectly();
+    
+    return () => {
+      mounted = false;
+    };
+  }, [address, ensName]);
+  
+  // Use direct resolution as fallback if useWalletData fails
+  const effectiveEnsName = ensName || directEnsName;
+  const effectiveEnsAvatar = ensAvatar || directEnsAvatar;
+  
   // Modal visibility states
   const [isAchievementsOpen, setIsAchievementsOpen] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
@@ -172,8 +222,8 @@ export default function WalletDisplay({ onAchievementsClick, onLeaderboardOpen }
         {/* Wallet Button - DO NOT WRAP THIS */}
         <WalletButton 
           address={address}
-          ensName={ensName}
-          ensAvatar={ensAvatar}
+          ensName={effectiveEnsName}
+          ensAvatar={effectiveEnsAvatar}
           handleClick={handleClick}
           handleImageError={handleImageError}
         />
