@@ -37,25 +37,45 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
     
     // Capture refresh events
     const handleBeforeUnload = () => {
-      // Store connection state on mobile devices
-      if (isMobile) {
+      // Always try to save the wallet state on any device
+      // This helps with game completion reconnection as well
+      try {
+        // Get current wallet state from wagmi
+        const wagmiState = window.localStorage.getItem('wagmi.store');
+        const wagmiData = wagmiState ? JSON.parse(wagmiState) : null;
+        const account = wagmiData?.state?.connections?.[0]?.accounts?.[0];
+        const chainId = wagmiData?.state?.connections?.[0]?.chains?.[0]?.id;
+        
+        if (account) {
+          saveConnectionState(account, chainId);
+        }
+      } catch (err) {
+        console.error('Error accessing wagmi state:', err);
+        // Fallback to basic connection saving
         saveConnectionState();
       }
     };
 
     // Restore connection after refresh
     const checkSavedConnection = () => {
-      if (isMobile && shouldRestoreConnection()) {
+      if (shouldRestoreConnection()) {
         console.log('Found recent connection state, reconnecting wallet');
+        
+        // Get saved details
+        const savedDetails = getSavedConnectionDetails();
+        console.log('Saved connection details:', savedDetails);
+        
         // Trigger wallet reconnect after a short delay
         setTimeout(() => {
           try {
             modal.open().catch(err => console.error('Error reopening connection modal:', err));
+            // Mark as restored but don't clear yet
+            markConnectionRestored();
           } catch (err) {
             console.error('Error reconnecting wallet:', err);
+            // Only clear on failure
+            clearConnectionState();
           }
-          // Clear the state only after successful reconnect attempt
-          clearConnectionState();
         }, 1000);
       }
     };
@@ -65,9 +85,18 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
     
     // Check for saved connection on page load
     checkSavedConnection();
+    
+    // Also listen for game completion events
+    const handleGameCompletion = () => {
+      console.log('Game completion detected, ensuring connection persistence');
+      handleBeforeUnload();
+    };
+    
+    window.addEventListener('gameCompleted', handleGameCompletion);
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('gameCompleted', handleGameCompletion);
     };
   }, []);
   

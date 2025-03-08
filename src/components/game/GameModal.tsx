@@ -431,6 +431,17 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
           await onGameComplete(finalStats.finalScore);
         }
         
+        // Dispatch event to notify of game completion to preserve wallet connection
+        if (typeof window !== 'undefined') {
+          console.log('Dispatching gameCompleted event for connection persistence');
+          window.dispatchEvent(new CustomEvent('gameCompleted', {
+            detail: {
+              finalScore: finalStats.finalScore,
+              address: address
+            }
+          }));
+        }
+        
         debugLog('Game completed successfully, closing modal');
         
         // Use a clean approach to reset the game state without forcing a page reload
