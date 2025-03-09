@@ -14,8 +14,9 @@ export default function Header({ onAchievementsClick, onLeaderboardOpen }: Heade
 
   return (
     <header className="fixed top-0 left-0 right-0 z-30 safe-top">
-      {/* Using a solid background color that matches the visual appearance in screenshots */}
-      <div className="bg-[#171923] border-b border-amber-600/20 hardware-accelerated">
+      {/* Black overlay backdrop similar to the game options modal */}
+      <div className="absolute inset-0 -z-10 bg-black/70 backdrop-blur-sm"></div>
+      <div className="border-b border-amber-600/20 hardware-accelerated">
         <div className="container mx-auto px-2 sm:px-4 py-2">
           <WalletDisplay onAchievementsClick={onAchievementsClick} onLeaderboardOpen={onLeaderboardOpen} />
         </div>

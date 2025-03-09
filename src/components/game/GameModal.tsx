@@ -598,16 +598,23 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
   
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex min-h-screen items-center justify-center p-4">
+      {/* Black overlay backdrop to match header style */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 -z-10 bg-black/70 backdrop-blur-sm"
+      />
+      <div className="flex min-h-screen items-center justify-center p-2 xs:p-3 sm:p-4">
         <motion.div
           key="game-modal-panel"
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="relative w-full max-w-5xl mt-8 mb-8 pt-8 md:pt-10 md:mt-24"
+          className="relative w-full max-w-5xl mt-2 mb-2 xs:mt-4 xs:mb-4 md:mt-8 md:mb-8 pt-2 xs:pt-4 md:pt-8"
           ref={modalRef}
         >
-          <div className="rounded-2xl bg-gradient-to-br from-gray-900/90 to-gray-800/90 p-8 border border-amber-500/20 overflow-hidden flex flex-col">
+          <div className="rounded-2xl bg-black/90 p-6 xs:p-8 border border-amber-500/20 overflow-hidden flex flex-col max-w-full mx-auto">
             {error ? (
               <div className="text-center p-8">
                 <h2 className="text-xl font-bold mb-4 text-red-500">{error}</h2>
@@ -696,8 +703,13 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
                         )}
                       </div>
                     </div>
-                    <div className="bg-gray-800/60 p-5 rounded-xl border border-gray-700/40 mb-4 md:mb-6 shadow-md">
-                      <h3 className="text-base xs:text-lg md:text-xl text-white">{currentQuestion.content}</h3>
+                    <div className="relative bg-gray-800/80 p-4 xs:p-5 rounded-xl border border-blue-500/30 mb-4 md:mb-6 shadow-md overflow-hidden group">
+                      {/* Shimmering blue outline effect */}
+                      <div className="absolute inset-0 opacity-20 bg-blue-400 blur-[10px] group-hover:opacity-30 transition-opacity duration-500"></div>
+                      <div className="absolute inset-0 border border-blue-400/30 rounded-xl"></div>
+                      <div className="relative z-10">
+                        <h3 className="text-base xs:text-lg md:text-xl text-white">{currentQuestion.content}</h3>
+                      </div>
                     </div>
                     
                     <div className="grid grid-cols-1 gap-4">
