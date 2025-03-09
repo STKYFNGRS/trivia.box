@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useEffect, Suspense, lazy, useRef } from 'react';
 import { useAccount } from 'wagmi';
 import { useGameState } from '@/hooks/useGameState';
 import dynamic from 'next/dynamic';
@@ -49,6 +49,10 @@ export default function ClientPage() {
   const [shouldRenderGame, setShouldRenderGame] = useState(false);
   const [initializationAttempts, setInitializationAttempts] = useState(0);
   const [sessionRestored, setSessionRestored] = useState(false);
+  const [mobileReconnecting, setMobileReconnecting] = useState(false);
+  
+  // Reference to track if we've attempted connection restoration
+  const connectionAttempted = useRef(false);
   
   // Track session restoration state
   useEffect(() => {
@@ -79,13 +83,24 @@ export default function ClientPage() {
           // Mobile behavior - just let it refresh naturally
           // No need to show confirmation dialog
           console.log('🎮 ClientPage: Page refresh on mobile detected, state will be restored');
+          
+          // For mobile, explicitly try to save connection state before unload
+          try {
+            if (address) {
+              const { saveConnectionState } = require('@/utils/persistConnection');
+              saveConnectionState(address, chainId || 8453);
+              console.log('📱 ClientPage: Mobile wallet state saved before refresh');
+            }
+          } catch (err) {
+            console.warn('📱 ClientPage: Error saving mobile wallet state:', err);
+          }
         }
       };
       
       window.addEventListener('beforeunload', handleBeforeUnload);
       return () => window.removeEventListener('beforeunload', handleBeforeUnload);
     }
-  }, [gameState, isMobile]);
+  }, [gameState, isMobile, address, chainId]);
   
   // Enhanced debugging for game state changes
   useEffect(() => {
@@ -109,6 +124,65 @@ export default function ClientPage() {
   useEffect(() => {
     console.log(`🎲 ClientPage: isLoading=${isLoading}, error=${error || 'none'}`);
   }, [isLoading, error]);
+  
+  // Mobile-specific connection restoration
+  useEffect(() => {
+    // Only on mobile and only run this once per page load
+    if (isMobile && !connectionAttempted.current && typeof window !== 'undefined') {
+      connectionAttempted.current = true;
+      
+      // Check if we might need to restore connection
+      const checkMobileConnection = async () => {
+        try {
+          setMobileReconnecting(true);
+          console.log('📱 ClientPage: Checking if mobile wallet connection needs restoration');
+          
+          const { shouldRestoreConnection } = await import('@/utils/persistConnection');
+          const needsRestore = shouldRestoreConnection();
+          
+          if (needsRestore && !isConnected) {
+            console.log('📱 ClientPage: Mobile device needs wallet reconnection');
+            
+            // We'll let the QueryProviders handle the actual reconnection
+            // But we'll monitor for successful connection
+            const checkWalletConnected = setInterval(() => {
+              // Check if we're now connected
+              const wagmiState = window.localStorage.getItem('wagmi.store');
+              if (wagmiState) {
+                try {
+                  const parsedState = JSON.parse(wagmiState);
+                  if (parsedState?.state?.connections?.[0]?.accounts?.[0]) {
+                    console.log('📱 ClientPage: Wallet successfully reconnected');
+                    clearInterval(checkWalletConnected);
+                    setMobileReconnecting(false);
+                  }
+                } catch (e) {
+                  console.warn('Error parsing wagmi state:', e);
+                }
+              }
+            }, 1000);
+            
+            // Safety timeout after 10 seconds
+            setTimeout(() => {
+              clearInterval(checkWalletConnected);
+              setMobileReconnecting(false);
+            }, 10000);
+          } else {
+            // No restoration needed or already connected
+            setMobileReconnecting(false);
+          }
+        } catch (err) {
+          console.error('📱 ClientPage: Error checking mobile connection state:', err);
+          setMobileReconnecting(false);
+        }
+      };
+      
+      // Wait a moment for page to fully load
+      setTimeout(() => {
+        checkMobileConnection();
+      }, 500);
+    }
+  }, [isMobile, isConnected]);
   
   // Handle the start game callback with detailed error handling
   const handleStartGame = (options: { questionCount: number; category: string; difficulty: string }) => {
@@ -165,6 +239,18 @@ export default function ClientPage() {
           console.log('Refreshing wallet stats after game close');
           window.dispatchEvent(new CustomEvent('refreshWalletStats'));
           
+          // For mobile, ensure wallet connection is maintained
+          if (isMobile && address) {
+            try {
+              console.log('Reinforcing mobile wallet connection after game close');
+              import('@/utils/persistConnection').then(({ saveConnectionState }) => {
+                saveConnectionState(address, chainId || 8453);
+              }).catch(err => console.warn('Error saving connection during game close:', err));
+            } catch (err) {
+              console.warn('Error during mobile wallet preservation:', err);
+            }
+          }
+          
           // Delay the state reset slightly to ensure UI transitions properly
           setTimeout(() => {
             // Reset internal state
@@ -179,7 +265,7 @@ export default function ClientPage() {
     
     window.addEventListener('gameClose', handleGameClose);
     return () => window.removeEventListener('gameClose', handleGameClose);
-  }, [initGame]); // Added initGame to dependencies
+  }, [initGame, isMobile, address, chainId]); 
   
   // Consider connected when wallet is connected and on Base chain
   const isFullyConnected = isConnected && chainId === 8453;
@@ -192,7 +278,8 @@ export default function ClientPage() {
   return (
     <div className="flex flex-col min-h-screen">
       <ParticleBackground gameLoading={isLoading} />
-      <LoadingAnimation isLoading={isLoading} />
+      
+      <LoadingAnimation isLoading={isLoading || mobileReconnecting} />
       
       {/* Mobile session restore notification */}
       <MobileRestoreNotification 
@@ -263,6 +350,19 @@ export default function ClientPage() {
                     }
                   }, 100);
                 }}
+                onGameComplete={async (score) => {
+                  console.log('Game completed with score:', score);
+                  // For mobile, make sure to preserve wallet connection on completion
+                  if (isMobile && address) {
+                    try {
+                      console.log('Preserving mobile wallet connection after game completion');
+                      const { saveConnectionState } = await import('@/utils/persistConnection');
+                      saveConnectionState(address, chainId || 8453);
+                    } catch (err) {
+                      console.warn('Error preserving wallet connection:', err);
+                    }
+                  }
+                }}
               />
               </div>
             )}
@@ -302,33 +402,37 @@ export default function ClientPage() {
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fadeIn" style={{ animationDelay: '0.4s' }}>
                 <div className="bg-gradient-to-br from-gray-900/90 to-gray-800/90 backdrop-blur-md p-4 rounded-xl border border-amber-600/20 hover:border-amber-600/40 transition-all group card-glow">
-                  <div className="w-10 h-10 bg-gradient-to-r from-amber-600 to-orange-600 rounded-lg mb-3 flex items-center justify-center group-hover:scale-110 transition-transform shadow-md icon-glow">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-600 to-amber-700 flex items-center justify-center mb-3 shadow-lg shadow-amber-600/20">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                     </svg>
                   </div>
-                  <h3 className="text-lg font-semibold text-amber-600 mb-1">Daily Challenges</h3>
-                  <p className="text-sm text-gray-300">Fresh trivia questions every day across multiple categories.</p>
+                  <h3 className="text-lg font-semibold text-amber-600 mb-1">Test Your Knowledge</h3>
+                  <p className="text-sm text-gray-300">Challenge yourself with diverse trivia across multiple categories and difficulty levels.</p>
                 </div>
+                
                 <div className="bg-gradient-to-br from-gray-900/90 to-gray-800/90 backdrop-blur-md p-4 rounded-xl border border-amber-600/20 hover:border-amber-600/40 transition-all group card-glow">
-                  <div className="w-10 h-10 bg-gradient-to-r from-amber-600 to-orange-600 rounded-lg mb-3 flex items-center justify-center group-hover:scale-110 transition-transform shadow-md icon-glow">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-600 to-amber-700 flex items-center justify-center mb-3 shadow-lg shadow-amber-600/20">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-amber-600 mb-1">Compete Globally</h3>
+                  <p className="text-sm text-gray-300">Climb the leaderboard and compare your scores with players worldwide.</p>
+                </div>
+                
+                <div className="bg-gradient-to-br from-gray-900/90 to-gray-800/90 backdrop-blur-md p-4 rounded-xl border border-amber-600/20 hover:border-amber-600/40 transition-all group card-glow">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-600 to-amber-700 flex items-center justify-center mb-3 shadow-lg shadow-amber-600/20">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
                   <h3 className="text-lg font-semibold text-amber-600 mb-1">Win Rewards</h3>
                   <p className="text-sm text-gray-300">Earn tokens and NFTs for your knowledge and fast responses.</p>
                 </div>
-                <div className="bg-gradient-to-br from-gray-900/90 to-gray-800/90 backdrop-blur-md p-4 rounded-xl border border-amber-600/20 hover:border-amber-600/40 transition-all group card-glow">
-                  <div className="w-10 h-10 bg-gradient-to-r from-amber-600 to-orange-600 rounded-lg mb-3 flex items-center justify-center group-hover:scale-110 transition-transform shadow-md icon-glow">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                    </svg>
-                  </div>
-                  <h3 className="text-lg font-semibold text-amber-600 mb-1">Global Rankings</h3>
-                  <p className="text-sm text-gray-300">Compete with players worldwide and climb the leaderboard.</p>
-                </div>
               </div>
+              
+              <FeatureIcons />
               
               <div className="pt-12 pb-12 animate-fadeIn" style={{ animationDelay: '0.7s' }}>
                 <div className="flex flex-col items-center space-y-3">

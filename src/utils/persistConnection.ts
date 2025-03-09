@@ -14,7 +14,8 @@ const CONNECTION_CHAIN_ID_KEY = 'connectedChainId';
 
 // Mobile-specific settings
 const MOBILE_CONNECTION_KEY = 'mobile_walletConnection';
-const MOBILE_MAX_AGE = 60 * 60 * 1000; // 1 hour for mobile
+const MOBILE_MAX_AGE = 120 * 60 * 1000; // 2 hours for mobile (increased from 1 hour)
+const MOBILE_BACKUP_KEY = 'mobile_wallet_backup';
 
 /**
  * Save wallet connection state before unload or game completion
@@ -56,10 +57,27 @@ export function saveConnectionState(address?: string, chainId?: number): void {
           timestamp: Date.now(),
           address: address || '',
           chainId: chainId || 0,
+          lastUpdated: new Date().toISOString(),
+          mobilePersisted: true
         };
         
-        localStorage.setItem(MOBILE_CONNECTION_KEY, JSON.stringify(connectionData));
-        sessionStorage.setItem(MOBILE_CONNECTION_KEY, JSON.stringify(connectionData));
+        // Store in both localStorage and sessionStorage for redundancy
+        const connectionString = JSON.stringify(connectionData);
+        localStorage.setItem(MOBILE_CONNECTION_KEY, connectionString);
+        sessionStorage.setItem(MOBILE_CONNECTION_KEY, connectionString);
+        
+        // Create additional backup copies with different keys
+        // This helps with some mobile browsers that might clear certain keys
+        localStorage.setItem(MOBILE_BACKUP_KEY, connectionString);
+        sessionStorage.setItem(MOBILE_BACKUP_KEY, connectionString);
+        
+        // For iOS Safari specifically, which sometimes has issues with localStorage
+        try {
+          document.cookie = `mobile_wallet_address=${address || ''}; path=/; max-age=7200; SameSite=Strict`;
+          document.cookie = `mobile_wallet_timestamp=${Date.now()}; path=/; max-age=7200; SameSite=Strict`;
+        } catch (cookieErr) {
+          console.warn('Could not set cookie backup for mobile wallet data', cookieErr);
+        }
         
         console.log('Mobile connection state saved with enhanced persistence');
       } catch (mobileErr) {
@@ -83,8 +101,12 @@ export function shouldRestoreConnection(): boolean {
     if (isMobileDevice()) {
       // Try consolidated mobile data first (most reliable)
       try {
-        const mobileDataStr = localStorage.getItem(MOBILE_CONNECTION_KEY) || 
-                             sessionStorage.getItem(MOBILE_CONNECTION_KEY);
+        // Check multiple storage locations
+        const mobileDataStr = 
+          localStorage.getItem(MOBILE_CONNECTION_KEY) || 
+          sessionStorage.getItem(MOBILE_CONNECTION_KEY) ||
+          localStorage.getItem(MOBILE_BACKUP_KEY) ||
+          sessionStorage.getItem(MOBILE_BACKUP_KEY);
         
         if (mobileDataStr) {
           const mobileData = JSON.parse(mobileDataStr);
@@ -93,6 +115,41 @@ export function shouldRestoreConnection(): boolean {
           
           if (timeDiff < MOBILE_MAX_AGE && mobileData.address) {
             console.log('Found valid mobile connection data to restore');
+            return true;
+          }
+        }
+        
+        // If no consolidated data found, try checking cookie (iOS Safari fallback)
+        if (document.cookie) {
+          const addressMatch = document.cookie.match(/mobile_wallet_address=([^;]+)/);
+          const timestampMatch = document.cookie.match(/mobile_wallet_timestamp=([^;]+)/);
+          
+          if (addressMatch && timestampMatch && addressMatch[1]) {
+            const timestamp = parseInt(timestampMatch[1], 10);
+            const now = Date.now();
+            if (now - timestamp < MOBILE_MAX_AGE) {
+              console.log('Found valid mobile connection cookie data');
+              return true;
+            }
+          }
+        }
+        
+        // Check for recent game completion or explicit save flags
+        if (sessionStorage.getItem('wallet_explicit_save') === 'true') {
+          const saveTimestamp = parseInt(sessionStorage.getItem('wallet_save_timestamp') || '0', 10);
+          const now = Date.now();
+          if (now - saveTimestamp < MOBILE_MAX_AGE) {
+            console.log('Found explicit wallet save flag in mobile session');
+            return true;
+          }
+        }
+        
+        // Check for recent game completion
+        if (sessionStorage.getItem('game_completed_address')) {
+          const completionTimestamp = parseInt(sessionStorage.getItem('game_completed_timestamp') || '0', 10);
+          const now = Date.now();
+          if (now - completionTimestamp < MOBILE_MAX_AGE) {
+            console.log('Found recent game completion data in mobile session');
             return true;
           }
         }
@@ -136,8 +193,12 @@ export function getSavedConnectionDetails(): { address?: string; chainId?: numbe
     // For mobile, try consolidated data first
     if (isMobileDevice()) {
       try {
-        const mobileDataStr = localStorage.getItem(MOBILE_CONNECTION_KEY) || 
-                             sessionStorage.getItem(MOBILE_CONNECTION_KEY);
+        // Try all possible storage locations
+        const mobileDataStr = 
+          localStorage.getItem(MOBILE_CONNECTION_KEY) || 
+          sessionStorage.getItem(MOBILE_CONNECTION_KEY) ||
+          localStorage.getItem(MOBILE_BACKUP_KEY) ||
+          sessionStorage.getItem(MOBILE_BACKUP_KEY);
         
         if (mobileDataStr) {
           const mobileData = JSON.parse(mobileDataStr);
@@ -148,6 +209,22 @@ export function getSavedConnectionDetails(): { address?: string; chainId?: numbe
               chainId: mobileData.chainId || undefined 
             };
           }
+        }
+        
+        // Check cookies as fallback (iOS Safari)
+        if (document.cookie) {
+          const addressMatch = document.cookie.match(/mobile_wallet_address=([^;]+)/);
+          if (addressMatch && addressMatch[1]) {
+            console.log('Retrieved connection address from cookie:', addressMatch[1]);
+            return { address: addressMatch[1] };
+          }
+        }
+        
+        // Check for game completion data
+        const gameCompletionAddress = sessionStorage.getItem('game_completed_address');
+        if (gameCompletionAddress) {
+          console.log('Retrieved connection address from game completion:', gameCompletionAddress);
+          return { address: gameCompletionAddress };
         }
       } catch (mobileErr) {
         console.error('Error retrieving mobile connection data:', mobileErr);
@@ -188,19 +265,35 @@ export function markConnectionRestored(): void {
         
         // Update mobile-specific storage
         const mobileDataStr = localStorage.getItem(MOBILE_CONNECTION_KEY) || 
-                             sessionStorage.getItem(MOBILE_CONNECTION_KEY);
+                             sessionStorage.getItem(MOBILE_CONNECTION_KEY) ||
+                             localStorage.getItem(MOBILE_BACKUP_KEY) ||
+                             sessionStorage.getItem(MOBILE_BACKUP_KEY);
         
         if (mobileDataStr) {
           const mobileData = JSON.parse(mobileDataStr);
           mobileData.timestamp = Date.now();
+          mobileData.lastUpdated = new Date().toISOString();
+          mobileData.restored = true;
           
-          localStorage.setItem(MOBILE_CONNECTION_KEY, JSON.stringify(mobileData));
-          sessionStorage.setItem(MOBILE_CONNECTION_KEY, JSON.stringify(mobileData));
+          const updatedStr = JSON.stringify(mobileData);
+          localStorage.setItem(MOBILE_CONNECTION_KEY, updatedStr);
+          sessionStorage.setItem(MOBILE_CONNECTION_KEY, updatedStr);
+          localStorage.setItem(MOBILE_BACKUP_KEY, updatedStr);
+          sessionStorage.setItem(MOBILE_BACKUP_KEY, updatedStr);
         }
         
-        console.log('Mobile connection marked as restored with updated timestamp');
+        // Update cookie if using that fallback
+        if (document.cookie.includes('mobile_wallet_address')) {
+          document.cookie = `mobile_wallet_timestamp=${Date.now()}; path=/; max-age=7200; SameSite=Strict`;
+        }
+        
+        // Update session flags
+        sessionStorage.setItem('wallet_explicit_save', 'true');
+        sessionStorage.setItem('wallet_save_timestamp', Date.now().toString());
+        
+        console.log('Mobile connection marked as restored with updated timestamps');
       } catch (mobileErr) {
-        console.error('Error updating mobile connection timestamp:', mobileErr);
+        console.error('Error updating mobile connection timestamps:', mobileErr);
       }
     }
   } catch (err) {
@@ -229,6 +322,18 @@ export function clearConnectionState(): void {
       
       localStorage.removeItem(MOBILE_CONNECTION_KEY);
       sessionStorage.removeItem(MOBILE_CONNECTION_KEY);
+      localStorage.removeItem(MOBILE_BACKUP_KEY);
+      sessionStorage.removeItem(MOBILE_BACKUP_KEY);
+      
+      // Clear cookies
+      document.cookie = "mobile_wallet_address=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      document.cookie = "mobile_wallet_timestamp=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      
+      // Clear session flags
+      sessionStorage.removeItem('wallet_explicit_save');
+      sessionStorage.removeItem('wallet_save_timestamp');
+      sessionStorage.removeItem('game_completed_address');
+      sessionStorage.removeItem('game_completed_timestamp');
     } catch (additionalErr) {
       console.error('Error clearing additional connection storage:', additionalErr);
     }

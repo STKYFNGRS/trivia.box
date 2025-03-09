@@ -1,6 +1,9 @@
+'use client';
 import React, { useState, useEffect } from 'react';
-import { About, PrivacyPolicy, TermsOfService } from '../legal';
-import { Download } from 'lucide-react';
+import About from '@/components/legal/About';
+import PrivacyPolicy from '@/components/legal/PrivacyPolicy';
+import TermsOfService from '@/components/legal/TermsOfService';
+import { DownloadIcon } from 'lucide-react';
 
 export default function Footer() {
   const [showAbout, setShowAbout] = useState(false);
@@ -94,10 +97,10 @@ export default function Footer() {
               {isInstallable && (
                 <button
                   onClick={handleInstallClick}
-                  className="flex items-center space-x-1 text-xs xs:text-sm text-amber-500 hover:text-amber-600 transition-colors mobile-touch-target"
+                  className="flex items-center text-xs xs:text-sm text-amber-500 hover:text-amber-600 transition-colors mobile-touch-target"
                 >
-                  <Download className="h-3 w-3" />
-                  <span>Download App</span>
+                  <DownloadIcon className="inline-block w-4 h-4 mr-1" />
+                  Install App
                 </button>
               )}
             </div>

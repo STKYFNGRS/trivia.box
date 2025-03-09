@@ -53,6 +53,8 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
   const isClosing = useRef(false);
   const sessionResponses = useRef<Array<{ isCorrect: boolean }>>([]);
   const hasLoggedRender = useRef(false);
+  // Add the missing modalRef
+  const modalRef = useRef<HTMLDivElement>(null);
   
   // Define current question and shuffled answers
   const currentQuestion = questions && currentQuestionIndex < questions.length
@@ -349,6 +351,34 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 8000);
             
+            // Explicitly save connection state before API call
+            // This helps with mobile browsers that might lose connection after the call
+            if (typeof window !== 'undefined') {
+              try {
+                const isMobile = window.innerWidth <= 768 || 
+                                /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                
+                if (isMobile) {
+                  console.log('Mobile device detected, saving wallet state before completion API call');
+                  // Get current wallet state from wagmi for more reliable state preservation
+                  const wagmiState = window.localStorage.getItem('wagmi.store');
+                  const wagmiData = wagmiState ? JSON.parse(wagmiState) : null;
+                  
+                  if (wagmiData?.state?.connections?.[0]?.accounts?.[0]) {
+                    const connectedAccount = wagmiData.state.connections[0].accounts[0];
+                    const chainId = wagmiData.state.connections[0].chains?.[0]?.id || 8453;
+                    
+                    // Import dynamically to avoid circular dependencies
+                    const { saveConnectionState } = await import('@/utils/persistConnection');
+                    saveConnectionState(connectedAccount, chainId);
+                    console.log('Mobile wallet state saved before game completion:', connectedAccount.slice(0, 6) + '...');
+                  }
+                }
+              } catch (stateErr) {
+                console.error('Error saving wallet state before completion:', stateErr);
+              }
+            }
+            
             // Use the dedicated game completion endpoint
             const completeResponse = await fetch('/api/game/complete', {
               method: 'POST',
@@ -437,9 +467,46 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
           window.dispatchEvent(new CustomEvent('gameCompleted', {
             detail: {
               finalScore: finalStats.finalScore,
-              address: address
+              address: address,
+              chainId: 8453,
+              timestamp: Date.now()
             }
           }));
+        }
+        
+        // Final mobile-specific wallet state persistence attempt
+        try {
+          if (typeof window !== 'undefined' && address) {
+            const isMobile = window.innerWidth <= 768 || 
+                          /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            
+            if (isMobile) {
+              // Dynamic import to avoid circular dependencies
+              const { markConnectionRestored } = await import('@/utils/persistConnection');
+              markConnectionRestored();
+              
+              // Additional mobile protection - save address in session storage with multiple methods
+              sessionStorage.setItem('last_connected_address', address);
+              sessionStorage.setItem('last_connection_time', Date.now().toString());
+              
+              // Add some app-specific details that may help with state reconstruction
+              try {
+                const mobileStateBackup = {
+                  address: address,
+                  timestamp: Date.now(),
+                  appVersion: '1.0',
+                  appName: 'TriviaBox',
+                  lastAction: 'gameCompleted',
+                  score: finalStats.finalScore
+                };
+                sessionStorage.setItem('triviabox_mobile_state', JSON.stringify(mobileStateBackup));
+              } catch (sessionErr) {
+                console.warn('Could not save additional mobile state backup', sessionErr);
+              }
+            }
+          }
+        } catch (mobileErr) {
+          console.error('Error during mobile-specific connection handling:', mobileErr);
         }
         
         debugLog('Game completed successfully, closing modal');
@@ -478,33 +545,35 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
     
     // For debugging purposes - log that we're displaying a question
     debugLog(`Displaying question ${currentQuestionIndex + 1}/${questions.length}`);
-  }, [currentQuestionIndex, questions?.length]);
-  
-  // Initialize the game session as soon as the component mounts
-  useEffect(() => {
-    if (!sessionId || !questions?.length) return;
     
-    debugLog(`Game modal initialized with session ID: ${sessionId}`);
-    debugLog(`Starting game with ${questions.length} questions`);
-    
-    // Set the initial timer and first question immediately
-    questionStartTime.current = new Date().toISOString();
-    
-    // Force a state update to ensure the component renders properly
-    setTimeLeft(DURATION);
-    setPotentialPoints(MAX_POINTS);
-    
-    // Make sure component is visible in DOM
-    setTimeout(() => {
-      const modalElement = document.querySelector('.fixed.inset-0.z-50');
-      if (modalElement) {
-        debugLog('Game modal element is in DOM and visible');
-        modalElement.classList.add('force-visible');
-      } else {
-        console.warn('Game modal element not found in DOM');
+    // Save current connection state during the game to help with mobile persistence
+    if (address && typeof window !== 'undefined') {
+      try {
+        const isMobile = window.innerWidth <= 768 || 
+                        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                        
+        if (isMobile && currentQuestionIndex % 3 === 0) { // Every 3 questions for mobile
+          import('@/utils/persistConnection').then(({ saveConnectionState }) => {
+            saveConnectionState(address, 8453);
+          }).catch(err => console.warn('Could not save connection state during game:', err));
+        }
+      } catch (err) {
+        console.warn('Error checking for mobile device during game:', err);
       }
-    }, 300);
-  }, [sessionId, questions?.length]);
+    }
+    
+    // Focus trap - ensure keyboard focus is within the game modal
+    setTimeout(() => {
+      if (modalRef.current) {
+        const focusableElements = modalRef.current.querySelectorAll(
+          'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusableElements.length > 0) {
+          (focusableElements[0] as HTMLElement).focus();
+        }
+      }
+    }, 100);
+  }, [currentQuestionIndex, questions, address]);
   
   useEffect(() => {
     if (!gameEnded) return;
@@ -532,6 +601,7 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           className="relative w-full max-w-5xl mt-8 mb-8 pt-8 md:pt-10 md:mt-24"
+          ref={modalRef}
         >
           <div className="rounded-2xl bg-gradient-to-br from-gray-900/90 to-gray-800/90 p-8 border border-amber-500/20 overflow-hidden flex flex-col">
             {error ? (

@@ -1,7 +1,7 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState, useRef } from 'react';
 import { WagmiConfig } from 'wagmi';
 import { config } from '@/config/wagmi';
 import { getAppKit } from '@reown/appkit/react';
@@ -32,6 +32,9 @@ if (typeof window !== 'undefined') {
 export default function QueryProviders({ children }: { children: ReactNode }) {
   const [reconnectionAttempted, setReconnectionAttempted] = useState(false);
   const [lastSaveTimestamp, setLastSaveTimestamp] = useState(0);
+  const reconnectAttemptCount = useRef(0);
+  const reconnectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectLastCall = useRef<number>(0);
   
   // Handle connection persistence across refreshes with enhanced mobile support
   useEffect(() => {
@@ -87,6 +90,15 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
             // Use enhanced saving for mobile
             saveConnectionState(account, chainId);
             console.log('Mobile connection saved before unload with account:', account.slice(0, 6) + '...');
+            
+            // For mobile, we set a flag to indicate this was an explicit save
+            // This helps with reconnection after refresh
+            try {
+              sessionStorage.setItem('wallet_explicit_save', 'true');
+              sessionStorage.setItem('wallet_save_timestamp', Date.now().toString());
+            } catch (e) {
+              console.error('Could not set mobile wallet explicit save flag:', e);
+            }
           } else {
             // Fallback without specific details
             saveConnectionState();
@@ -117,6 +129,75 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
       }
     };
     
+    // Enhanced mobile reconnection with staged approach
+    const performMobileReconnection = async () => {
+      // For safety, don't try too many reconnects
+      const maxAttempts = 3;
+      if (reconnectAttemptCount.current >= maxAttempts) {
+        console.log('Maximum reconnection attempts reached');
+        return false;
+      }
+      
+      // Rate limit reconnection attempts
+      const now = Date.now();
+      if (now - reconnectLastCall.current < 2000) {
+        console.log('Reconnection attempts being made too quickly, throttling');
+        return false;
+      }
+      reconnectLastCall.current = now;
+      
+      try {
+        reconnectAttemptCount.current++;
+        console.log(`Mobile reconnection attempt ${reconnectAttemptCount.current}/${maxAttempts}`);
+        
+        // Get saved connection details
+        const { address } = getSavedConnectionDetails();
+        
+        // Clear any previous pending reconnection
+        if (reconnectionTimeoutRef.current) {
+          clearTimeout(reconnectionTimeoutRef.current);
+          reconnectionTimeoutRef.current = null;
+        }
+        
+        // Check for cached wagmi state before trying to open the modal
+        const wagmiState = window.localStorage.getItem('wagmi.store');
+        if (wagmiState) {
+          try {
+            // If state contains connection data, we might not need to reconnect
+            const wagmiData = JSON.parse(wagmiState);
+            const hasConnectedAccount = wagmiData?.state?.connections?.[0]?.accounts?.[0];
+            
+            if (hasConnectedAccount) {
+              console.log('Found existing wagmi connection, may not need to reconnect');
+              // Mark as restored since connection exists
+              markConnectionRestored();
+              return true;
+            }
+          } catch (e) {
+            console.error('Error checking wagmi state:', e);
+          }
+        }
+        
+        // Attempt to open connection dialog
+        await modal.open();
+        console.log('Mobile reconnection attempt succeeded');
+        markConnectionRestored();
+        return true;
+      } catch (error) {
+        console.error('Mobile reconnection attempt failed:', error);
+        
+        // Schedule another attempt if we haven't reached the limit
+        if (reconnectAttemptCount.current < maxAttempts) {
+          console.log(`Scheduling reconnection attempt ${reconnectAttemptCount.current + 1}/${maxAttempts}...`);
+          reconnectionTimeoutRef.current = setTimeout(() => {
+            performMobileReconnection();
+          }, 2000); // Increased delay between attempts
+        }
+        
+        return false;
+      }
+    };
+    
     // Handle connection restore with more resilience for mobile
     const restoreConnection = async () => {
       if (reconnectionAttempted) return; // Prevent multiple attempts
@@ -130,42 +211,16 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
         console.log('Saved connection details:', savedDetails.address ? 
           `${savedDetails.address.slice(0, 6)}...` : 'No address');
         
-        // For mobile, use a staged approach with multiple attempts if needed
+        // For mobile, use enhanced staged approach
         if (isMobile) {
-          let reconnectSuccess = false;
+          // Reset attempt counter
+          reconnectAttemptCount.current = 0;
           
-          // First attempt - immediate
-          try {
-            await modal.open();
-            console.log('First reconnection attempt completed');
-            reconnectSuccess = true;
-          } catch (firstErr) {
-            console.warn('First reconnection attempt failed:', firstErr);
-          }
+          // Start the mobile-specific reconnection process
+          const success = await performMobileReconnection();
           
-          // Second attempt after delay if needed
-          if (!reconnectSuccess) {
-            try {
-              console.log('Trying reconnection again after delay...');
-              
-              // Short delay before second attempt
-              await new Promise(resolve => setTimeout(resolve, 1500));
-              
-              await modal.open();
-              console.log('Second reconnection attempt completed');
-              reconnectSuccess = true;
-            } catch (secondErr) {
-              console.error('Second reconnection attempt failed:', secondErr);
-            }
-          }
-          
-          // Mark as restored but keep state for future attempts
-          if (reconnectSuccess) {
-            markConnectionRestored();
+          if (success) {
             console.log('Mobile connection successfully restored');
-          } else {
-            // Only clear on complete failure after all attempts
-            console.error('All reconnection attempts failed on mobile');
           }
         } else {
           // Standard desktop behavior
@@ -194,11 +249,39 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
       } else {
         handleBeforeUnload();
       }
+      
+      // For mobile, set specific values to assist with reconnection
+      if (isMobile && address) {
+        try {
+          sessionStorage.setItem('game_completed_address', address);
+          sessionStorage.setItem('game_completed_timestamp', Date.now().toString());
+        } catch (e) {
+          console.error('Error saving game completion data:', e);
+        }
+      }
+    };
+    
+    // Special handler for mobile page visibility changes
+    const handleVisibilityChange = () => {
+      if (isMobile && document.visibilityState === 'visible') {
+        console.log('Mobile page became visible again, checking connection');
+        
+        // If we have a saved connection, verify it's still active
+        if (shouldRestoreConnection() && !reconnectionAttempted) {
+          console.log('Page visibility changed - attempting reconnection');
+          restoreConnection();
+        }
+      }
     };
     
     // Set up event listeners
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('gameCompleted', handleGameCompletion);
+    
+    // Add visibility change listener for mobile devices
+    if (isMobile) {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
     
     // Restore connection on initial load
     restoreConnection();
@@ -211,8 +294,16 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('gameCompleted', handleGameCompletion);
       
+      if (isMobile) {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+      
       if (savingInterval) {
         clearInterval(savingInterval);
+      }
+      
+      if (reconnectionTimeoutRef.current) {
+        clearTimeout(reconnectionTimeoutRef.current);
       }
     };
   }, [reconnectionAttempted, lastSaveTimestamp]);
