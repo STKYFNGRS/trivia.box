@@ -516,9 +516,13 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
         setTimeout(() => {
           // Reset the game state instead of forcing a page reload
           if (typeof window !== 'undefined') {
-            // Dispatch event for state reset in parent components
+            // First dispatch reset event
             window.dispatchEvent(new CustomEvent('resetGameState'));
-            // Call onClose without forcing a page reload
+            
+            // Also dispatch gameClose to ensure full cleanup
+            window.dispatchEvent(new CustomEvent('gameClose'));
+            
+            // Finally call onClose to properly return to the main screen
             onClose();
           }
         }, 300);

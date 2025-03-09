@@ -32,9 +32,7 @@ if (typeof window !== 'undefined') {
 export default function QueryProviders({ children }: { children: ReactNode }) {
   const [reconnectionAttempted, setReconnectionAttempted] = useState(false);
   const [lastSaveTimestamp, setLastSaveTimestamp] = useState(0);
-  const reconnectAttemptCount = useRef(0);
-  const reconnectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const reconnectLastCall = useRef<number>(0);
+  const isRestoringConnection = useRef<boolean>(false);
   
   // Handle connection persistence across refreshes with enhanced mobile support
   useEffect(() => {
@@ -76,201 +74,80 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
     const handleBeforeUnload = () => {
       console.log('Page is about to unload, saving wallet state...');
       
-      // More aggressive saving attempt for mobile
-      if (isMobile) {
-        try {
-          // Save multiple times with different strategies for mobile
-          // Immediate save with current state
-          const wagmiState = window.localStorage.getItem('wagmi.store');
-          const wagmiData = wagmiState ? JSON.parse(wagmiState) : null;
-          const account = wagmiData?.state?.connections?.[0]?.accounts?.[0];
-          const chainId = wagmiData?.state?.connections?.[0]?.chains?.[0]?.id;
+      try {
+        // Get current wallet state
+        const wagmiState = window.localStorage.getItem('wagmi.store');
+        const wagmiData = wagmiState ? JSON.parse(wagmiState) : null;
+        const account = wagmiData?.state?.connections?.[0]?.accounts?.[0];
+        const chainId = wagmiData?.state?.connections?.[0]?.chains?.[0]?.id;
+        
+        if (account) {
+          saveConnectionState(account, chainId);
+          console.log('Connection saved before unload with account:', account.slice(0, 6) + '...');
           
-          if (account) {
-            // Use enhanced saving for mobile
-            saveConnectionState(account, chainId);
-            console.log('Mobile connection saved before unload with account:', account.slice(0, 6) + '...');
-            
-            // For mobile, we set a flag to indicate this was an explicit save
-            // This helps with reconnection after refresh
+          // For mobile, set additional flags
+          if (isMobile) {
             try {
               sessionStorage.setItem('wallet_explicit_save', 'true');
               sessionStorage.setItem('wallet_save_timestamp', Date.now().toString());
             } catch (e) {
-              console.error('Could not set mobile wallet explicit save flag:', e);
+              console.error('Could not set wallet flags:', e);
             }
-          } else {
-            // Fallback without specific details
-            saveConnectionState();
-            console.log('Mobile connection saved without account details (fallback)');
           }
-        } catch (mobileErr) {
-          console.error('Error saving mobile connection before unload:', mobileErr);
-          saveConnectionState(); // Last resort fallback
+        } else {
+          // Fallback without specific details
+          saveConnectionState();
         }
-      } else {
-        // Standard desktop behavior
-        try {
-          const wagmiState = window.localStorage.getItem('wagmi.store');
-          const wagmiData = wagmiState ? JSON.parse(wagmiState) : null;
-          const account = wagmiData?.state?.connections?.[0]?.accounts?.[0];
-          const chainId = wagmiData?.state?.connections?.[0]?.chains?.[0]?.id;
-          
-          if (account) {
-            saveConnectionState(account, chainId);
-            console.log('Desktop connection saved before unload with account:', account.slice(0, 6) + '...');
-          } else {
-            saveConnectionState();
-          }
-        } catch (err) {
-          console.error('Error saving connection before unload:', err);
-          saveConnectionState(); // Fallback
-        }
+      } catch (err) {
+        console.error('Error saving connection before unload:', err);
+        saveConnectionState(); // Fallback
       }
     };
     
-    // Enhanced mobile reconnection with staged approach
-    const performMobileReconnection = async () => {
-      // For safety, don't try too many reconnects
-      const maxAttempts = 3;
-      if (reconnectAttemptCount.current >= maxAttempts) {
-        console.log('Maximum reconnection attempts reached');
-        return false;
-      }
-      
-      // Rate limit reconnection attempts
-      const now = Date.now();
-      if (now - reconnectLastCall.current < 2000) {
-        console.log('Reconnection attempts being made too quickly, throttling');
-        return false;
-      }
-      reconnectLastCall.current = now;
-      
-      try {
-        reconnectAttemptCount.current++;
-        console.log(`Mobile reconnection attempt ${reconnectAttemptCount.current}/${maxAttempts}`);
-        
-        // Get saved connection details
-        const { address } = getSavedConnectionDetails();
-        
-        // Clear any previous pending reconnection
-        if (reconnectionTimeoutRef.current) {
-          clearTimeout(reconnectionTimeoutRef.current);
-          reconnectionTimeoutRef.current = null;
-        }
-        
-        // Check for cached wagmi state before trying to open the modal
-        const wagmiState = window.localStorage.getItem('wagmi.store');
-        if (wagmiState) {
-          try {
-            // If state contains connection data, we might not need to reconnect
-            const wagmiData = JSON.parse(wagmiState);
-            const hasConnectedAccount = wagmiData?.state?.connections?.[0]?.accounts?.[0];
-            
-            if (hasConnectedAccount) {
-              console.log('Found existing wagmi connection, may not need to reconnect');
-              // Mark as restored since connection exists
-              markConnectionRestored();
-              return true;
-            }
-          } catch (e) {
-            console.error('Error checking wagmi state:', e);
-          }
-        }
-        
-        // Attempt to open connection dialog
-        await modal.open();
-        console.log('Mobile reconnection attempt succeeded');
-        markConnectionRestored();
-        return true;
-      } catch (error) {
-        console.error('Mobile reconnection attempt failed:', error);
-        
-        // Schedule another attempt if we haven't reached the limit
-        if (reconnectAttemptCount.current < maxAttempts) {
-          console.log(`Scheduling reconnection attempt ${reconnectAttemptCount.current + 1}/${maxAttempts}...`);
-          reconnectionTimeoutRef.current = setTimeout(() => {
-            performMobileReconnection();
-          }, 2000); // Increased delay between attempts
-        }
-        
-        return false;
-      }
-    };
-    
-    // Handle connection restore with more resilience for mobile
+    // Handle connection restoration - now with NO MODAL approach
     const restoreConnection = async () => {
       if (reconnectionAttempted) return; // Prevent multiple attempts
       
       if (shouldRestoreConnection()) {
-        console.log('Found recent connection state, reconnecting wallet...');
+        console.log('Found connection state, silently restoring without modal...');
         setReconnectionAttempted(true);
         
-        // Get saved details
+        // Get saved details but don't show any modal
         const savedDetails = getSavedConnectionDetails();
-        console.log('Saved connection details:', savedDetails.address ? 
-          `${savedDetails.address.slice(0, 6)}...` : 'No address');
         
-        // For mobile, use enhanced staged approach
-        if (isMobile) {
-          // Reset attempt counter
-          reconnectAttemptCount.current = 0;
-          
-          // Start the mobile-specific reconnection process
-          const success = await performMobileReconnection();
-          
-          if (success) {
-            console.log('Mobile connection successfully restored');
-          }
-        } else {
-          // Standard desktop behavior
-          try {
-            await modal.open();
-            markConnectionRestored();
-            console.log('Desktop connection restored');
-          } catch (err) {
-            console.error('Error reconnecting wallet on desktop:', err);
-            clearConnectionState();
-          }
-        }
+        // Just mark as restored silently
+        markConnectionRestored();
+        console.log('Connection marked as restored silently - no modal shown');
       }
     };
     
-    // Handle game completion events
+    // Handle game completion events - simpler implementation
     const handleGameCompletion = (event: Event) => {
-      console.log('Game completion detected, ensuring connection persistence');
-      // Extract any details from the event if available
       const detail = (event as CustomEvent)?.detail;
       const address = detail?.address;
       const chainId = detail?.chainId || 8453; // Default to Base chain
       
-      if (address) {
-        saveConnectionState(address, chainId);
-      } else {
-        handleBeforeUnload();
-      }
+      console.log(`Game completion detected, saving wallet state (${isMobile ? 'mobile' : 'desktop'})`);
       
-      // For mobile, set specific values to assist with reconnection
-      if (isMobile && address) {
-        try {
-          sessionStorage.setItem('game_completed_address', address);
-          sessionStorage.setItem('game_completed_timestamp', Date.now().toString());
-        } catch (e) {
-          console.error('Error saving game completion data:', e);
-        }
-      }
-    };
-    
-    // Special handler for mobile page visibility changes
-    const handleVisibilityChange = () => {
-      if (isMobile && document.visibilityState === 'visible') {
-        console.log('Mobile page became visible again, checking connection');
+      if (address) {
+        // Save for both desktop and mobile
+        saveConnectionState(address, chainId);
         
-        // If we have a saved connection, verify it's still active
-        if (shouldRestoreConnection() && !reconnectionAttempted) {
-          console.log('Page visibility changed - attempting reconnection');
-          restoreConnection();
+        // Additional storage for mobile
+        if (isMobile) {
+          try {
+            // Store in both types for redundancy
+            sessionStorage.setItem('game_completed_address', address);
+            sessionStorage.setItem('game_completed_timestamp', Date.now().toString());
+            localStorage.setItem('game_completed_address', address);
+            localStorage.setItem('game_completed_timestamp', Date.now().toString());
+          } catch (e) {
+            console.error('Error saving game completion data:', e);
+          }
         }
+      } else {
+        // Fallback
+        handleBeforeUnload();
       }
     };
     
@@ -278,7 +155,16 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('gameCompleted', handleGameCompletion);
     
-    // Add visibility change listener for mobile devices
+    // Add visibility change listener for mobile
+    const handleVisibilityChange = () => {
+      if (isMobile && document.visibilityState === 'visible') {
+        if (shouldRestoreConnection() && !reconnectionAttempted) {
+          console.log('Page visibility changed - checking connection');
+          restoreConnection();
+        }
+      }
+    };
+    
     if (isMobile) {
       document.addEventListener('visibilitychange', handleVisibilityChange);
     }
@@ -301,12 +187,38 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
       if (savingInterval) {
         clearInterval(savingInterval);
       }
-      
-      if (reconnectionTimeoutRef.current) {
-        clearTimeout(reconnectionTimeoutRef.current);
-      }
     };
   }, [reconnectionAttempted, lastSaveTimestamp]);
+  
+  // Create a function to manually handle reconnection (without modal)
+  const manuallyRestoreConnection = async () => {
+    if (shouldRestoreConnection() && !isRestoringConnection.current) {
+      console.log('Manual wallet restoration requested - no modal approach');
+      
+      try {
+        isRestoringConnection.current = true;
+        
+        // Just mark the connection as restored without showing a modal
+        markConnectionRestored();
+        console.log('Manual reconnection completed silently');
+      } catch (err) {
+        console.error('Error in manual reconnection:', err);
+      } finally {
+        isRestoringConnection.current = false;
+      }
+    }
+  };
+  
+  // Expose the function to window for potential use
+  if (typeof window !== 'undefined') {
+    // Define the extended window type
+    const extendedWindow = window as Window & {
+      __restoreWalletConnection?: () => Promise<void>
+    };
+    
+    // Add the function to the window object
+    extendedWindow.__restoreWalletConnection = manuallyRestoreConnection;
+  }
   
   return (
     <WagmiConfig config={config}>

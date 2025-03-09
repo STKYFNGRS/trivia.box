@@ -11,7 +11,7 @@ import LoadingAnimation from '@/components/ui/LoadingAnimation';
 import FeatureIcons from '@/components/FeatureIcons';
 import Footer from '@/components/shared/Footer';
 import GameModalFallback from '@/components/game/GameModalFallback';
-import MobileRestoreNotification from '@/components/ui/MobileRestoreNotification';
+// Mobile notifications removed as requested
 
 // Configuration
 const DEBUG_MODE = true; // Enable for better debugging
@@ -48,21 +48,19 @@ export default function ClientPage() {
   const { gameState, initGame, isLoading, error, isMobile } = useGameState();
   const [shouldRenderGame, setShouldRenderGame] = useState(false);
   const [initializationAttempts, setInitializationAttempts] = useState(0);
-  const [sessionRestored, setSessionRestored] = useState(false);
+  // Removed session restored state
   const [mobileReconnecting, setMobileReconnecting] = useState(false);
   
   // Reference to track if we've attempted connection restoration
   const connectionAttempted = useRef(false);
   
-  // Track session restoration state
+  // Session restoration is now handled silently without notifications
   useEffect(() => {
     // If we're on mobile and game state becomes available, but wasn't before,
     // this might be the result of a session restore
     if (isMobile && gameState && !shouldRenderGame) {
       console.log('🎮 ClientPage: Game session appears to have been restored on mobile');
-      setSessionRestored(true);
-      
-      // Make sure to update the render flag
+      // Silently update the render flag without showing notifications
       setShouldRenderGame(true);
     }
   }, [isMobile, gameState, shouldRenderGame]);
@@ -232,40 +230,44 @@ export default function ClientPage() {
   useEffect(() => {
     const handleGameClose = () => {
       console.log('Game close event received, cleaning up game state');
-      // Use GameState hook to properly reset the game state
-      if (typeof initGame === 'function') {
-        try {
-          // Refresh wallet stats when returning to main screen
-          console.log('Refreshing wallet stats after game close');
-          window.dispatchEvent(new CustomEvent('refreshWalletStats'));
-          
-          // For mobile, ensure wallet connection is maintained
-          if (isMobile && address) {
-            try {
-              console.log('Reinforcing mobile wallet connection after game close');
-              import('@/utils/persistConnection').then(({ saveConnectionState }) => {
-                saveConnectionState(address, chainId || 8453);
-              }).catch(err => console.warn('Error saving connection during game close:', err));
-            } catch (err) {
-              console.warn('Error during mobile wallet preservation:', err);
-            }
+      
+      try {
+        // Force a full state reset
+        setShouldRenderGame(false);
+        
+        // Refresh wallet stats when returning to main screen
+        console.log('Refreshing wallet stats after game close');
+        window.dispatchEvent(new CustomEvent('refreshWalletStats'));
+        
+        // For mobile, ensure wallet connection is maintained
+        if (isMobile && address) {
+          try {
+            console.log('Reinforcing mobile wallet connection after game close');
+            import('@/utils/persistConnection').then(({ saveConnectionState }) => {
+              saveConnectionState(address, chainId || 8453);
+            }).catch(err => console.warn('Error saving connection during game close:', err));
+          } catch (err) {
+            console.warn('Error during mobile wallet preservation:', err);
           }
-          
-          // Delay the state reset slightly to ensure UI transitions properly
-          setTimeout(() => {
-            // Reset internal state
-            setShouldRenderGame(false);
-            setSessionRestored(false);
-          }, 50);
-        } catch (error) {
-          console.error('Error during game state cleanup:', error);
         }
+
+        // Ensure game settings are shown
+        window.dispatchEvent(new CustomEvent('showGameSettings'));
+        
+        // Force redrawing after a slight delay
+        setTimeout(() => {
+          console.log('Redrawing UI after game close');
+          // Final state reset
+          setShouldRenderGame(false);
+        }, 100);
+      } catch (error) {
+        console.error('Error during game state cleanup:', error);
       }
     };
     
     window.addEventListener('gameClose', handleGameClose);
     return () => window.removeEventListener('gameClose', handleGameClose);
-  }, [initGame, isMobile, address, chainId]); 
+  }, [isMobile, address, chainId]); 
   
   // Consider connected when wallet is connected and on Base chain
   const isFullyConnected = isConnected && chainId === 8453;
@@ -281,12 +283,7 @@ export default function ClientPage() {
       
       <LoadingAnimation isLoading={isLoading || mobileReconnecting} />
       
-      {/* Mobile session restore notification */}
-      <MobileRestoreNotification 
-        show={sessionRestored} 
-        onClose={() => setSessionRestored(false)}
-        message="Your game has been restored after refresh"
-      />
+      {/* Mobile session restore notification removed as requested */}
       
       {isFullyConnected && (
         <Header 
@@ -339,16 +336,17 @@ export default function ClientPage() {
                 questions={gameState.questions}
                 sessionId={gameState.sessionId}
                 onClose={() => {
-                    // Use a cleaner approach to reset game state without forced reload
-                  console.log('Game closing, resetting state without page reload');
+                  console.log('Game closing from onClose handler');
+                  // First reset the rendering flag to hide modal
                   setShouldRenderGame(false);
-                  // Allow a short delay before resetting the game state completely
+                  
+                  // Dispatch gameClose event to trigger full state reset
+                  // This will be caught by the listener we set up earlier
                   setTimeout(() => {
-                    // Reset game state to null to fully close the game
                     if (typeof window !== 'undefined') {
                       window.dispatchEvent(new CustomEvent('gameClose'));
                     }
-                  }, 100);
+                  }, 50);
                 }}
                 onGameComplete={async (score) => {
                   console.log('Game completed with score:', score);

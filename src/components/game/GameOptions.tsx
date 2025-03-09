@@ -30,7 +30,10 @@ export default function GameOptions({ onStartGame, isVisible = true }: GameOptio
   useEffect(() => {
     const handleShowGameSettings = () => {
       console.log('GameOptions: showGameSettings event received');
-      setInternallyVisible(true);
+      // Use a short delay to ensure other UI elements are ready
+      setTimeout(() => {
+        setInternallyVisible(true);
+      }, 150);
     };
     
     window.addEventListener('showGameSettings', handleShowGameSettings);

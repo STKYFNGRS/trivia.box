@@ -23,6 +23,8 @@ const MOBILE_BACKUP_KEY = 'mobile_wallet_backup';
  */
 export function saveConnectionState(address?: string, chainId?: number): void {
   try {
+    console.log('Saving connection state', address ? `for ${address.slice(0, 6)}...` : '(no address)');
+    
     // Primary storage (localStorage)
     localStorage.setItem(CONNECTION_STATE_KEY, 'connected');
     localStorage.setItem(CONNECTION_TIMESTAMP_KEY, Date.now().toString());
@@ -66,26 +68,14 @@ export function saveConnectionState(address?: string, chainId?: number): void {
         localStorage.setItem(MOBILE_CONNECTION_KEY, connectionString);
         sessionStorage.setItem(MOBILE_CONNECTION_KEY, connectionString);
         
-        // Create additional backup copies with different keys
-        // This helps with some mobile browsers that might clear certain keys
+        // Create additional backup copies with different keys to avoid issues
+        // with certain mobile browsers that might clear specific keys
         localStorage.setItem(MOBILE_BACKUP_KEY, connectionString);
         sessionStorage.setItem(MOBILE_BACKUP_KEY, connectionString);
-        
-        // For iOS Safari specifically, which sometimes has issues with localStorage
-        try {
-          document.cookie = `mobile_wallet_address=${address || ''}; path=/; max-age=7200; SameSite=Strict`;
-          document.cookie = `mobile_wallet_timestamp=${Date.now()}; path=/; max-age=7200; SameSite=Strict`;
-        } catch (cookieErr) {
-          console.warn('Could not set cookie backup for mobile wallet data', cookieErr);
-        }
-        
-        console.log('Mobile connection state saved with enhanced persistence');
       } catch (mobileErr) {
-        console.error('Error saving mobile-specific connection data:', mobileErr);
+        console.warn('Additional mobile persistence failed', mobileErr);
       }
     }
-    
-    console.log('Connection state saved for possible refresh/restore');
   } catch (err) {
     console.error('Error saving connection state:', err);
   }
@@ -97,8 +87,39 @@ export function saveConnectionState(address?: string, chainId?: number): void {
  */
 export function shouldRestoreConnection(): boolean {
   try {
-    // Mobile devices need special handling due to more aggressive memory management
-    if (isMobileDevice()) {
+    const isMobile = isMobileDevice();
+    const deviceType = isMobile ? 'Mobile' : 'Desktop';
+    
+    // Desktop devices should only restore in specific cases
+    if (!isMobile) {
+      // Check only if there are explicit connection keys and the wallet was definitely connected
+      const hasConnectionState = localStorage.getItem(CONNECTION_STATE_KEY) === 'connected';
+      const hasAddress = localStorage.getItem(CONNECTION_ADDRESS_KEY) !== null;
+      
+      // Log for desktop
+      console.log(`${deviceType} restore check - Connection state: ${hasConnectionState}, Address: ${hasAddress ? 'present' : 'missing'}`);
+      
+      // Only return true for desktop if both conditions are met
+      if (hasConnectionState && hasAddress) {
+        const connectionTimestamp = localStorage.getItem(CONNECTION_TIMESTAMP_KEY);
+        if (connectionTimestamp) {
+          const timestamp = parseInt(connectionTimestamp, 10);
+          const now = Date.now();
+          const ageInMinutes = Math.round((now - timestamp) / (60 * 1000));
+          // Only restore very recent connections on desktop (last 5 minutes)
+          const shouldRestore = ageInMinutes < 5; // 5 minutes
+          
+          console.log(`${deviceType} connection age: ${ageInMinutes} minutes, will ${shouldRestore ? '' : 'NOT '}restore`);
+          return shouldRestore;
+        }
+      }
+      
+      console.log(`${deviceType} restore check - Will NOT restore connection`);
+      return false; // Default to not restoring on desktop
+    }
+    
+    // For mobile devices, use the existing multi-storage approach
+    if (isMobile) {
       // Try consolidated mobile data first (most reliable)
       try {
         // Check multiple storage locations
@@ -115,6 +136,17 @@ export function shouldRestoreConnection(): boolean {
           
           if (timeDiff < MOBILE_MAX_AGE && mobileData.address) {
             console.log('Found valid mobile connection data to restore');
+            return true;
+          }
+        }
+        
+        // Check if prevent_disconnect flag is set (used during game completion)
+        if (localStorage.getItem('prevent_disconnect') === 'true' || 
+            sessionStorage.getItem('prevent_disconnect') === 'true') {
+          const timestamp = parseInt(localStorage.getItem('game_completed_timestamp') || 
+                                   sessionStorage.getItem('game_completed_timestamp') || '0', 10);
+          if (timestamp && Date.now() - timestamp < MOBILE_MAX_AGE) {
+            console.log('Found prevent_disconnect flag from recent game completion');
             return true;
           }
         }
@@ -145,8 +177,12 @@ export function shouldRestoreConnection(): boolean {
         }
         
         // Check for recent game completion
-        if (sessionStorage.getItem('game_completed_address')) {
-          const completionTimestamp = parseInt(sessionStorage.getItem('game_completed_timestamp') || '0', 10);
+        if (sessionStorage.getItem('game_completed_address') || 
+            localStorage.getItem('game_completed_address')) {
+          const completionTimestamp = parseInt(
+            sessionStorage.getItem('game_completed_timestamp') || 
+            localStorage.getItem('game_completed_timestamp') || '0', 10
+          );
           const now = Date.now();
           if (now - completionTimestamp < MOBILE_MAX_AGE) {
             console.log('Found recent game completion data in mobile session');
@@ -159,7 +195,12 @@ export function shouldRestoreConnection(): boolean {
       }
     }
     
-    // Standard localStorage check (fallback)
+    // This is the final fallback check - skip it for desktop to prevent unwanted modals
+    if (!isMobile) {
+      return false;
+    }
+    
+    // Final fallback check only for mobile devices
     const connectionState = localStorage.getItem(CONNECTION_STATE_KEY) || 
                            sessionStorage.getItem(CONNECTION_STATE_KEY);
     const connectionTimestamp = localStorage.getItem(CONNECTION_TIMESTAMP_KEY) || 
@@ -172,10 +213,9 @@ export function shouldRestoreConnection(): boolean {
       const timestamp = parseInt(connectionTimestamp, 10);
       const now = Date.now();
       const timeDiff = now - timestamp;
-      const maxAge = isMobileDevice() ? MOBILE_MAX_AGE : CONNECTION_MAX_AGE;
       
-      // If less than max age old (longer for mobile)
-      return timeDiff < maxAge;
+      // Only for mobile devices
+      return timeDiff < MOBILE_MAX_AGE;
     }
   } catch (err) {
     console.error('Error checking connection state:', err);
@@ -220,11 +260,31 @@ export function getSavedConnectionDetails(): { address?: string; chainId?: numbe
           }
         }
         
-        // Check for game completion data
-        const gameCompletionAddress = sessionStorage.getItem('game_completed_address');
+        // Check for game completion data in both storage types
+        const gameCompletionAddress = 
+          sessionStorage.getItem('game_completed_address') ||
+          localStorage.getItem('game_completed_address');
+          
         if (gameCompletionAddress) {
           console.log('Retrieved connection address from game completion:', gameCompletionAddress);
           return { address: gameCompletionAddress };
+        }
+        
+        // Check for wagmi store directly as a last resort
+        try {
+          const wagmiStore = localStorage.getItem('wagmi.store');
+          if (wagmiStore) {
+            const wagmiData = JSON.parse(wagmiStore);
+            const address = wagmiData?.state?.connections?.[0]?.accounts?.[0];
+            const chainId = wagmiData?.state?.connections?.[0]?.chains?.[0]?.id;
+            
+            if (address) {
+              console.log('Retrieved connection address from wagmi store:', address);
+              return { address, chainId };
+            }
+          }
+        } catch (e) {
+          console.warn('Error checking wagmi store:', e);
         }
       } catch (mobileErr) {
         console.error('Error retrieving mobile connection data:', mobileErr);

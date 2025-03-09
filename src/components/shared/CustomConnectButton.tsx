@@ -1,15 +1,18 @@
 'use client';
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { useAccount, useSwitchChain } from 'wagmi';
 import { base } from 'viem/chains';
 import { modal } from '@/config/appkit';
 import { useAppKitState } from '@reown/appkit/react';
+import { isMobileDevice } from '@/utils/deviceDetect';
+import { saveConnectionState } from '@/utils/persistConnection';
 
 export default function CustomConnectButton() {
-  const { isConnected, chainId } = useAccount();
+  const { isConnected, chainId, address } = useAccount();
   const { switchChain } = useSwitchChain();
   const [isConnecting, setIsConnecting] = useState(false);
   const { status } = useAppKitState();
+  const connectionSavedRef = useRef(false);
 
   // Reset connecting state if AppKit disconnects
   useEffect(() => {
@@ -18,16 +21,33 @@ export default function CustomConnectButton() {
     }
   }, [status, isConnecting]);
 
-  // Debug logs
+  // Debug logs and save connection state on successful connection
   useEffect(() => {
+    // Log state changes
     console.log('[Debug] CustomConnectButton state:', {
       wagmiConnected: isConnected,
       chainId,
+      address: address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null,
       appKitStatus: status,
       isConnecting,
       timestamp: new Date().toISOString()
     });
-  }, [isConnected, chainId, status, isConnecting]);
+    
+    // When connected with an address, save the connection state
+    // This helps ensure persistence
+    if (isConnected && address && chainId && !connectionSavedRef.current) {
+      saveConnectionState(address, chainId);
+      connectionSavedRef.current = true;
+      console.log('[Debug] Connection state saved after successful connection');
+    }
+  }, [isConnected, chainId, status, isConnecting, address]);
+  
+  // Reset saved flag when disconnected
+  useEffect(() => {
+    if (!isConnected) {
+      connectionSavedRef.current = false;
+    }
+  }, [isConnected]);
 
   const handleConnect = useCallback(async () => {
     console.log('[Debug] Connect button clicked');
@@ -42,8 +62,41 @@ export default function CustomConnectButton() {
           await switchChain({ chainId: base.id });
         }
       } else {
+        // On desktop, check if we're already in a connected state that just needs to be recognized
+        const isDesktop = !isMobileDevice();
+        if (isDesktop) {
+          const wagmiStore = localStorage.getItem('wagmi.store');
+          if (wagmiStore) {
+            const wagmiData = JSON.parse(wagmiStore);
+            const hasConnectedAccount = wagmiData?.state?.connections?.[0]?.accounts?.[0];
+            if (hasConnectedAccount) {
+              console.log('[Debug] Found existing connection in wagmi store, not showing modal');
+              setIsConnecting(false);
+              return;
+            }
+          }
+        }
+        
         console.log('[Debug] Opening connect modal');
         await modal.open();
+        
+        // After successful connection, immediately save state
+        // This should help with persistence on both desktop and mobile
+        const wagmiStore = localStorage.getItem('wagmi.store');
+        if (wagmiStore) {
+          try {
+            const wagmiData = JSON.parse(wagmiStore);
+            const connectedAccount = wagmiData?.state?.connections?.[0]?.accounts?.[0];
+            const connectedChain = wagmiData?.state?.connections?.[0]?.chains?.[0]?.id;
+            
+            if (connectedAccount) {
+              console.log('[Debug] Saving new connection state after modal');
+              saveConnectionState(connectedAccount, connectedChain);
+            }
+          } catch (e) {
+            console.warn('[Debug] Error checking wagmi store after connection', e);
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to connect:', error);
