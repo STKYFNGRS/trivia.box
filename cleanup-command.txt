@@ -1,7 +1,0 @@
-To remove the unnecessary fix-achievements.js file, run:
-
-rm src/services/achievements/fix-achievements.js
-
-or just delete it manually from your code editor.
-
-The new AchievementService.ts file is already in place and working correctly.

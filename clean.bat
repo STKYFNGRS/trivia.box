@@ -1,6 +1,0 @@
-@echo off
-echo Cleaning Next.js build cache...
-if exist .next rmdir /s /q .next
-echo Creating empty .next directory...
-mkdir .next
-echo Done! Next.js cache cleaned.

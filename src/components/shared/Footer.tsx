@@ -1,10 +1,65 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { About, PrivacyPolicy, TermsOfService } from '../legal';
+import { Download } from 'lucide-react';
 
 export default function Footer() {
   const [showAbout, setShowAbout] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstallable, setIsInstallable] = useState(false);
+
+  // Listen for the beforeinstallprompt event
+  useEffect(() => {
+    // This event fires when the app can be installed
+    const handleBeforeInstallPrompt = (e: Event) => {
+      // Prevent browser from showing the default prompt
+      e.preventDefault();
+      // Store the event for later use
+      setDeferredPrompt(e);
+      // Show our install button
+      setIsInstallable(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // Check if app is already installed
+    const checkIsInstalled = () => {
+      if (window.matchMedia('(display-mode: standalone)').matches) {
+        setIsInstallable(false);
+      }
+    };
+
+    checkIsInstalled();
+    window.addEventListener('appinstalled', () => {
+      setIsInstallable(false);
+      setDeferredPrompt(null);
+    });
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+
+    // Show the installation prompt
+    deferredPrompt.prompt();
+    
+    // Wait for the user to respond to the prompt
+    const choiceResult = await deferredPrompt.userChoice;
+    
+    // We no longer need the prompt
+    setDeferredPrompt(null);
+    
+    if (choiceResult.outcome === 'accepted') {
+      console.log('User accepted the install prompt');
+    } else {
+      console.log('User dismissed the install prompt');
+    }
+  };
+
   return (
     <footer className="w-full px-4 sm:px-6 py-4 z-40 safe-bottom">
       <div className="max-w-5xl mx-auto">
@@ -36,8 +91,17 @@ export default function Footer() {
               >
                 Terms
               </button>
+              {isInstallable && (
+                <button
+                  onClick={handleInstallClick}
+                  className="flex items-center space-x-1 text-xs xs:text-sm text-amber-500 hover:text-amber-600 transition-colors mobile-touch-target"
+                >
+                  <Download className="h-3 w-3" />
+                  <span>Download App</span>
+                </button>
+              )}
             </div>
-
+            
             <div className="text-xs sm:text-sm text-gray-400">
               © 2024-2025 {' '}
               <a 
@@ -52,7 +116,6 @@ export default function Footer() {
           </div>
         </div>
       </div>
-
       {showAbout && <About onClose={() => setShowAbout(false)} />}
       {showPrivacy && <PrivacyPolicy onClose={() => setShowPrivacy(false)} />}
       {showTerms && <TermsOfService onClose={() => setShowTerms(false)} />}
