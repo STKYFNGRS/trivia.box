@@ -120,6 +120,40 @@ export function shouldRestoreConnection(): boolean {
     
     // For mobile devices, use the existing multi-storage approach
     if (isMobile) {
+    // Always try to use multiple storage types in case one gets cleared
+    // This significantly improves mobile persistence reliability
+    
+    // First check flag that might be set during game completion
+    try {
+      const preventDisconnect = localStorage.getItem('prevent_disconnect') === 'true' || 
+                              sessionStorage.getItem('prevent_disconnect') === 'true';
+      
+      if (preventDisconnect) {
+        const timestamp = parseInt(localStorage.getItem('game_completed_timestamp') || 
+                                 sessionStorage.getItem('game_completed_timestamp') || '0', 10);
+        if (timestamp && Date.now() - timestamp < MOBILE_MAX_AGE) {
+          console.log('Mobile device with prevent_disconnect flag - strongly forcing reconnection');
+          return true;
+        }
+      }
+    } catch (e) {
+      console.warn('Error checking prevent_disconnect flag:', e);
+    }
+    
+    // Try wagmi store directly as a reliable source of truth
+    try {
+      const wagmiStore = localStorage.getItem('wagmi.store');
+      if (wagmiStore) {
+        const wagmiData = JSON.parse(wagmiStore);
+        if (wagmiData?.state?.connections?.[0]?.accounts?.[0]) {
+          console.log('Found active connection in wagmi store - forcing reconnection');
+          // For mobile, this is a clear indicator we should reconnect
+          return true;
+        }
+      }
+    } catch (e) {
+      console.warn('Error checking wagmi store during shouldRestoreConnection:', e);
+    }
       // Try consolidated mobile data first (most reliable)
       try {
         // Check multiple storage locations

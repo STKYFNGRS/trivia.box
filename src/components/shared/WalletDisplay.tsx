@@ -169,25 +169,45 @@ export default function WalletDisplay({ onAchievementsClick, onLeaderboardOpen }
     }
   }, [showLeaderboard, isAchievementsOpen]);
   
-  // Add a forced refresh on initial render
-  useEffect(() => {
-    if (address) {
-      // Clear any existing ENS cache for this address to force fresh resolution
-      console.log('WalletDisplay: Forcing fresh ENS resolution for initial render');
-      
-      // Small timeout to ensure everything is ready
-      const refreshTimer = setTimeout(() => {
-        try {
-          // Force a refresh of wallet data
-          window.dispatchEvent(new CustomEvent('refreshWalletStats'));
-        } catch (error) {
-          console.error('Error triggering refresh:', error);
+  // Enhanced debug logging
+useEffect(() => {
+  console.log('WalletDisplay ENS debug - ENS name:', effectiveEnsName);
+  console.log('WalletDisplay ENS debug - ENS avatar:', effectiveEnsAvatar);
+}, [effectiveEnsName, effectiveEnsAvatar]);
+  
+// Force avatar refresh for any refresh event
+useEffect(() => {
+  const handleWalletStatsRefresh = () => {
+  console.log('WalletDisplay: Force refreshing ENS data due to wallet refresh event');
+  // Recheck ENS data after a refresh event
+  setTimeout(async () => {
+  if (address) {
+    try {
+        // Force clear the ENS cache
+        if (WalletDataService.getInstance) {
+          WalletDataService.getInstance().invalidateCache(address);
+          }
+          
+          // Manually trigger ENS resolution again
+          const name = await lookupEnsName(address);
+          if (name) {
+            setDirectEnsName(name);
+            const avatar = await lookupEnsAvatar(name);
+            setDirectEnsAvatar(avatar);
+          }
+        } catch (e) {
+          console.warn('Error refreshing ENS data:', e);
         }
-      }, 500);
-      
-      return () => clearTimeout(refreshTimer);
-    }
-  }, [address]);
+      }
+    }, 500);
+  };
+  
+  window.addEventListener('refreshWalletStats', handleWalletStatsRefresh);
+  
+  return () => {
+    window.removeEventListener('refreshWalletStats', handleWalletStatsRefresh);
+  };
+}, [address]);
   
   // Handler for wallet button click
   const handleClick = useCallback(async () => {

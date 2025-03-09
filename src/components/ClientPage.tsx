@@ -123,7 +123,7 @@ export default function ClientPage() {
     console.log(`🎲 ClientPage: isLoading=${isLoading}, error=${error || 'none'}`);
   }, [isLoading, error]);
   
-  // Mobile-specific connection restoration
+  // Enhanced mobile-specific connection restoration
   useEffect(() => {
     // Only on mobile and only run this once per page load
     if (isMobile && !connectionAttempted.current && typeof window !== 'undefined') {
@@ -135,14 +135,38 @@ export default function ClientPage() {
           setMobileReconnecting(true);
           console.log('📱 ClientPage: Checking if mobile wallet connection needs restoration');
           
-          const { shouldRestoreConnection } = await import('@/utils/persistConnection');
-          const needsRestore = shouldRestoreConnection();
+          // First, check wagmi store directly as a reliable source of connected state
+          const wagmiStore = window.localStorage.getItem('wagmi.store');
+          let hasActiveConnection = false;
           
-          if (needsRestore && !isConnected) {
+          if (wagmiStore) {
+            try {
+              const wagmiData = JSON.parse(wagmiStore);
+              if (wagmiData?.state?.connections?.[0]?.accounts?.[0]) {
+                console.log('📱 ClientPage: Found active connection in wagmi store');
+                hasActiveConnection = true;
+              }
+            } catch (e) {
+              console.warn('Error checking wagmi store:', e);
+            }
+          }
+          
+          // Checking for any connection persistence markers
+          const persistFlag = localStorage.getItem('prevent_disconnect') === 'true' || 
+                            localStorage.getItem('walletConnectionState') === 'connected';
+                            
+          if (persistFlag) {
+            console.log('📱 ClientPage: Found wallet persistence flag');
+          }
+          
+          const shouldRestore = hasActiveConnection || persistFlag || await import('@/utils/persistConnection')
+            .then(module => module.shouldRestoreConnection())
+            .catch(() => false);
+          
+          if (shouldRestore && !isConnected) {
             console.log('📱 ClientPage: Mobile device needs wallet reconnection');
             
-            // We'll let the QueryProviders handle the actual reconnection
-            // But we'll monitor for successful connection
+            // Keep monitoring for successful connection
             const checkWalletConnected = setInterval(() => {
               // Check if we're now connected
               const wagmiState = window.localStorage.getItem('wagmi.store');
@@ -153,6 +177,9 @@ export default function ClientPage() {
                     console.log('📱 ClientPage: Wallet successfully reconnected');
                     clearInterval(checkWalletConnected);
                     setMobileReconnecting(false);
+                    
+                    // Force refresh stats
+                    window.dispatchEvent(new CustomEvent('refreshWalletStats'));
                   }
                 } catch (e) {
                   console.warn('Error parsing wagmi state:', e);
