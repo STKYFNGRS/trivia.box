@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { log } from '@/utils/logger';
 import WalletDataService, { WalletData } from '@/services/wallet/WalletDataService';
 
 // Default state for when no wallet is connected or data is loading
@@ -57,7 +58,7 @@ export function useWalletData(address: string | undefined) {
       const walletData = await walletService.fetchWalletData(address);
       
       // Debug log to check what's coming back from the API
-      console.log('Wallet data received:', JSON.stringify({
+      log.debug('Wallet data received:', { component: 'useWalletData', meta: 
         ensName: walletData.ensName,
         ensAvatar: walletData.ensAvatar ? 'Avatar present' : 'No avatar',
         stats: walletData.stats ? {
@@ -67,9 +68,9 @@ export function useWalletData(address: string | undefined) {
           gamesPlayed: walletData.stats.gamesPlayed
         } : null,
         leaderboardCount: walletData.leaderboard?.length || 0
-      }, null, 2));
+      }});
       if (walletData.stats) {
-        console.log('Best streak from API:', walletData.stats.bestStreak);
+        log.debug(`Best streak from API: ${walletData.stats.bestStreak}`, { component: 'useWalletData' });
       }
       
       if (isMounted.current) {
@@ -135,7 +136,7 @@ export function useWalletData(address: string | undefined) {
       const isDevelopment = window.location.hostname === 'localhost' || 
                            window.location.hostname === '127.0.0.1';
       (window as any).ENV_TYPE = isDevelopment ? 'development' : 'production';
-      console.log(`useWalletData: Setting environment to ${isDevelopment ? 'development' : 'production'} mode before fetch`);
+      log.info(`Setting environment to ${isDevelopment ? 'development' : 'production'} mode before fetch`, { component: 'useWalletData' });
     }
     
     if (address && !hasInitiallyFetched.current) {
@@ -143,7 +144,7 @@ export function useWalletData(address: string | undefined) {
       // Give a brief delay to ensure environment setting has propagated
       setTimeout(() => {
         if (isMounted.current) {
-          console.log('Starting initial fetch with environment type set');
+          log.info('Starting initial fetch with environment type set', { component: 'useWalletData' });
           fetchData();
         }
       }, 100);

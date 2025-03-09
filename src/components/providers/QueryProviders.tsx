@@ -108,16 +108,32 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
     const restoreConnection = async () => {
       if (reconnectionAttempted) return; // Prevent multiple attempts
       
-      if (shouldRestoreConnection()) {
-        console.log('Found connection state, silently restoring without modal...');
-        setReconnectionAttempted(true);
+      // Try consolidated mobile data first (most reliable)
+      try {
+        // Get wagmi state directly - this is the most reliable source
+        const wagmiStore = localStorage.getItem('wagmi.store');
+        if (wagmiStore) {
+          try {
+            const wagmiData = JSON.parse(wagmiStore);
+            const address = wagmiData?.state?.connections?.[0]?.accounts?.[0];
+            if (address) {
+              // Always force reconnect on mobile if we have an address
+              markConnectionRestored();
+              console.log('Found active wagmi connection on mobile, session restored');
+              return;
+            }
+          } catch (e) {
+            console.warn('Error parsing wagmi store:', e);
+          }
+        }
         
-        // Get saved details but don't show any modal
-        const savedDetails = getSavedConnectionDetails();
-        
-        // Just mark as restored silently
-        markConnectionRestored();
-        console.log('Connection marked as restored silently - no modal shown');
+        // Mark as restored even if there's no specific data - just in case
+        if (shouldRestoreConnection()) {
+          markConnectionRestored();
+          console.log('Connection marked as restored based on persistence check');
+        }
+      } catch (e) {
+        console.warn('Error during mobile connection restoration:', e);
       }
     };
     

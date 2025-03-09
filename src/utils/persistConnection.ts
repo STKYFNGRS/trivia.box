@@ -90,6 +90,37 @@ export function shouldRestoreConnection(): boolean {
     const isMobile = isMobileDevice();
     const deviceType = isMobile ? 'Mobile' : 'Desktop';
     
+    // SIMPLER MOBILE DETECTION:
+    // For mobile devices, ALWAYS try to restore if we have any connection data
+    // This is more permissive but fixes issues with mobile reconnection
+    if (isMobile) {
+      // Check for ANY connection data in ANY storage medium
+      const hasAnyConnectionData = [
+        // Check wagmi store - the most reliable source
+        localStorage.getItem('wagmi.store'),
+        
+        // Check our custom storage keys
+        localStorage.getItem(MOBILE_CONNECTION_KEY),
+        sessionStorage.getItem(MOBILE_CONNECTION_KEY),
+        localStorage.getItem(MOBILE_BACKUP_KEY),
+        sessionStorage.getItem(MOBILE_BACKUP_KEY),
+        localStorage.getItem(CONNECTION_STATE_KEY),
+        sessionStorage.getItem(CONNECTION_STATE_KEY),
+        localStorage.getItem(CONNECTION_ADDRESS_KEY),
+        sessionStorage.getItem(CONNECTION_ADDRESS_KEY),
+        
+        // Check game completion flags
+        localStorage.getItem('game_completed_address'),
+        sessionStorage.getItem('game_completed_address'),
+        localStorage.getItem('prevent_disconnect'),
+        sessionStorage.getItem('prevent_disconnect')
+      ].some(item => item && item !== 'null');
+      
+      console.log(`${deviceType} restore check: ${hasAnyConnectionData ? 'WILL RESTORE' : 'No connection data found'}`);
+      return hasAnyConnectionData;
+    }
+    
+    // For desktop, keep existing more restrictive logic
     // Desktop devices should only restore in specific cases
     if (!isMobile) {
       // Check only if there are explicit connection keys and the wallet was definitely connected
@@ -118,144 +149,11 @@ export function shouldRestoreConnection(): boolean {
       return false; // Default to not restoring on desktop
     }
     
-    // For mobile devices, use the existing multi-storage approach
-    if (isMobile) {
-    // Always try to use multiple storage types in case one gets cleared
-    // This significantly improves mobile persistence reliability
-    
-    // First check flag that might be set during game completion
-    try {
-      const preventDisconnect = localStorage.getItem('prevent_disconnect') === 'true' || 
-                              sessionStorage.getItem('prevent_disconnect') === 'true';
-      
-      if (preventDisconnect) {
-        const timestamp = parseInt(localStorage.getItem('game_completed_timestamp') || 
-                                 sessionStorage.getItem('game_completed_timestamp') || '0', 10);
-        if (timestamp && Date.now() - timestamp < MOBILE_MAX_AGE) {
-          console.log('Mobile device with prevent_disconnect flag - strongly forcing reconnection');
-          return true;
-        }
-      }
-    } catch (e) {
-      console.warn('Error checking prevent_disconnect flag:', e);
-    }
-    
-    // Try wagmi store directly as a reliable source of truth
-    try {
-      const wagmiStore = localStorage.getItem('wagmi.store');
-      if (wagmiStore) {
-        const wagmiData = JSON.parse(wagmiStore);
-        if (wagmiData?.state?.connections?.[0]?.accounts?.[0]) {
-          console.log('Found active connection in wagmi store - forcing reconnection');
-          // For mobile, this is a clear indicator we should reconnect
-          return true;
-        }
-      }
-    } catch (e) {
-      console.warn('Error checking wagmi store during shouldRestoreConnection:', e);
-    }
-      // Try consolidated mobile data first (most reliable)
-      try {
-        // Check multiple storage locations
-        const mobileDataStr = 
-          localStorage.getItem(MOBILE_CONNECTION_KEY) || 
-          sessionStorage.getItem(MOBILE_CONNECTION_KEY) ||
-          localStorage.getItem(MOBILE_BACKUP_KEY) ||
-          sessionStorage.getItem(MOBILE_BACKUP_KEY);
-        
-        if (mobileDataStr) {
-          const mobileData = JSON.parse(mobileDataStr);
-          const now = Date.now();
-          const timeDiff = now - mobileData.timestamp;
-          
-          if (timeDiff < MOBILE_MAX_AGE && mobileData.address) {
-            console.log('Found valid mobile connection data to restore');
-            return true;
-          }
-        }
-        
-        // Check if prevent_disconnect flag is set (used during game completion)
-        if (localStorage.getItem('prevent_disconnect') === 'true' || 
-            sessionStorage.getItem('prevent_disconnect') === 'true') {
-          const timestamp = parseInt(localStorage.getItem('game_completed_timestamp') || 
-                                   sessionStorage.getItem('game_completed_timestamp') || '0', 10);
-          if (timestamp && Date.now() - timestamp < MOBILE_MAX_AGE) {
-            console.log('Found prevent_disconnect flag from recent game completion');
-            return true;
-          }
-        }
-        
-        // If no consolidated data found, try checking cookie (iOS Safari fallback)
-        if (document.cookie) {
-          const addressMatch = document.cookie.match(/mobile_wallet_address=([^;]+)/);
-          const timestampMatch = document.cookie.match(/mobile_wallet_timestamp=([^;]+)/);
-          
-          if (addressMatch && timestampMatch && addressMatch[1]) {
-            const timestamp = parseInt(timestampMatch[1], 10);
-            const now = Date.now();
-            if (now - timestamp < MOBILE_MAX_AGE) {
-              console.log('Found valid mobile connection cookie data');
-              return true;
-            }
-          }
-        }
-        
-        // Check for recent game completion or explicit save flags
-        if (sessionStorage.getItem('wallet_explicit_save') === 'true') {
-          const saveTimestamp = parseInt(sessionStorage.getItem('wallet_save_timestamp') || '0', 10);
-          const now = Date.now();
-          if (now - saveTimestamp < MOBILE_MAX_AGE) {
-            console.log('Found explicit wallet save flag in mobile session');
-            return true;
-          }
-        }
-        
-        // Check for recent game completion
-        if (sessionStorage.getItem('game_completed_address') || 
-            localStorage.getItem('game_completed_address')) {
-          const completionTimestamp = parseInt(
-            sessionStorage.getItem('game_completed_timestamp') || 
-            localStorage.getItem('game_completed_timestamp') || '0', 10
-          );
-          const now = Date.now();
-          if (now - completionTimestamp < MOBILE_MAX_AGE) {
-            console.log('Found recent game completion data in mobile session');
-            return true;
-          }
-        }
-      } catch (mobileErr) {
-        console.error('Error parsing mobile connection data:', mobileErr);
-        // Continue to standard checks if mobile-specific check fails
-      }
-    }
-    
-    // This is the final fallback check - skip it for desktop to prevent unwanted modals
-    if (!isMobile) {
-      return false;
-    }
-    
-    // Final fallback check only for mobile devices
-    const connectionState = localStorage.getItem(CONNECTION_STATE_KEY) || 
-                           sessionStorage.getItem(CONNECTION_STATE_KEY);
-    const connectionTimestamp = localStorage.getItem(CONNECTION_TIMESTAMP_KEY) || 
-                              sessionStorage.getItem(CONNECTION_TIMESTAMP_KEY);
-    const connectedAddress = localStorage.getItem(CONNECTION_ADDRESS_KEY) || 
-                            sessionStorage.getItem(CONNECTION_ADDRESS_KEY);
-    
-    // Check if we have a saved state that's not too old
-    if (connectionState === 'connected' && connectionTimestamp && connectedAddress) {
-      const timestamp = parseInt(connectionTimestamp, 10);
-      const now = Date.now();
-      const timeDiff = now - timestamp;
-      
-      // Only for mobile devices
-      return timeDiff < MOBILE_MAX_AGE;
-    }
+    return false;
   } catch (err) {
     console.error('Error checking connection state:', err);
+    return false;
   }
-  
-  return false;
 }
 
 /**

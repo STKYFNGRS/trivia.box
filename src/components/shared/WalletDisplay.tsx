@@ -1,5 +1,6 @@
 'use client';
 import { useState, useCallback, useEffect, memo } from 'react';
+import { log } from '@/utils/logger';
 import { useAccount } from 'wagmi';
 import { modal } from '@/config/appkit';
 import { useAppKitState } from '@reown/appkit/react';
@@ -41,9 +42,10 @@ const WalletButton = memo(({
 }) => {
   // Format address display
   const displayName = ensName || (address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null);
-  console.log('WalletButton render with address:', address);
-  console.log('WalletButton render with ensName:', ensName);
-  console.log('WalletButton render with ensAvatar:', ensAvatar);
+  log.debug('WalletButton render', { 
+    component: 'WalletButton', 
+    meta: { address, ensName, hasAvatar: !!ensAvatar } 
+  });
 
   return (
     <button
@@ -116,17 +118,17 @@ export default function WalletDisplay({ onAchievementsClick, onLeaderboardOpen }
           (window as any).ENV_TYPE = isDevelopment ? 'development' : 'production';
         }
         
-        console.log('Direct ENS resolution attempt for address:', address);
+        log.debug(`Direct ENS resolution attempt for address: ${address}`, { component: 'WalletDisplay' });
         const name = await lookupEnsName(address);
         
         if (name && mounted) {
-          console.log('Direct ENS name resolved:', name);
+          log.debug(`Direct ENS name resolved: ${name}`, { component: 'WalletDisplay' });
           setDirectEnsName(name);
           
           // Now try to get avatar
           const avatar = await lookupEnsAvatar(name);
           if (avatar && mounted) {
-            console.log('Direct ENS avatar resolved:', avatar);
+            log.debug(`Direct ENS avatar resolved`, { component: 'WalletDisplay' });
             setDirectEnsAvatar(avatar);
           }
         }
@@ -152,7 +154,7 @@ export default function WalletDisplay({ onAchievementsClick, onLeaderboardOpen }
   
   // Handle image loading error
   const handleImageError = useCallback((event: React.SyntheticEvent<HTMLImageElement>) => {
-    console.warn('Avatar image failed to load, using fallback');
+    log.warn('Avatar image failed to load, using fallback', { component: 'WalletDisplay' });
     
     event.currentTarget.style.display = 'none';
     const nextSibling = event.currentTarget.nextSibling as HTMLElement;
@@ -171,14 +173,19 @@ export default function WalletDisplay({ onAchievementsClick, onLeaderboardOpen }
   
   // Enhanced debug logging
 useEffect(() => {
-  console.log('WalletDisplay ENS debug - ENS name:', effectiveEnsName);
-  console.log('WalletDisplay ENS debug - ENS avatar:', effectiveEnsAvatar);
+  log.debug('ENS values updated', { 
+    component: 'WalletDisplay', 
+    meta: { 
+      name: effectiveEnsName, 
+      hasAvatar: !!effectiveEnsAvatar 
+    }
+  });
 }, [effectiveEnsName, effectiveEnsAvatar]);
   
 // Force avatar refresh for any refresh event
 useEffect(() => {
   const handleWalletStatsRefresh = () => {
-  console.log('WalletDisplay: Force refreshing ENS data due to wallet refresh event');
+  log.info('Force refreshing ENS data due to wallet refresh event', { component: 'WalletDisplay' });
   // Recheck ENS data after a refresh event
   setTimeout(async () => {
   if (address) {

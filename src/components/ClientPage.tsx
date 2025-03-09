@@ -54,16 +54,42 @@ export default function ClientPage() {
   // Reference to track if we've attempted connection restoration
   const connectionAttempted = useRef(false);
   
-  // Session restoration is now handled silently without notifications
+  // Enhanced mobile initialization - force immediate state checks on mobile
   useEffect(() => {
-    // If we're on mobile and game state becomes available, but wasn't before,
-    // this might be the result of a session restore
-    if (isMobile && gameState && !shouldRenderGame) {
-      console.log('🎮 ClientPage: Game session appears to have been restored on mobile');
-      // Silently update the render flag without showing notifications
-      setShouldRenderGame(true);
+    // Special Samsung Note 8 handling - works around Chrome issues on this device
+    if (isMobile && typeof window !== 'undefined') {
+      const userAgent = window.navigator.userAgent.toLowerCase();
+      const isSamsungDevice = userAgent.includes('sm-n9');
+      
+      // Fix for the landing page appearing on refresh issue
+      if (isSamsungDevice) {
+        // Wait just a moment to let React hydration complete
+        setTimeout(() => {
+          // Get wallet state directly
+          try {
+            const wagmiStore = localStorage.getItem('wagmi.store');
+            if (wagmiStore) {
+              try {
+                const wagmiData = JSON.parse(wagmiStore);
+                const hasAccount = wagmiData?.state?.connections?.[0]?.accounts?.[0];
+                
+                // Force a wallet state refresh if we've got an account but don't appear connected
+                if (hasAccount && !isConnected) {
+                  console.log('🔄 Samsung device detected with wallet data but no active connection - forcing refresh');
+                  if (window.location.href.includes('#')) {
+                    // Remove hash to ensure full reload
+                    window.location.href = window.location.href.split('#')[0];
+                  } else {
+                    window.location.reload();
+                  }
+                }
+              } catch (e) {}
+            }
+          } catch (e) {}
+        }, 500);
+      }
     }
-  }, [isMobile, gameState, shouldRenderGame]);
+  }, [isMobile, isConnected]);
   
   // Handle beforeunload event differently on mobile vs desktop
   useEffect(() => {

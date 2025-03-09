@@ -1,4 +1,5 @@
 import React, { memo, useEffect } from 'react';
+import { log } from '@/utils/logger';
 import { Hash, Flame, Target, Trophy } from 'lucide-react';
 import SkeletonLoader from '../ui/SkeletonLoader';
 
@@ -18,8 +19,8 @@ const StatsDisplay = memo(function StatsDisplay({ stats, isLoading = false, onRa
   // Add debug logging to see what stats are really being received
   useEffect(() => {
     if (stats) {
-      console.log('StatsDisplay received stats:', JSON.stringify(stats, null, 2));
-      console.log('Best streak value:', stats.bestStreak);
+      log.debug('StatsDisplay received stats:', { component: 'StatsDisplay', meta: stats });
+      log.debug(`Best streak value: ${stats.bestStreak}`, { component: 'StatsDisplay' });
     }
   }, [stats]);
   // Loading state
@@ -63,7 +64,7 @@ const StatsDisplay = memo(function StatsDisplay({ stats, isLoading = false, onRa
             {(() => {
               // Use a function to ensure the value is dynamically computed
               const streakValue = typeof stats.bestStreak === 'number' ? stats.bestStreak : 0;
-              console.log('Rendering streak value:', streakValue);
+              log.debug(`Rendering streak value: ${streakValue}`, { component: 'StatsDisplay' });
               return streakValue;
             })()}
           </div>

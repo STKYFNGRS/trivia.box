@@ -3,6 +3,7 @@ import { GameOrchestrator } from '../services/gameOrchestrator';
 import { GameQuestionService } from '../services/client/GameQuestionService';
 import { AchievementService } from '@/services/achievements/AchievementService';
 import { EventEmitter } from 'events';
+import { log } from '@/utils/logger';
 import { GameState, GameConfig } from '@/types/game';
 import { safelyStoreSessionData, safelyGetSessionData, isMobileDevice } from '@/utils/deviceDetect';
 
@@ -13,9 +14,9 @@ const SESSION_CLEANUP_TIMEOUT = 2000; // Wait 2 seconds for cleanup
 const SESSION_CREATION_TIMEOUT = 30000; // Increase timeout to 30 seconds for session creation
 const DEBUG_MODE = true; // Enable for debugging
 
-// Debug logger - logs to console regardless of DEBUG_MODE for critical functions
-const debugLog = (...args: any[]) => {
-  console.log(...args);
+// Debug logger - logs using our structured logger
+const debugLog = (message: string, meta?: any) => {
+  log.debug(message, { component: 'GameController', meta });
 };
 
 export class GameController extends EventEmitter {
@@ -41,7 +42,7 @@ export class GameController extends EventEmitter {
     this.setMaxListeners(20);
     
     // Log constructor for debugging
-    console.log('🎲 GameController: constructor called');
+    log.info('GameController instantiated', { component: 'GameController' });
     
     // Try to restore game state from sessionStorage
     try {

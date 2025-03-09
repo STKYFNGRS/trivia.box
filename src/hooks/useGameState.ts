@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { log } from '@/utils/logger';
 import { useAccount } from 'wagmi';
 import { modal } from '@/config/appkit';
 import useSWR from 'swr';
@@ -15,8 +16,8 @@ const MAX_INIT_ATTEMPTS = 3;
 const DEBUG_MODE = true; // Enable for better debugging
 
 // Debug logger to track game initialization
-const debugLog = (...args: any[]) => {
-  console.log(...args); // Always log to make debugging easier
+const debugLog = (message: string, meta?: any) => {
+  log.debug(message, { component: 'useGameState', meta });
 };
 
 export function useGameState() {
@@ -47,18 +48,27 @@ export function useGameState() {
 
   // Subscribe to controller state changes with improved error handling
   useEffect(() => {
-    console.log('🎮 useGameState: Setting up stateChange listener');
+    log.debug('Setting up stateChange listener', { component: 'useGameState' });
     
     // Create a handler that explicitly calls setGameState
     const handleStateChange = (newState: GameState | null) => {
-      console.log('🎮 useGameState: Received state change event:', newState ? 'Valid Game State' : 'Null');
+      log.debug('Received state change event', { 
+        component: 'useGameState', 
+        meta: { hasState: !!newState } 
+      });
       if (newState) {
-        console.log(`🎮 useGameState: received state has sessionId: ${newState.sessionId} and ${newState.questions?.length || 0} questions`);
+        log.debug('Game state details', { 
+          component: 'useGameState',
+          meta: { 
+            sessionId: newState.sessionId, 
+            questionCount: newState.questions?.length || 0 
+          }
+        });
         
         // Force state update immediately (no timeout)
         setGameState(newState);
         initializationComplete.current = true;
-        console.log('🎮 useGameState: Game state updated successfully');
+        log.debug('Game state updated successfully', { component: 'useGameState' });
       } else {
         // For null state updates
         setGameState(null);
@@ -71,14 +81,14 @@ export function useGameState() {
     // Check if we already have a state in the controller
     const currentState = gameController.getGameState();
     if (currentState) {
-      console.log('🎮 useGameState: Found existing game state in controller');
+      log.debug('Found existing game state in controller', { component: 'useGameState' });
       handleStateChange(currentState);
       
       // Handle mobile refresh case by showing a toast or notification
       if (typeof window !== 'undefined') {
         try {
           if (sessionStorage.getItem('triviabox_gamestate')) {
-            console.log('🎮 useGameState: Detected restored game state after page refresh');
+            log.debug('Detected restored game state after page refresh', { component: 'useGameState' });
             // Here you could show a toast notification that the game was restored
           }
         } catch (e) {
@@ -88,7 +98,7 @@ export function useGameState() {
     }
     
     return () => {
-      console.log('🎮 useGameState: Removing stateChange listener');
+      log.debug('Removing stateChange listener', { component: 'useGameState' });
       gameController.off('stateChange', handleStateChange);
     };
   }, [gameController]);
@@ -97,11 +107,11 @@ export function useGameState() {
   useEffect(() => {
     const attemptRecovery = async () => {
       if (!gameState && user) {
-        console.log('🎮 useGameState: Attempting to recover session on page load/refresh');
+        log.debug('Attempting to recover session on page load/refresh', { component: 'useGameState' });
         try {
           const recovered = await gameController.attemptSessionRecovery();
           if (recovered) {
-            console.log('🎮 useGameState: Successfully recovered session after page refresh');
+            log.debug('Successfully recovered session after page refresh', { component: 'useGameState' });
           }
         } catch (error) {
           console.error('🎮 useGameState: Error recovering session:', error);
