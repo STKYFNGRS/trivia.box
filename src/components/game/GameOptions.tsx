@@ -105,9 +105,9 @@ export default function GameOptions({ onStartGame, isVisible = true }: GameOptio
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="relative w-full max-w-4xl mt-28 pt-16 md:pt-10 md:mt-24"
+          className="relative w-full max-w-4xl mt-10 xs:mt-16 md:mt-20 pt-6 md:pt-10"
         >
-          <div className="rounded-2xl bg-gradient-to-br from-gray-900/90 to-gray-800/90 p-6 backdrop-blur-lg border border-amber-500/20 overflow-y-auto max-h-[80vh]">
+          <div className="rounded-2xl bg-black/90 p-4 xs:p-6 backdrop-blur-lg border border-amber-500/20 overflow-y-auto max-h-[90vh] md:max-h-[80vh]">
             {/* Header */}
             <div className="mb-6 flex items-center">
               <div className="flex items-center gap-3 justify-center w-full relative">
@@ -123,7 +123,7 @@ export default function GameOptions({ onStartGame, isVisible = true }: GameOptio
                 <div className="text-base font-medium text-gray-200">
                   Number of Questions:
                 </div>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-3 gap-2 xs:gap-4">
                   {questionCounts.map(count => (
                     <button
                       key={count}
@@ -145,7 +145,7 @@ export default function GameOptions({ onStartGame, isVisible = true }: GameOptio
                 <div className="text-base font-medium text-gray-200">
                   Difficulty:
                 </div>
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-4 gap-2 xs:gap-3">
                   {difficulties.map(difficulty => (
                     <button
                       key={difficulty.id}
@@ -167,7 +167,7 @@ export default function GameOptions({ onStartGame, isVisible = true }: GameOptio
                 <div className="text-base font-medium text-gray-200">
                   Category:
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 xs:grid-cols-3 gap-2 xs:gap-3 max-h-[250px] overflow-y-auto pr-1 pb-2">
                   {categories.map(category => (
                     <button
                       key={category.id}
@@ -186,11 +186,11 @@ export default function GameOptions({ onStartGame, isVisible = true }: GameOptio
             </div>
 
             {/* Start Game Button */}
-            <div className="flex justify-center mt-6">
+            <div className="flex justify-center mt-4 sm:mt-6 pb-4">
               <button
                 onClick={handleStartGame}
                 disabled={!selectedCount || !selectedCategory || !selectedDifficulty}
-                className={`relative px-8 py-4 rounded-lg font-bold transition-all ${
+                className={`relative px-6 sm:px-8 py-3 sm:py-4 rounded-lg font-bold transition-all w-full sm:w-auto sm:min-w-[200px] ${
                   selectedCount && selectedCategory && selectedDifficulty
                     ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-gray-900 shadow-lg shadow-amber-600/20 hover:transform hover:scale-105 hover:shadow-lg hover:shadow-amber-600/30 border border-amber-500/40'
                     : 'bg-gray-800/60 text-gray-400 border border-gray-700/40 cursor-not-allowed'

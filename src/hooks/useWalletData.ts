@@ -58,7 +58,7 @@ export function useWalletData(address: string | undefined) {
       const walletData = await walletService.fetchWalletData(address);
       
       // Debug log to check what's coming back from the API
-      log.debug('Wallet data received:', { component: 'useWalletData', meta: 
+      log.debug('Wallet data received:', { component: 'useWalletData', meta: {
         ensName: walletData.ensName,
         ensAvatar: walletData.ensAvatar ? 'Avatar present' : 'No avatar',
         stats: walletData.stats ? {

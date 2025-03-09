@@ -614,13 +614,13 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
           className="relative w-full max-w-5xl mt-2 mb-2 xs:mt-4 xs:mb-4 md:mt-8 md:mb-8 pt-2 xs:pt-4 md:pt-8"
           ref={modalRef}
         >
-          <div className="rounded-2xl bg-black/90 p-6 xs:p-8 border border-amber-500/20 overflow-hidden flex flex-col max-w-full mx-auto">
+          <div className="rounded-2xl bg-black/90 p-4 xs:p-6 border border-amber-500/20 overflow-hidden flex flex-col max-w-full mx-auto">
             {error ? (
-              <div className="text-center p-8">
+              <div className="text-center p-2 xs:p-4">
                 <h2 className="text-xl font-bold mb-4 text-red-500">{error}</h2>
               </div>
             ) : gameEnded ? (
-              <div className="text-center p-4">
+              <div className="text-center p-3 xs:p-4">
                 <h2 className="text-2xl font-bold text-white mb-6">Game Complete!</h2>
                 
                 {finalStats && (
@@ -665,7 +665,7 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
               </div>
             ) : (
               <div className="space-y-6">
-                <div className="text-sm xs:text-base text-gray-200 py-2 px-4 bg-gray-800/60 rounded-lg border border-gray-700/40 inline-block shadow-sm">
+                <div className="text-sm xs:text-base text-gray-200 py-1 xs:py-2 px-2 xs:px-4 bg-gray-800/60 rounded-lg border border-gray-700/40 inline-block shadow-sm">
                   Question {currentQuestionIndex + 1} of {questions.length}
                 </div>
                 {!gameEnded && currentQuestion && (
@@ -680,16 +680,16 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
                       />
                     </div>
                     
-                    <div className="flex items-center justify-between mb-4 gap-2 flex-wrap sm:flex-nowrap">
-                      <div className="sm:w-1/3 w-full mb-2 sm:mb-0">
-                        <div className="text-gray-300 py-2 px-4 bg-green-900/20 rounded-lg border border-green-500/30 inline-block sm:text-sm text-xs">
+                    <div className="flex items-center justify-between mb-3 gap-1 xs:gap-2 flex-wrap sm:flex-nowrap">
+                      <div className="sm:w-1/3 w-full mb-1 sm:mb-0">
+                        <div className="text-gray-300 py-1 xs:py-2 px-2 xs:px-4 bg-green-900/20 rounded-lg border border-green-500/30 inline-block sm:text-sm text-xs">
                           Points Available: <span className="font-bold text-green-400">{potentialPoints}</span>
                         </div>
                       </div>
                       
                       {/* Score display - always visible and centered */}
-                      <div className="sm:w-1/3 w-full mb-2 sm:mb-0 flex sm:justify-center justify-start">
-                        <div className="text-gray-300 py-2 px-4 bg-blue-900/20 rounded-lg border border-blue-500/30 inline-block sm:text-sm text-xs">
+                      <div className="sm:w-1/3 w-full mb-1 sm:mb-0 flex sm:justify-center justify-start">
+                        <div className="text-gray-300 py-1 xs:py-2 px-2 xs:px-4 bg-blue-900/20 rounded-lg border border-blue-500/30 inline-block sm:text-sm text-xs">
                           Score: <span className="font-bold text-amber-400">{score}</span>
                         </div>
                       </div>
@@ -697,29 +697,29 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
                       {/* Show streak if present - always on the right, or empty placeholder */}
                       <div className="sm:w-1/3 w-full flex sm:justify-end justify-start">
                         {currentStreak > 0 && (
-                          <div className="text-orange-400 font-bold flex items-center gap-1 py-2 px-4 bg-amber-900/20 rounded-lg border border-amber-500/30 sm:text-sm text-xs">
+                          <div className="text-orange-400 font-bold flex items-center gap-1 py-1 xs:py-2 px-2 xs:px-4 bg-amber-900/20 rounded-lg border border-amber-500/30 sm:text-sm text-xs">
                             <span>Streak:</span> {currentStreak}<span className="ml-0.5">🔥</span>
                           </div>
                         )}
                       </div>
                     </div>
-                    <div className="relative bg-gray-800/80 p-4 xs:p-5 rounded-xl border border-blue-500/30 mb-4 md:mb-6 shadow-md overflow-hidden group">
+                    <div className="relative bg-gray-800/80 p-3 xs:p-4 rounded-xl border border-blue-500/30 mb-3 md:mb-6 shadow-md overflow-hidden group">
                       {/* Shimmering blue outline effect */}
                       <div className="absolute inset-0 opacity-20 bg-blue-400 blur-[10px] group-hover:opacity-30 transition-opacity duration-500"></div>
                       <div className="absolute inset-0 border border-blue-400/30 rounded-xl"></div>
                       <div className="relative z-10">
-                        <h3 className="text-base xs:text-lg md:text-xl text-white">{currentQuestion.content}</h3>
+                        <h3 className="text-base xs:text-lg text-white">{currentQuestion.content}</h3>
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-1 gap-4">
+                    <div className="grid grid-cols-1 gap-2 xs:gap-4">
                       {shuffledAnswers.map((answer, index) => (
                         <button
                           key={`${currentQuestionIndex}-${index}`}
                           onClick={() => handleAnswerSelect(answer)}
                           disabled={revealed}
                           className={`
-                            w-full p-4 text-left rounded-xl transition-all duration-300 shadow-sm
+                            w-full p-3 xs:p-4 text-left rounded-xl transition-all duration-300 shadow-sm
                             ${revealed
                               ? answer === currentQuestion.correct_answer
                                 ? 'bg-gradient-to-br from-green-600/80 to-green-700/80 text-white shadow-lg shadow-green-500/20 transform scale-105 border border-green-400/30'
