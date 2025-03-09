@@ -1,18 +1,58 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface LoadingAnimationProps {
   isLoading: boolean;
+  inline?: boolean;
 }
 
-export default function LoadingAnimation({ isLoading, inline = false }: { isLoading: boolean; inline?: boolean }) {
+export default function LoadingAnimation({ isLoading, inline = false }: LoadingAnimationProps) {
   // This component displays an animated loading screen with:
   // 1. Fixed position "Loading..." text where only the dots animate
   // 2. Orbital rings that rotate on different planes
   // 3. Transparent background to show existing app background
   const [dots, setDots] = useState("");
+  
+  // Check if we should skip loading on initial/refresh
+  const [shouldDisplay, setShouldDisplay] = useState(false);
+  const initialLoadChecked = useRef(false);
+  
+  // Special check for page refresh
+  useEffect(() => {
+    if (!initialLoadChecked.current) {
+      initialLoadChecked.current = true;
+      
+      // On initial load or page refresh, don't immediately show the loader
+      const isInitialLoadOrRefresh = !sessionStorage.getItem('app_initialized');
+      if (isInitialLoadOrRefresh) {
+        // Mark as initialized
+        sessionStorage.setItem('app_initialized', 'true');
+        // Don't show loader on initial load/refresh
+        setShouldDisplay(false);
+      } else {
+        // For subsequent state changes, follow isLoading prop
+        setShouldDisplay(isLoading);
+      }
+    } else {
+      // For subsequent state changes, follow isLoading prop
+      setShouldDisplay(isLoading);
+    }
+    
+    // Mobile specific handling - don't block UI on page refresh
+    if (typeof window !== 'undefined' && !inline) {
+      // Check if this is likely a page refresh or initial load
+      const isRefresh = window.performance && 
+                      window.performance.navigation && 
+                      window.performance.navigation.type === 1;
+      
+      if (isRefresh) {
+        // Don't show loading overlay on refresh
+        setShouldDisplay(false);
+      }
+    }
+  }, [isLoading, inline]);
   
   // Animated dots with fixed position
   useEffect(() => {
@@ -27,7 +67,7 @@ export default function LoadingAnimation({ isLoading, inline = false }: { isLoad
     }, 400);
     
     // Hide header and game settings when loading (only for full-screen mode)
-    if (isLoading && !inline) {
+    if (isLoading && !inline && shouldDisplay) {
       document.body.classList.add('loading-active');
       // Dispatch custom event to hide game settings
       window.dispatchEvent(new Event('hideGameSettings'));
@@ -39,11 +79,11 @@ export default function LoadingAnimation({ isLoading, inline = false }: { isLoad
         document.body.classList.remove('loading-active');
       }
     };
-  }, [isLoading, inline]);
+  }, [isLoading, inline, shouldDisplay]);
 
   return (
     <AnimatePresence>
-      {isLoading && (
+      {shouldDisplay && isLoading && (
         <motion.div 
           className={`${inline ? '' : 'fixed inset-0'} z-[100] flex items-center justify-center pointer-events-none`}
           initial={{ opacity: 0 }}

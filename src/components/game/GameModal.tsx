@@ -344,12 +344,24 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
         isClosing.current = true;
         debugLog('Completing game and processing achievements');
         
+        // First dispatch a pre-completion event to update stats UI immediately
+        if (typeof window !== 'undefined') {
+          console.log('Dispatching pre-completion event for immediate UI update');
+          window.dispatchEvent(new CustomEvent('preGameCompletion', { 
+            detail: {
+              finalScore: finalStats.finalScore,
+              address: address,
+              sessionId: sessionId
+            }
+          }));
+        }
+        
         if (address) {
           try {
             debugLog('Sending game completion request for wallet:', address);
             // Add timeout protection
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 8000);
+            const timeoutId = setTimeout(() => controller.abort(), 4000); // Reduced from 8s to 4s
             
             // Explicitly save connection state before API call
             // This helps with mobile browsers that might lose connection after the call
@@ -379,8 +391,8 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
               }
             }
             
-            // Use the dedicated game completion endpoint
-            const completeResponse = await fetch('/api/game/complete', {
+            // Execute API call in the background - don't block UI
+            const completePromise = fetch('/api/game/complete', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -395,70 +407,77 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
                 bestStreak: finalStats.bestStreak
               }),
               signal: controller.signal
-            });
-            
-            clearTimeout(timeoutId);
-            
-            // Check for HTML response which indicates error
-            const contentType = completeResponse.headers.get('content-type');
-            if (contentType && contentType.includes('text/html')) {
-              console.error('Received HTML response instead of JSON. Server may be returning an error page.');
-              const htmlContent = await completeResponse.text();
-              console.log('HTML error preview:', htmlContent.substring(0, 200) + '...');
-              throw new Error('Server returned HTML instead of JSON');
-            }
-            
-            if (completeResponse.ok) {
-              const result = await completeResponse.json();
-              debugLog('Game completion successful:', result);
+            }).then(async response => {
+              clearTimeout(timeoutId);
               
-              // Clear any cached stats to ensure fresh data
-              if (typeof localStorage !== 'undefined') {
-                const cacheKeys = Object.keys(localStorage);
-                cacheKeys.forEach(key => {
-                  if (key.startsWith('trivia-user-stats') || key.startsWith('trivia-leaderboard')) {
-                    console.log('Clearing cached stats:', key);
-                    localStorage.removeItem(key);
-                  }
-                });
+              // Check for HTML response which indicates error
+              const contentType = response.headers.get('content-type');
+              if (contentType && contentType.includes('text/html')) {
+                console.error('Received HTML response instead of JSON. Server may be returning an error page.');
+                const htmlContent = await response.text();
+                console.log('HTML error preview:', htmlContent.substring(0, 200) + '...');
+                throw new Error('Server returned HTML instead of JSON');
+              }
+              
+              if (response.ok) {
+                const result = await response.json();
+                debugLog('Game completion successful:', result);
+                
+                // Clear any cached stats to ensure fresh data
+                if (typeof localStorage !== 'undefined') {
+                  const cacheKeys = Object.keys(localStorage);
+                  cacheKeys.forEach(key => {
+                    if (key.startsWith('trivia-user-stats') || key.startsWith('trivia-leaderboard')) {
+                      console.log('Clearing cached stats:', key);
+                      localStorage.removeItem(key);
+                    }
+                  });
+                }
+              } else {
+                console.warn('Game completion API returned error status:', response.status);
+                // Continue even if completion API fails - we don't want to block the user
               }
               
               // Force the app to refresh stats
               console.log('Triggering stats refresh after game completion');
               window.dispatchEvent(new CustomEvent('refreshWalletStats'));
-            } else {
-              console.warn('Game completion API returned error status:', completeResponse.status);
-              // Continue even if completion API fails - we don't want to block the user
-            }
+              
+            }).catch(error => {
+              console.error('Error in completion API call:', error);
+              // Still let the user continue even if API fails
+            });
+            
+            // Don't await the completion call - let it run in background
+            // Only wait a very short time to ensure the request has started
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
           } catch (completeError) {
             // Log but don't block game completion if the API fails
             console.error('Error during game completion API call:', completeError);
           }
         }
         
-        // Explicitly refresh leaderboard data before completing game
+        // Don't wait for leaderboard refresh - let it happen in background
         try {
-          console.log('Refreshing leaderboard data...');
-          const leaderboardController = new AbortController();
-          const leaderboardTimeoutId = setTimeout(() => leaderboardController.abort(), 5000);
-          
-          // Fetch leaderboard data to trigger a refresh
-          await fetch('/api/scores/leaderboard', { 
+          console.log('Refreshing leaderboard data in background...');
+          fetch('/api/scores/leaderboard', { 
             method: 'GET',
-            headers: { 'Cache-Control': 'no-cache' },
-            signal: leaderboardController.signal
-          });
-          
-          clearTimeout(leaderboardTimeoutId);
-          console.log('Leaderboard data refreshed');
-        } catch (leaderboardError) {
-          // Don't block game completion if leaderboard refresh fails
-          console.warn('Failed to refresh leaderboard:', leaderboardError);
+            headers: { 'Cache-Control': 'no-cache' }
+          }).catch(e => console.warn('Leaderboard refresh background error:', e));
+        } catch (e) {
+          console.warn('Failed to initiate leaderboard refresh:', e);
         }
         
         if (onGameComplete) {
           debugLog(`Submitting final score: ${finalStats.finalScore}`);
-          await onGameComplete(finalStats.finalScore);
+          try {
+            // Just fire this and don't await - it shouldn't block the UI
+            onGameComplete(finalStats.finalScore).catch(e => {
+              console.warn('Error in onGameComplete handler:', e);
+            });
+          } catch (e) {
+            console.warn('Error calling onGameComplete:', e);
+          }
         }
         
         // Dispatch event to notify of game completion to preserve wallet connection
@@ -511,7 +530,7 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
         
         debugLog('Game completed successfully, closing modal');
         
-        // Use a clean approach to reset the game state without forcing a page reload
+        // Return to main immediately without long delays
         // This prevents the "Reload site?" message
         setTimeout(() => {
           // Reset the game state instead of forcing a page reload
@@ -522,10 +541,15 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
             // Also dispatch gameClose to ensure full cleanup
             window.dispatchEvent(new CustomEvent('gameClose'));
             
+            // Trigger another stats refresh after returning to main screen
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('refreshWalletStats', { detail: { forceRefresh: true } }));
+            }, 500); // Small delay to ensure the modal is closed
+            
             // Finally call onClose to properly return to the main screen
             onClose();
           }
-        }, 300);
+        }, 100); // Reduced from 300ms to 100ms
       } catch (error) {
         console.error('Error during game completion:', error);
         setError('Failed to complete game');

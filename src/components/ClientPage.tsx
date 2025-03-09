@@ -1,4 +1,17 @@
-'use client';
+  // Handle initial page load to prevent unnecessary loading screen
+  useEffect(() => {
+    if (!initialLoadDone.current) {
+      initialLoadDone.current = true;
+      // Short delay to allow component to fully render and hydrate
+      const timer = setTimeout(() => {
+        setInitialLoading(false);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+  // Initial load checks - fix for mobile refresh issue
+  const initialLoadDone = useRef(false);
+  const [initialLoading, setInitialLoading] = useState(false);'use client';
 
 import React, { useState, useEffect, Suspense, lazy, useRef } from 'react';
 import { useAccount } from 'wagmi';
@@ -54,8 +67,15 @@ export default function ClientPage() {
   // Reference to track if we've attempted connection restoration
   const connectionAttempted = useRef(false);
   
-  // Enhanced mobile initialization - force immediate state checks on mobile
+  // Initial load checks - fix for mobile refresh issue
+  const initialLoadDone = useRef(false);
+  const [initialLoading, setInitialLoading] = useState(false);
+  
+  // Enhanced mobile initialization - fix for mobile refresh issues
   useEffect(() => {
+    // Mark initial load as complete first
+    initialLoadDone.current = true;
+    
     // Special Samsung Note 8 handling - works around Chrome issues on this device
     if (isMobile && typeof window !== 'undefined') {
       const userAgent = window.navigator.userAgent.toLowerCase();
@@ -279,7 +299,7 @@ export default function ClientPage() {
     return () => window.removeEventListener('resetGameState', handleResetGameState);
   }, []);
   
-  // Add listener for gameClose events to properly clean up
+  // Add listener for gameClose and gameCOmpletion events to properly clean up and refresh stats
   useEffect(() => {
     const handleGameClose = () => {
       console.log('Game close event received, cleaning up game state');
@@ -290,7 +310,9 @@ export default function ClientPage() {
         
         // Refresh wallet stats when returning to main screen
         console.log('Refreshing wallet stats after game close');
-        window.dispatchEvent(new CustomEvent('refreshWalletStats'));
+        window.dispatchEvent(new CustomEvent('refreshWalletStats', { 
+          detail: { forceRefresh: true } 
+        }));
         
         // For mobile, ensure wallet connection is maintained
         if (isMobile && address) {
@@ -309,7 +331,6 @@ export default function ClientPage() {
         
         // Force redrawing after a slight delay
         setTimeout(() => {
-          console.log('Redrawing UI after game close');
           // Final state reset
           setShouldRenderGame(false);
         }, 100);
@@ -318,9 +339,21 @@ export default function ClientPage() {
       }
     };
     
+    const handleGameCompletion = (event: any) => {
+      // Immediately update any UI that needs to show the new score
+      if (event.detail && event.detail.finalScore) {
+        console.log(`Game completed with score: ${event.detail.finalScore}`);
+      }
+    };
+    
     window.addEventListener('gameClose', handleGameClose);
-    return () => window.removeEventListener('gameClose', handleGameClose);
-  }, [isMobile, address, chainId]); 
+    window.addEventListener('gameCompleted', handleGameCompletion);
+    
+    return () => {
+      window.removeEventListener('gameClose', handleGameClose);
+      window.removeEventListener('gameCompleted', handleGameCompletion);
+    };
+  }, [isMobile, address, chainId]);
   
   // Consider connected when wallet is connected and on Base chain
   const isFullyConnected = isConnected && chainId === 8453;
@@ -334,7 +367,7 @@ export default function ClientPage() {
     <div className="flex flex-col min-h-screen">
       <ParticleBackground gameLoading={isLoading} />
       
-      <LoadingAnimation isLoading={isLoading || mobileReconnecting} />
+      <LoadingAnimation isLoading={isLoading && initialLoadDone.current && (isConnected || mobileReconnecting)} />
       
       {/* Mobile session restore notification removed as requested */}
       

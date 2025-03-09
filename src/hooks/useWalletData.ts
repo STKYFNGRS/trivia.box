@@ -173,20 +173,61 @@ export function useWalletData(address: string | undefined) {
     };
   }, [address]);
   
-  // Effect to handle refresh events
+  // Effect to handle refresh events with enhanced force refresh option
   useEffect(() => {
-    const handleRefresh = () => {
+    const handleRefresh = (event: any) => {
       if (address && isMounted.current) {
-        refresh();
+        // Check if this is a force refresh request
+        const forceRefresh = event?.detail?.forceRefresh === true;
+        
+        if (forceRefresh) {
+          // For force refresh, clear cache first
+          if (walletService && walletService.invalidateCache) {
+            log.info('Force refreshing wallet data due to game completion', { component: 'useWalletData' });
+            walletService.invalidateCache(address);
+          }
+          
+          // Set to loading state to show visual indicator that refresh is happening
+          setData(prev => ({
+            ...prev,
+            isLoading: true
+          }));
+        }
+        
+        // Delay slightly to ensure UI updates before fetch begins
+        setTimeout(() => {
+          refresh();
+        }, forceRefresh ? 10 : 100);
       }
     };
     
+    // Listen for both standard refreshWalletStats event and preGameCompletion event
     window.addEventListener('refreshWalletStats', handleRefresh);
+    window.addEventListener('preGameCompletion', (event) => {
+      // When we get a preGameCompletion event, update immediately with estimated score
+      if (event.detail && event.detail.finalScore && data.stats) {
+        // Update the stats immediately with the known final score
+        const updatedStats = {
+          ...data.stats,
+          totalPoints: (data.stats.totalPoints || 0) + event.detail.finalScore
+        };
+        
+        // Update state with optimistic data
+        setData(prev => ({
+          ...prev,
+          stats: updatedStats
+        }));
+        
+        // Also force a refresh to get official data
+        handleRefresh({ detail: { forceRefresh: true } });
+      }
+    });
     
     return () => {
       window.removeEventListener('refreshWalletStats', handleRefresh);
+      window.removeEventListener('preGameCompletion', handleRefresh);
     };
-  }, [address, refresh]);
+  }, [address, refresh, walletService, data.stats]);
   
   return {
     ...data,
