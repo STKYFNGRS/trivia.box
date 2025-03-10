@@ -3,9 +3,14 @@ import { useState, useCallback, useEffect, memo } from 'react';
 import { log } from '@/utils/logger';
 import { useAccount } from 'wagmi';
 import { modal } from '@/config/appkit';
-import { useAppKitState } from '@reown/appkit/react';
 import { Award } from 'lucide-react';
 import dynamic from 'next/dynamic';
+
+// Import AppKit components dynamically to prevent SSR issues
+const AppKitWrapper = dynamic(
+  () => import('../wrappers/AppKitWrapper'),
+  { ssr: false }
+);
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import useWalletData from '@/hooks/useWalletData';
@@ -93,8 +98,8 @@ WalletButton.displayName = 'WalletButton';
 export default function WalletDisplay({ onAchievementsClick, onLeaderboardOpen }: { onAchievementsClick: () => void, onLeaderboardOpen?: (isOpen: boolean) => void }) {
   const { address } = useAccount();
   
-  // Use AppKit state for debugging purposes
-  const appkitState = useAppKitState();
+  // State to store AppKit state obtained from the wrapper
+  const [appkitState, setAppkitState] = useState<any>(null);
   
   // Use the optimized wallet data hook
   const { ensName, ensAvatar, stats, leaderboard, isLoading } = useWalletData(address);
@@ -243,7 +248,11 @@ useEffect(() => {
   if (!address) return null;
 
   return (
-    <div className="flex flex-col">
+    <>
+      {/* Render the AppKitWrapper with no SSR to get AppKit state safely */}
+      <AppKitWrapper onStateChange={setAppkitState} />
+      
+      <div className="flex flex-col">
       {/* Top Navigation Bar with Logo and Wallet */}
       <div className="flex items-center justify-between mb-2">
         {/* Wallet Button - DO NOT WRAP THIS */}
@@ -349,5 +358,6 @@ useEffect(() => {
         />
       )}
     </div>
+    </>
   );
 }

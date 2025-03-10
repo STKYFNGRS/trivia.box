@@ -24,15 +24,27 @@ const queryClient = new QueryClient({
   }
 });
 
-// Initialize AppKit before provider render
-if (typeof window !== 'undefined') {
-  getAppKit(modal);
-}
+// Don't initialize AppKit until component mounts
+// This prevents issues during static rendering
 
 export default function QueryProviders({ children }: { children: ReactNode }) {
   const [reconnectionAttempted, setReconnectionAttempted] = useState(false);
   const [lastSaveTimestamp, setLastSaveTimestamp] = useState(0);
   const isRestoringConnection = useRef<boolean>(false);
+  
+  // Initialize AppKit on client-side only after component mounts
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        // Initialize AppKit with our config - don't check if it's already initialized
+        // since getAppKit() requires an argument
+        getAppKit(modal);
+        console.log('[AppKit] Initialized successfully');
+      } catch (error) {
+        console.error('[AppKit] Failed to initialize:', error);
+      }
+    }
+  }, []);
   
   // Handle connection persistence across refreshes with enhanced mobile support
   useEffect(() => {

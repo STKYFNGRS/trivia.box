@@ -1,30 +1,40 @@
-// Simple middleware for handling icon requests
+/**
+ * Middleware function that adds CORS headers to icon requests
+ * This is needed to fix the icon loading issues in the AppKit modal
+ */
 export function middleware(request) {
-  const url = new URL(request.url);
+  const pathname = request.nextUrl?.pathname;
   
-  // Special handling for icon files to ensure proper CORS headers
-  if (url.pathname.endsWith('.ico') || 
-      url.pathname.includes('chrome') || 
-      url.pathname.includes('apple-touch') || 
-      url.pathname.endsWith('.png')) {
+  // Check if this is an icon request
+  if (
+    pathname && (
+      pathname.endsWith('.ico') ||
+      pathname.endsWith('.png') ||
+      pathname.includes('apple-touch-icon') ||
+      pathname.includes('android-chrome')
+    )
+  ) {
+    // Get the URL from the request
+    const url = request.nextUrl.clone();
     
-    // Return a Response object with headers directly
-    return new Response(null, {
+    // Create a response - we'll use the standard Response constructor
+    const response = new Response(null, {
       status: 200,
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET',
-        'Cache-Control': 'public, max-age=86400' // Cache for 24 hours
+        'Cache-Control': 'public, max-age=86400'
       }
     });
+    
+    return response;
   }
   
-  // Continue to the next middleware by simply not returning anything
-  // This is how Next.js middleware works when we want to pass through
-  return undefined;
+  // For all other requests, continue as normal without modification
+  return;
 }
 
-// Configure which paths this middleware will run on
+// Configure the middleware to only run for icon files
 export const config = {
   matcher: [
     '/favicon.ico',
