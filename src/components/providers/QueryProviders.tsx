@@ -36,10 +36,18 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
-        // Initialize AppKit with our config - don't check if it's already initialized
-        // since getAppKit() requires an argument
+        // Check if in development mode
+        const isDevelopment = typeof window !== 'undefined' && 
+                          (window.location.hostname === 'localhost' || 
+                           window.location.hostname === '127.0.0.1');
+
+        // Initialize AppKit with our config
         getAppKit(modal);
-        console.log('[AppKit] Initialized successfully');
+        console.log(`[AppKit] Initialized successfully in ${isDevelopment ? 'development' : 'production'} mode`);
+        
+        if (isDevelopment) {
+          console.info('[AppKit] Running in development mode - SIWE is disabled to avoid local verification issues');
+        }
       } catch (error) {
         console.error('[AppKit] Failed to initialize:', error);
       }

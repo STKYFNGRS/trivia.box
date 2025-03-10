@@ -10,6 +10,15 @@ export default function SIWEErrorWrapper() {
   const { chainId } = useAccount();
 
   useEffect(() => {
+    // Check if we're in development mode
+    const isDevelopment = 
+      typeof window !== 'undefined' && 
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    
+    // Only set up error handlers in production mode where SIWE is enabled
+    if (isDevelopment) {
+      return; // Don't set up error handlers in development
+    }
     // Listen for SIWE-specific errors that our custom error handler dispatches
     const handleSIWEError = (event: CustomEvent) => {
       console.log('[SIWE Debug] Error event received:', event.detail);
