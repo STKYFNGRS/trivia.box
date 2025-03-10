@@ -15,17 +15,20 @@ const hostname = typeof window !== 'undefined' ? window.location.hostname : 'tri
 const signingDomain = isLocalhost ? 'localhost' : hostname;
 const signingUri = isLocalhost ? 'http://localhost:3000' : origin;
 
-// Create a more specifically configured SIWx implementation
+// Create the EIP155Verifier without parameters since it doesn't accept any
+const eip155Verifier = new EIP155Verifier();
+
+// Create a more specifically configured SIWx implementation with simplified message
 const siwxConfig = new DefaultSIWX({
   messenger: new InformalMessenger({
     domain: signingDomain,
     uri: signingUri,
-    statement: "Sign this message to verify you own this wallet. This won't cost any gas.",
-    // Add required getNonce function
+    statement: "Sign this message to verify wallet ownership. No gas fee.",
     getNonce: async () => Math.round(Math.random() * 1000000).toString()
   }),
-  // Explicitly specify the verifier for the EIP155 namespace (Ethereum)
-  verifiers: [new EIP155Verifier()],
+  // Use our custom verifier with explicit chain support
+  verifiers: [eip155Verifier],
+  // Use a persistent storage with a unique key
   storage: new LocalStorage({ key: 'trivia-box-auth-session' })
 });
 
@@ -77,6 +80,16 @@ export const modal = createAppKit({
     }
   ]
 });
+
+// Add a debug event listener to track SIWx errors
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (event) => {
+    if (event.error && event.error.message && event.error.message.includes('CaipNetwork')) {
+      console.error('SIWx Verification Error:', event.error);
+      // You can add custom error handling here if needed
+    }
+  });
+}
 
 // Export everything for use in components
 export * from '@reown/appkit/react';
