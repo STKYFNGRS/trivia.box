@@ -1,60 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useAccount } from 'wagmi';
+import React, { useEffect, useState } from 'react';
+import { useAppKitState } from '@reown/appkit/react';
 
+/**
+ * SIWEErrorWrapper - Component that listens for SIWE errors and displays them in a user-friendly way
+ * This helps diagnose and communicate issues with the Sign-In with Ethereum process
+ */
 export default function SIWEErrorWrapper() {
   const [error, setError] = useState<string | null>(null);
-  const [authStatus, setAuthStatus] = useState<string | undefined>(undefined);
-  const { chainId } = useAccount();
-
-  // Safely check authentication status without using hooks that might not be available
-  useEffect(() => {
-    // Check if we're in development mode
-    const isDevelopment = 
-      typeof window !== 'undefined' && 
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-    
-    // In development, we don't need auth status
-    if (isDevelopment) {
-      return;
-    }
-    
-    // Try to get AppKit state
-    try {
-      const appkitModal = (window as any).__APPKIT_MODAL__;
-      if (appkitModal && typeof appkitModal.getState === 'function') {
-        const state = appkitModal.getState();
-        setAuthStatus(state?.status);
-        
-        // Set up an interval to check state periodically
-        const interval = setInterval(() => {
-          try {
-            const updatedState = appkitModal.getState();
-            setAuthStatus(updatedState?.status);
-          } catch (e) {
-            // Ignore errors during polling
-          }
-        }, 2000);
-        
-        return () => clearInterval(interval);
-      }
-    } catch (err) {
-      console.warn('Could not access AppKit state:', err);
-    }
-  }, []);
+  const { status } = useAppKitState();
 
   useEffect(() => {
-    // Check if we're in development mode
-    const isDevelopment = 
-      typeof window !== 'undefined' && 
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-    
-    // Only set up error handlers in production mode where SIWE is enabled
-    if (isDevelopment) {
-      return; // Don't set up error handlers in development
-    }
-    
     // Listen for SIWE-specific errors that our custom error handler dispatches
     const handleSIWEError = (event: CustomEvent) => {
       console.log('[SIWE Debug] Error event received:', event.detail);
@@ -64,49 +21,18 @@ export default function SIWEErrorWrapper() {
       setTimeout(() => setError(null), 5000);
     };
 
-    // Listen for global unhandled SIWE errors
-    const handleUnhandledRejection = (event: any) => {
-      if (
-        event.reason && 
-        typeof event.reason.message === 'string' && 
-        (
-          event.reason.message.includes('CAIP') || 
-          event.reason.message.includes('verify') ||
-          event.reason.message.includes('sign')
-        )
-      ) {
-        // Format a better error message
-        let message = 'Wallet verification failed.';
-        
-        if (event.reason.message.includes('CaipNetwork not found')) {
-          if (chainId) {
-            message = `Network ${chainId} is not supported for verification. Please try switching to Ethereum Mainnet or Base.`;
-          } else {
-            message = 'Your current network is not supported. Please switch to Ethereum Mainnet or Base.';
-          }
-        }
-        
-        setError(message);
-        
-        // Auto-clear error after 7 seconds
-        setTimeout(() => setError(null), 7000);
-      }
-    };
-
     // Reset error when status changes to authenticated
-    if (authStatus === 'authenticated') {
+    if (status === 'authenticated') {
       setError(null);
     }
 
-    // Listen for custom SIWE errors and unhandled rejections
+    // Listen for custom SIWE errors
     window.addEventListener('siwe-error', handleSIWEError as EventListener);
-    window.addEventListener('unhandledrejection', handleUnhandledRejection);
     
     return () => {
       window.removeEventListener('siwe-error', handleSIWEError as EventListener);
-      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     };
-  }, [authStatus, chainId]);
+  }, [status]);
 
   // Only render if there's an error to show
   if (!error) return null;

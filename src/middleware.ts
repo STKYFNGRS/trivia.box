@@ -1,35 +1,48 @@
 /**
- * Middleware function that adds proper headers for icon requests
- * This ensures icons load correctly in the wallet connect modals
+ * Enhanced middleware function to ensure proper icon handling for wallet connect modals
  */
+
+// Middleware handler for icon requests
 export function middleware(request) {
-  // For any request for images or icons, we'll add CORS headers
-  const url = request.nextUrl;
+  // Get the path from the URL
+  const { pathname } = request.nextUrl;
   
-  if (url.pathname.includes('.png') || 
-      url.pathname.includes('.ico') || 
-      url.pathname.includes('apple-touch-icon') ||
-      url.pathname.includes('icon')) {
+  // Check if this is an icon request
+  const isIconRequest = 
+    pathname.endsWith('.ico') || 
+    pathname.endsWith('.png') || 
+    pathname.includes('favicon') || 
+    pathname.includes('icon') || 
+    pathname.includes('chrome') || 
+    pathname.includes('apple-touch');
+  
+  // Apply special CORS headers to icon requests to fix loading in AppKit modal
+  if (isIconRequest) {
+    // Create response object
+    const response = new Response(null);
     
-    // Create response that continues to the actual file
-    return new Response(null, {
-      status: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET',
-        'Cache-Control': 'public, max-age=86400',
-        'X-Middleware-Cache': 'no-cache'
-      }
-    });
+    // Add CORS and cache headers to allow loading from AppKit modal
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    response.headers.set('Access-Control-Allow-Methods', 'GET');
+    response.headers.set('Cache-Control', 'public, max-age=86400'); // Cache for a day
+    
+    return response;
   }
+  
+  // For all other requests, continue normally
+  return new Response(null);
 }
 
+// Configure which paths this middleware will run on
+// Using valid Next.js middleware matcher syntax
 export const config = {
   matcher: [
-    '/((?!api|_next/static|_next/image).*)',
-    '/:path*/favicon.ico',
-    '/:path*/apple-touch-icon.png',
-    '/:path*/android-chrome-192x192.png',
-    '/:path*/android-chrome-512x512.png'
+    // Match favicon and icon files with valid patterns
+    '/favicon.ico',
+    '/(.*).ico',
+    '/(.*).png',
+    '/icon-:path*',
+    '/apple-touch-icon:path*',
+    '/android-chrome-:path*',
   ],
 };

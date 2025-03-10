@@ -1,7 +1,8 @@
 import { createAppKit } from '@reown/appkit';
-import { DefaultSIWX, InformalMessenger, EIP155Verifier, LocalStorage } from '@reown/appkit-siwx';
+import { DefaultSIWX, InformalMessenger, LocalStorage } from '@reown/appkit-siwx';
 import { wagmiAdapter } from './wagmi';
 import { base, mainnet } from '@reown/appkit/networks';
+import { CustomEIP155Verifier } from '@/utils/CustomSIWEVerifier';
 
 /**
  * Create AppKit configuration with improved SIWE settings
@@ -31,8 +32,8 @@ if (typeof window !== 'undefined') {
       getNonce: async () => Math.floor(Math.random() * 10000000).toString()
     });
     
-    // Use the standard EIP155 verifier which handles Ethereum chains
-    const verifier = new EIP155Verifier();
+    // Use our custom EIP155 verifier which properly handles EVM chains
+    const verifier = new CustomEIP155Verifier();
     
     // Explicitly specify our icons for better loading
     const icons = [
@@ -50,12 +51,12 @@ if (typeof window !== 'undefined') {
         url: window.location.origin,
         icons: icons
       },
-      // Configure SIWE only in production
-      siwx: isDevelopment ? undefined : new DefaultSIWX({
+      // Always use SIWx with our custom verifier to fix the CaipNetwork issue
+      siwx: new DefaultSIWX({
         messenger: messenger,
         verifiers: [verifier],
         // Use a versioned storage key to avoid conflicts
-        storage: new LocalStorage({ key: 'trivia-box-siwe-v2' })
+        storage: new LocalStorage({ key: 'trivia-box-siwe-v3' })
       }),
       // Project ID from environment
       projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
@@ -76,6 +77,14 @@ if (typeof window !== 'undefined') {
         console.warn('[AppKit] SIWE error caught:', 
           event.reason.message
         );
+
+        // Dispatch a custom event for our error handler component
+        window.dispatchEvent(new CustomEvent('siwe-error', {
+          detail: {
+            type: 'verification-error',
+            message: 'Wallet verification failed. Please try again or switch to Base/Ethereum network.'
+          }
+        }));
       }
     });
     

@@ -6,18 +6,10 @@ import SWRProviders from '@/components/providers/SWRProviders';
 import AchievementProvider from '@/components/providers/AchievementProvider';
 import EnsPrefetchProvider from '@/components/providers/EnsPrefetchProvider';
 import SIWEProvider from '@/components/providers/SIWEProvider';
-import dynamic from 'next/dynamic';
-
-// Import debug wrapper with SSR disabled
-const DebugConnectionWrapper = dynamic(
-  () => import('../wrappers/DebugConnectionWrapper'),
-  { ssr: false }
-);
 
 /**
- * Client-side only providers component.
- * This component is loaded dynamically with ssr: false to ensure that all AppKit-related
- * initialization happens only on the client side, preventing SSR errors.
+ * ClientProviders component that wraps all client-side providers
+ * This ensures that AppKit and other client-only libraries are properly initialized
  */
 export default function ClientProviders({ children }: { children: ReactNode }) {
   return (
@@ -26,8 +18,6 @@ export default function ClientProviders({ children }: { children: ReactNode }) {
         <AchievementProvider>
           <EnsPrefetchProvider>
             <SIWEProvider>
-              {/* Debug wrapper to help diagnose connection issues */}
-              <DebugConnectionWrapper />
               {children}
             </SIWEProvider>
           </EnsPrefetchProvider>
