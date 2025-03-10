@@ -1,13 +1,48 @@
 'use client';
 
-import { useAppKitState } from '@reown/appkit/react';
 import { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 
 export default function SIWEErrorWrapper() {
   const [error, setError] = useState<string | null>(null);
-  const { status } = useAppKitState();
+  const [authStatus, setAuthStatus] = useState<string | undefined>(undefined);
   const { chainId } = useAccount();
+
+  // Safely check authentication status without using hooks that might not be available
+  useEffect(() => {
+    // Check if we're in development mode
+    const isDevelopment = 
+      typeof window !== 'undefined' && 
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    
+    // In development, we don't need auth status
+    if (isDevelopment) {
+      return;
+    }
+    
+    // Try to get AppKit state
+    try {
+      const appkitModal = (window as any).__APPKIT_MODAL__;
+      if (appkitModal && typeof appkitModal.getState === 'function') {
+        const state = appkitModal.getState();
+        setAuthStatus(state?.status);
+        
+        // Set up an interval to check state periodically
+        const interval = setInterval(() => {
+          try {
+            const updatedState = appkitModal.getState();
+            setAuthStatus(updatedState?.status);
+          } catch (e) {
+            // Ignore errors during polling
+          }
+        }, 2000);
+        
+        return () => clearInterval(interval);
+      }
+    } catch (err) {
+      console.warn('Could not access AppKit state:', err);
+    }
+  }, []);
 
   useEffect(() => {
     // Check if we're in development mode
@@ -19,6 +54,7 @@ export default function SIWEErrorWrapper() {
     if (isDevelopment) {
       return; // Don't set up error handlers in development
     }
+    
     // Listen for SIWE-specific errors that our custom error handler dispatches
     const handleSIWEError = (event: CustomEvent) => {
       console.log('[SIWE Debug] Error event received:', event.detail);
@@ -57,8 +93,8 @@ export default function SIWEErrorWrapper() {
       }
     };
 
-    // Reset error when status changes
-    if (status === 'authenticated') {
+    // Reset error when status changes to authenticated
+    if (authStatus === 'authenticated') {
       setError(null);
     }
 
@@ -70,7 +106,7 @@ export default function SIWEErrorWrapper() {
       window.removeEventListener('siwe-error', handleSIWEError as EventListener);
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     };
-  }, [status, chainId]);
+  }, [authStatus, chainId]);
 
   // Only render if there's an error to show
   if (!error) return null;
