@@ -50,20 +50,20 @@ export default function About({ onClose }: AboutProps) {
             <h3 className="text-lg font-semibold text-amber-400">Players Share in Our Success</h3>
             <p>
               Trivia.Box operates on a revolutionary principle: <span className="text-amber-300 font-medium">the players who make our game great deserve to share in its success</span>. 
-              Unlike traditional platforms that keep all advertising revenue, we've created a groundbreaking economic model that directly rewards our community.
+              Unlike traditional platforms that keep all advertising revenue, we&apos;ve created a groundbreaking economic model that directly rewards our community.
             </p>
             <p>
-              When you see ads on Trivia.Box, that revenue doesn't just go to our bottom line—it's systematically used to provide{' '}
+              When you see ads on Trivia.Box, that revenue doesn&apos;t just go to our bottom line—it&apos;s systematically used to provide{' '}
               <span className="text-amber-300 font-medium">real equity value to our token ecosystem</span>. This means every question you answer 
               and every game you play not only tests your knowledge but also contributes to a growing token pool that flows back to our players.
             </p>
             <p>
               Through this player-first approach, your trivia skills translate into tangible rewards. The better you perform, the more you earn—creating 
-              a virtuous cycle where your entertainment directly benefits you. It's not just about playing a game; it's about being a stakeholder 
+              a virtuous cycle where your entertainment directly benefits you. It&apos;s not just about playing a game; it&apos;s about being a stakeholder 
               in a community where <span className="text-amber-300 font-medium">your participation has real value</span>.
             </p>
             <div className="bg-gradient-to-r from-amber-900/30 to-orange-900/30 p-3 rounded-lg border border-amber-600/30 mt-2">
-              <p className="text-amber-300 font-medium">In short: When Trivia.Box succeeds, you succeed. Your knowledge isn't just tested—it's rewarded.</p>
+              <p className="text-amber-300 font-medium">In short: When Trivia.Box succeeds, you succeed. Your knowledge isn&apos;t just tested—it&apos;s rewarded.</p>
             </div>
           </section>
           

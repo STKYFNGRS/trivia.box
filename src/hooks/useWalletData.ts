@@ -203,7 +203,9 @@ export function useWalletData(address: string | undefined) {
     
     // Listen for both standard refreshWalletStats event and preGameCompletion event
     window.addEventListener('refreshWalletStats', handleRefresh);
-    window.addEventListener('preGameCompletion', (event) => {
+    
+    // Fix: properly type the custom event to include detail property
+    window.addEventListener('preGameCompletion', (event: CustomEvent<{ finalScore: number }>) => {
       // When we get a preGameCompletion event, update immediately with estimated score
       if (event.detail && event.detail.finalScore && data.stats) {
         // Update the stats immediately with the known final score

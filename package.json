@@ -14,6 +14,7 @@
     "@next/bundle-analyzer": "^14.0.3",
     "@prisma/client": "^5.6.0",
     "@reown/appkit-adapter-wagmi": "^1.6.7",
+    "@reown/appkit-siwx": "^1.6.9",
     "@vercel/og": "^0.5.20",
     "clsx": "^2.0.0",
     "date-fns": "^2.30.0",

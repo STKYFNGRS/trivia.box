@@ -1,17 +1,4 @@
-  // Handle initial page load to prevent unnecessary loading screen
-  useEffect(() => {
-    if (!initialLoadDone.current) {
-      initialLoadDone.current = true;
-      // Short delay to allow component to fully render and hydrate
-      const timer = setTimeout(() => {
-        setInitialLoading(false);
-      }, 300);
-      return () => clearTimeout(timer);
-    }
-  }, []);
-  // Initial load checks - fix for mobile refresh issue
-  const initialLoadDone = useRef(false);
-  const [initialLoading, setInitialLoading] = useState(false);'use client';
+'use client';
 
 import React, { useState, useEffect, Suspense, lazy, useRef } from 'react';
 import { useAccount } from 'wagmi';
@@ -71,6 +58,18 @@ export default function ClientPage() {
   const initialLoadDone = useRef(false);
   const [initialLoading, setInitialLoading] = useState(false);
   
+  // Handle initial page load to prevent unnecessary loading screen
+  useEffect(() => {
+    if (!initialLoadDone.current) {
+      initialLoadDone.current = true;
+      // Short delay to allow component to fully render and hydrate
+      const timer = setTimeout(() => {
+        setInitialLoading(false);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
   // Enhanced mobile initialization - fix for mobile refresh issues
   useEffect(() => {
     // Mark initial load as complete first
