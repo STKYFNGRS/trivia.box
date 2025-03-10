@@ -26,7 +26,7 @@ export default function CustomConnectButton() {
     // Log state changes
     console.log('[Debug] CustomConnectButton state:', {
       wagmiConnected: isConnected,
-      chainId,
+      chainId: chainId ? `${chainId} (0x${chainId.toString(16)})` : undefined,
       address: address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null,
       appKitStatus: status,
       isConnecting,

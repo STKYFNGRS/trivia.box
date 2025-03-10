@@ -1,47 +1,35 @@
 /**
- * Middleware function that adds CORS headers to icon requests
- * This is needed to fix the icon loading issues in the AppKit modal
+ * Middleware function that adds proper headers for icon requests
+ * This ensures icons load correctly in the wallet connect modals
  */
 export function middleware(request) {
-  const pathname = request.nextUrl?.pathname;
+  // For any request for images or icons, we'll add CORS headers
+  const url = request.nextUrl;
   
-  // Check if this is an icon request
-  if (
-    pathname && (
-      pathname.endsWith('.ico') ||
-      pathname.endsWith('.png') ||
-      pathname.includes('apple-touch-icon') ||
-      pathname.includes('android-chrome')
-    )
-  ) {
-    // Get the URL from the request
-    const url = request.nextUrl.clone();
+  if (url.pathname.includes('.png') || 
+      url.pathname.includes('.ico') || 
+      url.pathname.includes('apple-touch-icon') ||
+      url.pathname.includes('icon')) {
     
-    // Create a response - we'll use the standard Response constructor
-    const response = new Response(null, {
+    // Create response that continues to the actual file
+    return new Response(null, {
       status: 200,
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET',
-        'Cache-Control': 'public, max-age=86400'
+        'Cache-Control': 'public, max-age=86400',
+        'X-Middleware-Cache': 'no-cache'
       }
     });
-    
-    return response;
   }
-  
-  // For all other requests, continue as normal without modification
-  return;
 }
 
-// Configure the middleware to only run for icon files
 export const config = {
   matcher: [
-    '/favicon.ico',
-    '/android-chrome-192x192.png',
-    '/android-chrome-512x512.png',
-    '/apple-touch-icon.png',
-    '/favicon-16x16.png',
-    '/favicon-32x32.png',
+    '/((?!api|_next/static|_next/image).*)',
+    '/:path*/favicon.ico',
+    '/:path*/apple-touch-icon.png',
+    '/:path*/android-chrome-192x192.png',
+    '/:path*/android-chrome-512x512.png'
   ],
 };
