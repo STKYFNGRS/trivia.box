@@ -1,5 +1,5 @@
 import { Inter } from 'next/font/google';
-import type { Metadata, Viewport } from "next";
+import type { Metadata } from "next";
 import "./globals.css";
 import Providers from "./providers";
 
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
   manifest: '/site.webmanifest'
 };
 
-export const viewport: Viewport = {
+export const viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1, 
