@@ -14,18 +14,8 @@ export default function CustomConnectButton() {
   const { status } = useAppKitState();
   const connectionSavedRef = useRef(false);
 
-  // Add cleanup to avoid auto-reconnect on component mount
-  useEffect(() => {
-    // Clean connection state on component mount
-    const cleanupConnection = async () => {
-      try {
-        // Try to disconnect any existing wallet connection
-        await modal.disconnect().catch(() => {});
-      } catch (e) {}
-    };
-    
-    cleanupConnection();
-  }, []);
+  // REMOVED cleanup to preserve connection on component mount
+  // This allows for proper connection persistence
 
   // Reset connecting state if AppKit disconnects
   useEffect(() => {
@@ -75,15 +65,7 @@ export default function CustomConnectButton() {
           await switchChain({ chainId: base.id });
         }
       } else {
-        // Try to disconnect to ensure clean state
-        try {
-          console.log('[Debug] Disconnecting before new connection...');
-          await modal.disconnect().catch(() => {});
-          // Small delay
-          await new Promise(resolve => setTimeout(resolve, 300));
-        } catch (e) {}
-        
-        // Simple connection flow - just open the modal
+        // Simple connection flow - just open the modal without disconnecting first
         console.log('[Debug] Opening connect modal');
         await modal.open();
         

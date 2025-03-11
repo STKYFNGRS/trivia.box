@@ -123,25 +123,25 @@ export function useGameState() {
   }, [gameController, gameState, user]);
 
   // Use SWR for efficient data fetching and caching - only fetch when user is connected
-  const { data: stats } = useSWR(
+  const { data: stats, mutate: mutateStats } = useSWR(
     user ? `/api/scores/stats?wallet=${user}` : null,
     {
-      revalidateOnFocus: false,
-      dedupingInterval: 60000, // 1 minute
-      revalidateIfStale: false,
-      focusThrottleInterval: 120000, // 2 minutes
+      revalidateOnFocus: true, // Changed from false to true to update on focus
+      dedupingInterval: 10000, // Reduced from 60000 to 10000 (10 seconds) for more frequent updates
+      revalidateIfStale: true, // Changed from false to true
+      focusThrottleInterval: 5000, // Reduced from 120000 to 5000 (5 seconds)
       errorRetryCount: 2
     }
   );
 
   // Only fetch leaderboard when user is connected
-  const { data: leaderboard } = useSWR(
+  const { data: leaderboard, mutate: mutateLeaderboard } = useSWR(
     user ? '/api/scores/leaderboard' : null, 
     {
-      revalidateOnFocus: false,
-      dedupingInterval: 60000, // 1 minute
-      revalidateIfStale: false,
-      focusThrottleInterval: 120000, // 2 minutes
+      revalidateOnFocus: true, // Changed from false to true
+      dedupingInterval: 10000, // Reduced from 60000 to 10000 (10 seconds)
+      revalidateIfStale: true, // Changed from false to true
+      focusThrottleInterval: 5000, // Reduced from 120000 to 5000 (5 seconds)
       errorRetryCount: 2
     }
   );
@@ -343,6 +343,9 @@ export function useGameState() {
     resetGame,
     submitScore,
     isAuthenticated: !!user,
-    isMobile: mobileDetected
+    isMobile: mobileDetected,
+    // Add mutation functions for refreshing data
+    refreshStats: () => mutateStats(),
+    refreshLeaderboard: () => mutateLeaderboard() 
   };
 }

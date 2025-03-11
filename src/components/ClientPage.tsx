@@ -1,6 +1,5 @@
 'use client';
-
-import React, { useState, useEffect, Suspense, lazy, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { cleanupWalletConnections, preventAutoConnection } from '@/utils/cleanupConnection';
 import { useAccount } from 'wagmi';
 import { useGameState } from '@/hooks/useGameState';
@@ -13,16 +12,6 @@ import FeatureIcons from '@/components/FeatureIcons';
 import Footer from '@/components/shared/Footer';
 import GameModalFallback from '@/components/game/GameModalFallback';
 // Mobile notifications removed as requested
-
-// Configuration
-const DEBUG_MODE = true; // Enable for better debugging
-
-// Debug logger
-const debugLog = (...args: any[]) => {
-  if (DEBUG_MODE) {
-    console.log(...args);
-  }
-};
 
 // Dynamically import heavy components with better loading experience
 const GameModal = dynamic(() => import('@/components/game/GameModal'), {
@@ -46,8 +35,7 @@ export default function ClientPage() {
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [isAchievementsOpen, setIsAchievementsOpen] = useState(false);
   const { address, isConnected, chainId } = useAccount();
-  const { gameState, initGame, isLoading, error, isMobile } = useGameState();
-  const [shouldRenderGame, setShouldRenderGame] = useState(false);
+  const { gameState, initGame, isLoading, error, isMobile, refreshStats, refreshLeaderboard } = useGameState();
   const [initializationAttempts, setInitializationAttempts] = useState(0);
   // Removed session restored state
   const [mobileReconnecting, setMobileReconnecting] = useState(false);
@@ -57,29 +45,41 @@ export default function ClientPage() {
   
   // Initial load checks - fix for mobile refresh issue
   const initialLoadDone = useRef(false);
-  const [initialLoading, setInitialLoading] = useState(false);
-  
+
   // Handle initial page load to prevent unnecessary loading screen
   useEffect(() => {
     if (!initialLoadDone.current) {
       initialLoadDone.current = true;
+
+      // Check if we have an active game session or recently completed a game
+      // If so, don't clear the wallet connection state
+      const hasCompletedGame = localStorage.getItem('game_completed_address') || 
+                             sessionStorage.getItem('game_completed_address');
+      const hasActiveWallet = localStorage.getItem('walletConnectionState') === 'connected';
       
-      // Clean up any existing wallet connections to prevent auto-connect
-      cleanupWalletConnections();
-      preventAutoConnection();
-      
-      // Also try to disconnect using the modal directly
-      setTimeout(() => {
-        try {
-          import('@/config/appkit').then(({ modal }) => {
-            modal.disconnect().catch(() => {});
-          }).catch(() => {});
-        } catch (e) {}
-      }, 100);
+      // Only clean up wallet connections if we don't have a completed game or active wallet
+      if (!hasCompletedGame && !hasActiveWallet) {
+        // Clean up any existing wallet connections to prevent auto-connect
+        cleanupWalletConnections();
+        preventAutoConnection();
+        
+        // Also try to disconnect using the modal directly
+        setTimeout(() => {
+          try {
+            import('@/config/appkit').then(({ modal }) => {
+              modal.disconnect().catch(() => {});
+            }).catch(() => {});
+          } catch {
+            // Ignore errors
+          }
+        }, 100);
+      } else {
+        console.log('Detected completed game or active wallet connection - preserving wallet state');
+      }
       
       // Short delay to allow component to fully render and hydrate
       const timer = setTimeout(() => {
-        setInitialLoading(false);
+        // We're ready
       }, 300);
       return () => clearTimeout(timer);
     }
@@ -89,12 +89,12 @@ export default function ClientPage() {
   useEffect(() => {
     // Mark initial load as complete first
     initialLoadDone.current = true;
-    
+
     // Special Samsung Note 8 handling - works around Chrome issues on this device
     if (isMobile && typeof window !== 'undefined') {
       const userAgent = window.navigator.userAgent.toLowerCase();
       const isSamsungDevice = userAgent.includes('sm-n9');
-      
+
       // Fix for the landing page appearing on refresh issue
       if (isSamsungDevice) {
         // Wait just a moment to let React hydration complete
@@ -106,7 +106,7 @@ export default function ClientPage() {
               try {
                 const wagmiData = JSON.parse(wagmiStore);
                 const hasAccount = wagmiData?.state?.connections?.[0]?.accounts?.[0];
-                
+
                 // Force a wallet state refresh if we've got an account but don't appear connected
                 if (hasAccount && !isConnected) {
                   console.log('🔄 Samsung device detected with wallet data but no active connection - forcing refresh');
@@ -117,14 +117,18 @@ export default function ClientPage() {
                     window.location.reload();
                   }
                 }
-              } catch (e) {}
+              } catch {
+                // Ignore parse errors
+              }
             }
-          } catch (e) {}
+          } catch {
+            // Ignore storage errors
+          }
         }, 500);
       }
     }
   }, [isMobile, isConnected]);
-  
+
   // Handle beforeunload event differently on mobile vs desktop
   useEffect(() => {
     // Only set up if we have an active game
@@ -141,64 +145,62 @@ export default function ClientPage() {
           // Mobile behavior - just let it refresh naturally
           // No need to show confirmation dialog
           console.log('🎮 ClientPage: Page refresh on mobile detected, state will be restored');
-          
+
           // For mobile, explicitly try to save connection state before unload
           try {
             if (address) {
-              const { saveConnectionState } = require('@/utils/persistConnection');
-              saveConnectionState(address, chainId || 8453);
-              console.log('📱 ClientPage: Mobile wallet state saved before refresh');
+              import('@/utils/persistConnection').then(module => {
+                module.saveConnectionState(address, chainId || 8453);
+                console.log('📱 ClientPage: Mobile wallet state saved before refresh');
+              }).catch(err => {
+                console.warn('📱 ClientPage: Error saving mobile wallet state:', err);
+              });
             }
           } catch (err) {
             console.warn('📱 ClientPage: Error saving mobile wallet state:', err);
           }
         }
       };
-      
+
       window.addEventListener('beforeunload', handleBeforeUnload);
       return () => window.removeEventListener('beforeunload', handleBeforeUnload);
     }
   }, [gameState, isMobile, address, chainId]);
-  
+
   // Enhanced debugging for game state changes
   useEffect(() => {
     console.log('🎲 ClientPage: Game state updated:', gameState ? 'YES' : 'NO');
-    
+
     if (gameState) {
       console.log('🎲 ClientPage: Game state details:', {
         sessionId: gameState.sessionId,
         questionCount: gameState.questions?.length,
         timestamp: new Date().toISOString()
       });
-      
-      // Set a flag to ensure we render the game modal
-      setShouldRenderGame(true);
-    } else {
-      setShouldRenderGame(false);
     }
   }, [gameState]);
-  
+
   // Debug effect for error and loading state changes
   useEffect(() => {
     console.log(`🎲 ClientPage: isLoading=${isLoading}, error=${error || 'none'}`);
   }, [isLoading, error]);
-  
+
   // Enhanced mobile-specific connection restoration
   useEffect(() => {
     // Only on mobile and only run this once per page load
     if (isMobile && !connectionAttempted.current && typeof window !== 'undefined') {
       connectionAttempted.current = true;
-      
+
       // Check if we might need to restore connection
       const checkMobileConnection = async () => {
         try {
           setMobileReconnecting(true);
           console.log('📱 ClientPage: Checking if mobile wallet connection needs restoration');
-          
+
           // First, check wagmi store directly as a reliable source of connected state
           const wagmiStore = window.localStorage.getItem('wagmi.store');
           let hasActiveConnection = false;
-          
+
           if (wagmiStore) {
             try {
               const wagmiData = JSON.parse(wagmiStore);
@@ -206,26 +208,26 @@ export default function ClientPage() {
                 console.log('📱 ClientPage: Found active connection in wagmi store');
                 hasActiveConnection = true;
               }
-            } catch (e) {
-              console.warn('Error checking wagmi store:', e);
+            } catch (err) {
+              console.warn('Error checking wagmi store:', err);
             }
           }
-          
+
           // Checking for any connection persistence markers
           const persistFlag = localStorage.getItem('prevent_disconnect') === 'true' || 
                             localStorage.getItem('walletConnectionState') === 'connected';
-                            
+
           if (persistFlag) {
             console.log('📱 ClientPage: Found wallet persistence flag');
           }
-          
+
           const shouldRestore = hasActiveConnection || persistFlag || await import('@/utils/persistConnection')
             .then(module => module.shouldRestoreConnection())
             .catch(() => false);
-          
+
           if (shouldRestore && !isConnected) {
             console.log('📱 ClientPage: Mobile device needs wallet reconnection');
-            
+
             // Keep monitoring for successful connection
             const checkWalletConnected = setInterval(() => {
               // Check if we're now connected
@@ -237,16 +239,16 @@ export default function ClientPage() {
                     console.log('📱 ClientPage: Wallet successfully reconnected');
                     clearInterval(checkWalletConnected);
                     setMobileReconnecting(false);
-                    
+
                     // Force refresh stats
                     window.dispatchEvent(new CustomEvent('refreshWalletStats'));
                   }
-                } catch (e) {
-                  console.warn('Error parsing wagmi state:', e);
+                } catch (err) {
+                  console.warn('Error parsing wagmi state:', err);
                 }
               }
             }, 1000);
-            
+
             // Safety timeout after 10 seconds
             setTimeout(() => {
               clearInterval(checkWalletConnected);
@@ -261,73 +263,86 @@ export default function ClientPage() {
           setMobileReconnecting(false);
         }
       };
-      
+
       // Wait a moment for page to fully load
       setTimeout(() => {
         checkMobileConnection();
       }, 500);
     }
   }, [isMobile, isConnected]);
-  
+
   // Handle the start game callback with detailed error handling
   const handleStartGame = (options: { questionCount: number; category: string; difficulty: string }) => {
     console.log('🎲 ClientPage: handleStartGame called with:', options);
-    
+
     try {
       // Track initialization attempts
       setInitializationAttempts(prev => prev + 1);
-      
+
       // Create a custom event for analytics/debugging
       const eventDetail = {
         ...options,
         attempt: initializationAttempts + 1,
         timestamp: new Date().toISOString()
       };
-      
+
       // Dispatch a custom event that can be caught by browser devtools
       const gameStartEvent = new CustomEvent('game_start_attempt', { detail: eventDetail });
       window.dispatchEvent(gameStartEvent);
-      
+
       // Make sure we're initializing with the correct options
       console.log('🎲 ClientPage: Calling initGame function...');
       initGame(options);
-      
+
       console.log('🎲 ClientPage: initGame function called successfully');
     } catch (error) {
       console.error('🛑 ClientPage: Error in handleStartGame:', error);
     }
   };
-  
+
   // Force a re-render of the GameModal component when game state changes
   // This helps ensure the component is properly mounted
   const gameModalKey = gameState ? `game-modal-${gameState.sessionId}-${Date.now()}` : 'no-game';
-  
+
   // Listen for resetGameState events from GameModal
   useEffect(() => {
     const handleResetGameState = () => {
       console.log('Resetting game state from event');
-      setShouldRenderGame(false);
     };
-    
+
     window.addEventListener('resetGameState', handleResetGameState);
     return () => window.removeEventListener('resetGameState', handleResetGameState);
   }, []);
-  
-  // Add listener for gameClose and gameCOmpletion events to properly clean up and refresh stats
+
+  // Add a function to manually refresh stats and leaderboard
+  const refreshGameData = useCallback(() => {
+    console.log('📊 ClientPage: Manually refreshing game stats and leaderboard');
+    if (refreshStats) refreshStats(); 
+    if (refreshLeaderboard) refreshLeaderboard();
+  }, [refreshStats, refreshLeaderboard]);
+
+  // Listen for refreshWalletStats events
+  useEffect(() => {
+    const handleRefreshStats = () => {
+      console.log('📊 ClientPage: Refreshing stats from event');
+      refreshGameData();
+    };
+
+    window.addEventListener('refreshWalletStats', handleRefreshStats);
+    return () => window.removeEventListener('refreshWalletStats', handleRefreshStats);
+  }, [refreshGameData]);
+
+  // Add listener for gameClose and gameCompletion events to properly clean up and refresh stats
   useEffect(() => {
     const handleGameClose = () => {
       console.log('Game close event received, cleaning up game state');
-      
       try {
-        // Force a full state reset
-        setShouldRenderGame(false);
-        
         // Refresh wallet stats when returning to main screen
         console.log('Refreshing wallet stats after game close');
         window.dispatchEvent(new CustomEvent('refreshWalletStats', { 
           detail: { forceRefresh: true } 
         }));
-        
+
         // For mobile, ensure wallet connection is maintained
         if (isMobile && address) {
           try {
@@ -342,41 +357,40 @@ export default function ClientPage() {
 
         // Ensure game settings are shown
         window.dispatchEvent(new CustomEvent('showGameSettings'));
-        
+
         // Force redrawing after a slight delay
         setTimeout(() => {
           // Final state reset
-          setShouldRenderGame(false);
         }, 100);
       } catch (error) {
         console.error('Error during game state cleanup:', error);
       }
     };
-    
-    const handleGameCompletion = (event: any) => {
+
+    const handleGameCompletion = (event: CustomEvent) => {
       // Immediately update any UI that needs to show the new score
       if (event.detail && event.detail.finalScore) {
         console.log(`Game completed with score: ${event.detail.finalScore}`);
       }
     };
-    
+
     window.addEventListener('gameClose', handleGameClose);
-    window.addEventListener('gameCompleted', handleGameCompletion);
-    
+    window.addEventListener('gameCompleted', handleGameCompletion as EventListener);
+
     return () => {
       window.removeEventListener('gameClose', handleGameClose);
-      window.removeEventListener('gameCompleted', handleGameCompletion);
+      window.removeEventListener('gameCompleted', handleGameCompletion as EventListener);
     };
   }, [isMobile, address, chainId]);
-  
+
   // Consider connected when wallet is connected and on Base chain
   const isFullyConnected = isConnected && chainId === 8453;
-  
+
   // Log render info outside JSX
   if (gameState && gameState.questions && gameState.questions.length > 0) {
     console.log('🎲 ClientPage: Rendering GameModal with', gameState.questions.length, 'questions and sessionId:', gameState.sessionId);
   }
-  
+
   return (
     <div className="flex flex-col min-h-screen">
       <ParticleBackground gameLoading={isLoading} />
@@ -437,8 +451,10 @@ export default function ClientPage() {
                 sessionId={gameState.sessionId}
                 onClose={() => {
                   console.log('Game closing from onClose handler');
-                  // First reset the rendering flag to hide modal
-                  setShouldRenderGame(false);
+                  
+                  // Force a refresh of stats and leaderboard
+                  if (refreshStats) refreshStats();
+                  if (refreshLeaderboard) refreshLeaderboard();
                   
                   // Dispatch gameClose event to trigger full state reset
                   // This will be caught by the listener we set up earlier
@@ -450,6 +466,11 @@ export default function ClientPage() {
                 }}
                 onGameComplete={async (score) => {
                   console.log('Game completed with score:', score);
+                  
+                  // Force immediate stats refresh
+                  if (refreshStats) refreshStats();
+                  if (refreshLeaderboard) refreshLeaderboard();
+                  
                   // For mobile, make sure to preserve wallet connection on completion
                   if (isMobile && address) {
                     try {

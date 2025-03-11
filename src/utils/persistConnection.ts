@@ -8,13 +8,11 @@ import { isMobileDevice } from './deviceDetect';
 // Storage keys
 const CONNECTION_STATE_KEY = 'walletConnectionState';
 const CONNECTION_TIMESTAMP_KEY = 'connectionTimestamp';
-const CONNECTION_MAX_AGE = 30 * 60 * 1000; // 30 minutes in milliseconds
 const CONNECTION_ADDRESS_KEY = 'connectedAddress';
 const CONNECTION_CHAIN_ID_KEY = 'connectedChainId';
 
 // Mobile-specific settings
 const MOBILE_CONNECTION_KEY = 'mobile_walletConnection';
-const MOBILE_MAX_AGE = 120 * 60 * 1000; // 2 hours for mobile (increased from 1 hour)
 const MOBILE_BACKUP_KEY = 'mobile_wallet_backup';
 
 /**
@@ -120,15 +118,25 @@ export function shouldRestoreConnection(): boolean {
       return hasAnyConnectionData;
     }
     
-    // For desktop, keep existing more restrictive logic
+    // For desktop, keep existing more restrictive logic but with a longer timeout
     // Desktop devices should only restore in specific cases
     if (!isMobile) {
       // Check only if there are explicit connection keys and the wallet was definitely connected
       const hasConnectionState = localStorage.getItem(CONNECTION_STATE_KEY) === 'connected';
       const hasAddress = localStorage.getItem(CONNECTION_ADDRESS_KEY) !== null;
       
+      // Also check for recent game completion flags
+      const hasCompletedGame = localStorage.getItem('game_completed_address') || 
+                              sessionStorage.getItem('game_completed_address');
+      
       // Log for desktop
-      console.log(`${deviceType} restore check - Connection state: ${hasConnectionState}, Address: ${hasAddress ? 'present' : 'missing'}`);
+      console.log(`${deviceType} restore check - Connection state: ${hasConnectionState}, Address: ${hasAddress ? 'present' : 'missing'}, Game completed: ${hasCompletedGame ? 'yes' : 'no'}`);
+      
+      // If we have game completion data, always restore
+      if (hasCompletedGame) {
+        console.log(`${deviceType} detected completed game - will restore connection`);
+        return true;
+      }
       
       // Only return true for desktop if both conditions are met
       if (hasConnectionState && hasAddress) {
@@ -137,8 +145,8 @@ export function shouldRestoreConnection(): boolean {
           const timestamp = parseInt(connectionTimestamp, 10);
           const now = Date.now();
           const ageInMinutes = Math.round((now - timestamp) / (60 * 1000));
-          // Only restore very recent connections on desktop (last 5 minutes)
-          const shouldRestore = ageInMinutes < 5; // 5 minutes
+          // Extend the restoration window to 30 minutes (from 5 minutes)
+          const shouldRestore = ageInMinutes < 30; // 30 minutes
           
           console.log(`${deviceType} connection age: ${ageInMinutes} minutes, will ${shouldRestore ? '' : 'NOT '}restore`);
           return shouldRestore;

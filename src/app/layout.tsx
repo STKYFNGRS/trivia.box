@@ -1,6 +1,7 @@
 import { Inter } from 'next/font/google';
 import type { Metadata } from "next";
 import "./globals.css";
+import 'ethereum-identity-kit/css';
 import Providers from "./providers";
 
 const inter = Inter({
@@ -22,7 +23,7 @@ export const metadata: Metadata = {
     ],
     shortcut: { url: '/favicon.ico', type: 'image/x-icon' },
     apple: [
-      { url: '/apple-touch-icon.png', type: 'image/png' },
+      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
       { url: '/android-chrome-192x192.png', sizes: '192x192', type: 'image/png' },
     ],
     other: [
@@ -59,7 +60,19 @@ export default function RootLayout({
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
+        {/* Primary meta tags */}
+        <meta name="theme-color" content="#000000" />
+        
+        {/* Explicit favicon tags for MetaMask and other extensions */}
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="shortcut icon" href="/favicon.ico" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+        
+        {/* Additional tags specifically for web3 wallets */}
+        <link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png" />
+        <link rel="icon" type="image/png" sizes="512x512" href="/android-chrome-512x512.png" />
       </head>
       <body className="dark overflow-x-hidden">
         <Providers>

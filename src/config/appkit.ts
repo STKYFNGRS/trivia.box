@@ -2,7 +2,6 @@ import { createAppKit } from '@reown/appkit';
 import { DefaultSIWX, InformalMessenger, LocalStorage } from '@reown/appkit-siwx';
 import { wagmiAdapter } from './wagmi';
 import { base, mainnet } from '@reown/appkit/networks';
-import { clearConnectionState } from '@/utils/persistConnection';
 
 /**
  * Create AppKit configuration with improved SIWE settings
@@ -32,18 +31,13 @@ if (typeof window !== 'undefined') {
       getNonce: async () => Math.floor(Math.random() * 10000000).toString()
     });
     
-    // Define icons list
+    // Define icons with absolute URLs for better compatibility
     const icons = [
-      '/favicon.ico',
-      '/android-chrome-192x192.png'
+      `${window.location.origin}/favicon.ico`, // This format is critical for third-party extensions
+      `${window.location.origin}/android-chrome-192x192.png`,
+      `${window.location.origin}/favicon-32x32.png`,
+      `${window.location.origin}/favicon-16x16.png`
     ];
-    
-    // Force clean existing connections for a fresh start
-    try {
-      clearConnectionState();
-    } catch (err) {
-      console.warn('[AppKit] Error clearing connection state:', err);
-    }
     
     // Create the AppKit with the documented SIWX configuration
     modal = createAppKit({
@@ -57,21 +51,14 @@ if (typeof window !== 'undefined') {
       // Use DefaultSIWX with minimal configuration as per docs
       siwx: new DefaultSIWX({
         messenger: messenger,
-        storage: new LocalStorage({ key: 'trivia-box-siwe-v7' })
+        storage: new LocalStorage({ key: 'trivia-box-siwe-v8' })
       }),
       projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
       themeMode: 'dark',
       networks: [base, mainnet]
     });
 
-    // More comprehensive error handling and force clean state at startup
-    try {
-      // Attempt to disconnect any existing connection
-      modal.disconnect().catch(e => console.warn('Initial disconnect error:', e));
-    } catch (e) {
-      console.warn('Cannot disconnect at init:', e);
-    }
-    
+    // Add error handling but don't disconnect on errors
     window.addEventListener('unhandledrejection', (event) => {
       if (event.reason?.message && 
          (event.reason.message.includes('SIWE') || 
@@ -80,22 +67,36 @@ if (typeof window !== 'undefined') {
           event.reason.message.includes('wallet'))) {
         console.warn('[AppKit] Wallet connection error:', event.reason.message);
         
-        // Attempt to stop any ongoing connection attempts
-        try {
-          modal.disconnect().catch(e => console.warn('Error during disconnect:', e));
-        } catch (disconnectErr) {
-          console.warn('Error attempting disconnect:', disconnectErr);
-        }
+        // Don't disconnect - just log the error
+        // This helps maintain existing connections across refreshes
+        console.log('[AppKit] Connection error detected, but maintaining state');
       }
     });
-    
-    // Also listen for connection events to debug
+
+    // Add enhanced event listeners for connection state changes
     window.addEventListener('connect', (event) => {
       console.log('[AppKit] Connect event received:', event);
     });
     
     window.addEventListener('connected', (event) => {
       console.log('[AppKit] Connected event received:', event);
+      // When connected, save to more persistent storage
+      try {
+        const wagmiState = window.localStorage.getItem('wagmi.store');
+        const wagmiData = wagmiState ? JSON.parse(wagmiState) : null;
+        const account = wagmiData?.state?.connections?.[0]?.accounts?.[0];
+        const chainId = wagmiData?.state?.connections?.[0]?.chains?.[0]?.id;
+        
+        if (account) {
+          // Import dynamically to avoid circular dependencies
+          import('@/utils/persistConnection').then(({ saveConnectionState }) => {
+            saveConnectionState(account, chainId || 8453);
+            console.log('[AppKit] Connection state saved for:', account);
+          }).catch(e => console.warn('[AppKit] Error importing persistConnection:', e));
+        }
+      } catch (e) {
+        console.warn('[AppKit] Error saving connection state on connect:', e);
+      }
     });
     
     // Save modal to window for easier debugging

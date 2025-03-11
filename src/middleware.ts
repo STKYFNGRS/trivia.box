@@ -16,15 +16,17 @@ export function middleware(request) {
     pathname.includes('chrome') || 
     pathname.includes('apple-touch');
   
-  // Apply special CORS headers to icon requests to fix loading in AppKit modal
+  // Apply CORS headers to icon requests but allow them to be served
   if (isIconRequest) {
-    // Create response object
-    const response = new Response(null);
-    
-    // Add CORS and cache headers to allow loading from AppKit modal
-    response.headers.set('Access-Control-Allow-Origin', '*');
-    response.headers.set('Access-Control-Allow-Methods', 'GET');
-    response.headers.set('Cache-Control', 'public, max-age=86400'); // Cache for a day
+    // Create a new Response object
+    const response = new Response(null, {
+      status: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET',
+        'Cache-Control': 'public, max-age=86400'
+      }
+    });
     
     return response;
   }
