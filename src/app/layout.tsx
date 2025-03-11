@@ -2,7 +2,6 @@ import { Inter } from 'next/font/google';
 import type { Metadata } from "next";
 import "./globals.css";
 import Providers from "./providers";
-import FaviconLinks from "@/components/FaviconLinks";
 
 const inter = Inter({
   subsets: ['latin'],
@@ -60,7 +59,7 @@ export default function RootLayout({
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <FaviconLinks />
+        <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
       </head>
       <body className="dark overflow-x-hidden">
         <Providers>

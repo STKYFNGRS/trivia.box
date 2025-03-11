@@ -1,5 +1,5 @@
 import { createAppKit } from '@reown/appkit';
-import { DefaultSIWX, InformalMessenger, LocalStorage, EIP155Verifier } from '@reown/appkit-siwx';
+import { DefaultSIWX, InformalMessenger, LocalStorage } from '@reown/appkit-siwx';
 import { wagmiAdapter } from './wagmi';
 import { base, mainnet } from '@reown/appkit/networks';
 import { clearConnectionState } from '@/utils/persistConnection';
@@ -32,17 +32,10 @@ if (typeof window !== 'undefined') {
       getNonce: async () => Math.floor(Math.random() * 10000000).toString()
     });
     
-    // Use absolute URLs with explicit protocol for better compatibility
-    const domain = window.location.hostname.replace('www.', '');
-    const protocol = window.location.protocol;
-    const baseUrl = `${protocol}//${domain}`;
-    
-    // Define icons with absolute URLs
+    // Define icons list
     const icons = [
-      `${baseUrl}/favicon.ico`,
-      `${baseUrl}/android-chrome-192x192.png`,
-      `${baseUrl}/favicon-32x32.png`,
-      `${baseUrl}/favicon-16x16.png`
+      '/favicon.ico',
+      '/android-chrome-192x192.png'
     ];
     
     // Force clean existing connections for a fresh start
@@ -61,13 +54,10 @@ if (typeof window !== 'undefined') {
         url: window.location.origin,
         icons: icons
       },
-      // Use DefaultSIWX with explicit Ethereum verifier for MetaMask compatibility
+      // Use DefaultSIWX with minimal configuration as per docs
       siwx: new DefaultSIWX({
         messenger: messenger,
-        // Explicitly include EIP155Verifier for Ethereum chains
-        verifiers: [new EIP155Verifier()],
-        // Use a fresh storage key
-        storage: new LocalStorage({ key: 'trivia-box-siwe-v6' })
+        storage: new LocalStorage({ key: 'trivia-box-siwe-v7' })
       }),
       projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
       themeMode: 'dark',

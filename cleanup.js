@@ -1,13 +1,18 @@
-// Cleanup script to remove unnecessary files
 const fs = require('fs');
 const path = require('path');
 
-// Files to delete
+// List of files to delete
 const filesToDelete = [
+  // Custom components we created that are no longer needed
+  path.join(__dirname, 'src', 'components', 'FaviconLinks.tsx'),
+  path.join(__dirname, 'src', 'components', 'MetamaskFavicon.tsx'),
   path.join(__dirname, 'src', 'utils', 'directSiwe.ts'),
-  path.join(__dirname, 'src', 'utils', 'simpleSiwe.ts'),
-  path.join(__dirname, 'src', 'config', 'directAppkit.ts'),
-  path.join(__dirname, 'src', 'components', 'shared', 'DirectConnectButton.tsx')
+  
+  // Custom HTML file we created that is not needed
+  path.join(__dirname, 'public', 'index.html'),
+  
+  // This cleanup script itself
+  __filename
 ];
 
 // Delete each file
@@ -17,11 +22,11 @@ filesToDelete.forEach(file => {
       fs.unlinkSync(file);
       console.log(`Deleted: ${file}`);
     } else {
-      console.log(`File does not exist: ${file}`);
+      console.log(`File not found: ${file}`);
     }
   } catch (err) {
     console.error(`Error deleting ${file}:`, err);
   }
 });
 
-console.log('Cleanup complete!');
+console.log('Cleanup completed!');
