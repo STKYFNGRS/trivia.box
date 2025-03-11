@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, Suspense, lazy, useRef } from 'react';
+import { cleanupWalletConnections, preventAutoConnection } from '@/utils/cleanupConnection';
 import { useAccount } from 'wagmi';
 import { useGameState } from '@/hooks/useGameState';
 import dynamic from 'next/dynamic';
@@ -62,6 +63,11 @@ export default function ClientPage() {
   useEffect(() => {
     if (!initialLoadDone.current) {
       initialLoadDone.current = true;
+      
+      // Clean up any existing wallet connections to prevent auto-connect
+      cleanupWalletConnections();
+      preventAutoConnection();
+      
       // Short delay to allow component to fully render and hydrate
       const timer = setTimeout(() => {
         setInitialLoading(false);

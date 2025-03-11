@@ -2,6 +2,7 @@ import { createAppKit } from '@reown/appkit';
 import { DefaultSIWX, InformalMessenger, LocalStorage } from '@reown/appkit-siwx';
 import { wagmiAdapter } from './wagmi';
 import { base, mainnet } from '@reown/appkit/networks';
+import { clearConnectionState } from '@/utils/persistConnection';
 
 /**
  * Create AppKit configuration with improved SIWE settings
@@ -40,6 +41,13 @@ if (typeof window !== 'undefined') {
       `${window.location.origin}/apple-touch-icon.png`
     ];
     
+    // Force clean any existing connection state to prevent auto-connection
+    try {
+      clearConnectionState();
+    } catch (err) {
+      console.warn('[AppKit] Error clearing connection state:', err);
+    }
+    
     // Create the AppKit with proper configuration
     modal = createAppKit({
       adapters: [wagmiAdapter],
@@ -56,22 +64,41 @@ if (typeof window !== 'undefined') {
         // Use a versioned storage key to avoid conflicts
         storage: new LocalStorage({ key: 'trivia-box-siwe-v3' })
       }),
-
       // Project ID from environment
       projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
       // Dark theme for better UI
       themeMode: 'dark',
       // Use the predefined networks from AppKit
-      networks: [base, mainnet]
+      networks: [base, mainnet],
+      // Important: Disable auto-connect to force manual connection
+      autoConnect: false
     });
 
-    // Log any SIWE-related errors for debugging
+    // More comprehensive error handling
     window.addEventListener('unhandledrejection', (event) => {
       if (event.reason?.message && 
          (event.reason.message.includes('SIWE') || 
-          event.reason.message.includes('sign'))) {
-        console.warn('[AppKit] SIWE-related error:', event.reason.message);
+          event.reason.message.includes('sign') ||
+          event.reason.message.includes('connect') ||
+          event.reason.message.includes('wallet'))) {
+        console.warn('[AppKit] Wallet connection error:', event.reason.message);
+        
+        // Attempt to stop any ongoing connection attempts
+        try {
+          modal.disconnect().catch(e => console.warn('Error during disconnect:', e));
+        } catch (disconnectErr) {
+          console.warn('Error attempting disconnect:', disconnectErr);
+        }
       }
+    });
+    
+    // Also listen for connection events to debug
+    window.addEventListener('connect', (event) => {
+      console.log('[AppKit] Connect event received:', event);
+    });
+    
+    window.addEventListener('connected', (event) => {
+      console.log('[AppKit] Connected event received:', event);
     });
     
     // Save modal to window for easier debugging
