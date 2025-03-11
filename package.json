@@ -9,10 +9,10 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@reown/appkit": "^0.1.66",
-    "@reown/appkit-adapter-wagmi": "^0.1.66",
-    "@reown/appkit-react": "^0.1.66",
-    "@reown/appkit-siwx": "^0.1.66",
+    "@reown/appkit": "^0.1.40",
+    "@reown/appkit-adapter-wagmi": "^0.1.40",
+    "@reown/appkit-react": "^0.1.40",
+    "@reown/appkit-siwx": "^0.1.40",
     "@types/node": "^20.4.9",
     "@types/react": "^18.2.19",
     "@types/react-dom": "^18.2.7",
