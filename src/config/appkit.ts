@@ -1,5 +1,5 @@
 import { createAppKit } from '@reown/appkit';
-import { DefaultSIWX, InformalMessenger, LocalStorage } from '@reown/appkit-siwx';
+import { DefaultSIWX, InformalMessenger, LocalStorage, EIP155Verifier } from '@reown/appkit-siwx';
 import { wagmiAdapter } from './wagmi';
 import { base, mainnet } from '@reown/appkit/networks';
 import { clearConnectionState } from '@/utils/persistConnection';
@@ -20,19 +20,22 @@ if (typeof window !== 'undefined') {
     // Log environment
     console.log(`[AppKit] Initializing in ${isDevelopment ? 'development' : 'production'} mode`);
     
-    // Create a message for SIWE that's clearer and more concise
+    // Create a message for SIWE that exactly matches EIP-4361 standard for MetaMask compatibility
     const messenger = new InformalMessenger({
+      // Domain without protocol or www prefix - critical for domain binding
       domain: window.location.hostname.replace('www.', ''),
+      // Full origin as URI
       uri: window.location.origin,
-      // Short, clear statement
-      statement: "Sign to verify you own this wallet",
-      // Nonce generation
+      // Standardized simple statement as per EIP-4361
+      statement: "Sign in with Ethereum to verify wallet ownership",
+      // Nonce generation - keep it simple
       getNonce: async () => Math.floor(Math.random() * 10000000).toString()
     });
     
-    // Define icons in correct order - larger icons first
+    // Define icons with proper full URLs (not relative paths)
     const icons = [
       `${window.location.origin}/android-chrome-192x192.png`,
+      `${window.location.origin}/android-chrome-512x512.png`,
       `${window.location.origin}/favicon-32x32.png`,
       `${window.location.origin}/favicon-16x16.png`,
       `${window.location.origin}/favicon.ico`
@@ -54,11 +57,13 @@ if (typeof window !== 'undefined') {
         url: window.location.origin,
         icons: icons
       },
-      // Use DefaultSIWX with minimal customization as per docs
+      // Use DefaultSIWX with explicit Ethereum verifier for MetaMask compatibility
       siwx: new DefaultSIWX({
         messenger: messenger,
+        // Explicitly include EIP155Verifier for Ethereum chains
+        verifiers: [new EIP155Verifier()],
         // Use a fresh storage key
-        storage: new LocalStorage({ key: 'trivia-box-siwe-v5' })
+        storage: new LocalStorage({ key: 'trivia-box-siwe-v6' })
       }),
       projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
       themeMode: 'dark',

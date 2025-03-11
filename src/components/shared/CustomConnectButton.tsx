@@ -75,12 +75,31 @@ export default function CustomConnectButton() {
           await switchChain({ chainId: base.id });
         }
       } else {
+        // Try to disconnect to ensure clean state
+        try {
+          console.log('[Debug] Disconnecting before new connection...');
+          await modal.disconnect().catch(() => {});
+          // Small delay
+          await new Promise(resolve => setTimeout(resolve, 300));
+        } catch (e) {}
+        
         // Simple connection flow - just open the modal
         console.log('[Debug] Opening connect modal');
         await modal.open();
         
         // Log the result
-        console.log('[Debug] Modal closed, connection result:', { isConnected, status, address });
+        console.log('[Debug] Modal closed, connection result:', { 
+          isConnected, 
+          status, 
+          address,
+          chainId
+        });
+        
+        // If connection successful, save state
+        if (address) {
+          console.log('[Debug] Connection successful, saving state for:', address);
+          saveConnectionState(address, chainId || base.id);
+        }
       }
     } catch (error) {
       console.error('[Debug] Connection error:', error);
