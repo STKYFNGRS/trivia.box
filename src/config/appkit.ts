@@ -20,19 +20,17 @@ if (typeof window !== 'undefined') {
     // Log environment
     console.log(`[AppKit] Initializing in ${isDevelopment ? 'development' : 'production'} mode`);
     
-    // Create a cleaner, simpler message for SIWE
+    // Create a message for SIWE that's clearer and more concise
     const messenger = new InformalMessenger({
-      // Just use the domain without www prefix
       domain: window.location.hostname.replace('www.', ''),
-      // Full origin URL
       uri: window.location.origin,
-      // Simplified statement that works better with wallets
-      statement: "Sign to verify wallet ownership",
-      // Simple nonce generation
+      // Short, clear statement
+      statement: "Sign to verify you own this wallet",
+      // Nonce generation
       getNonce: async () => Math.floor(Math.random() * 10000000).toString()
     });
     
-    // Explicitly specify our icons for better loading - order matters for wallet displays
+    // Define icons in correct order - larger icons first
     const icons = [
       `${window.location.origin}/android-chrome-192x192.png`,
       `${window.location.origin}/favicon-32x32.png`,
@@ -40,34 +38,30 @@ if (typeof window !== 'undefined') {
       `${window.location.origin}/favicon.ico`
     ];
     
-    // Force clean any existing connection state to prevent auto-connection
+    // Force clean existing connections for a fresh start
     try {
       clearConnectionState();
     } catch (err) {
       console.warn('[AppKit] Error clearing connection state:', err);
     }
     
-    // Create the AppKit with proper configuration
+    // Create the AppKit with the documented SIWX configuration
     modal = createAppKit({
       adapters: [wagmiAdapter],
-      // Improved metadata for cleaner UI
       metadata: {
         name: 'Trivia.Box',
-        description: 'Test your knowledge & earn rewards in this web3 trivia game',
+        description: 'Test your knowledge & earn rewards',
         url: window.location.origin,
         icons: icons
       },
-      // Use DefaultSIWX with minimal customization
+      // Use DefaultSIWX with minimal customization as per docs
       siwx: new DefaultSIWX({
         messenger: messenger,
-        // Use a versioned storage key to avoid conflicts - use a new key to reset storage
-        storage: new LocalStorage({ key: 'trivia-box-siwe-v4' })
+        // Use a fresh storage key
+        storage: new LocalStorage({ key: 'trivia-box-siwe-v5' })
       }),
-      // Project ID from environment
       projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
-      // Dark theme for better UI
       themeMode: 'dark',
-      // Use the predefined networks from AppKit
       networks: [base, mainnet]
     });
 

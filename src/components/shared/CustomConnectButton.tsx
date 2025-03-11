@@ -62,7 +62,7 @@ export default function CustomConnectButton() {
     }
   }, [isConnected]);
 
-  const handleConnect = useCallback(async () => {
+    const handleConnect = useCallback(async () => {
     console.log('[Debug] Connect button clicked');
     if (isConnecting) return;
     
@@ -75,42 +75,19 @@ export default function CustomConnectButton() {
           await switchChain({ chainId: base.id });
         }
       } else {
-        // Clear any existing connections first
-        console.log('[Debug] Attempting to disconnect any existing connections...');
-        try {
-          await modal.disconnect().catch(() => {});
-        } catch (e) {}
-        
-        // Small delay after disconnect
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        console.log('[Debug] Opening connect modal...');
+        // Simple connection flow - just open the modal
+        console.log('[Debug] Opening connect modal');
         await modal.open();
         
-        // After connection, log status
-        console.log('[Debug] Modal closed, checking connection status...');
-        console.log('[Debug] isConnected:', isConnected, 'status:', status);
-        
-        // Save connection state if connected
-        if (address) {
-          console.log('[Debug] Saving connection state for address:', address);
-          saveConnectionState(address, chainId || base.id);
-        }
+        // Log the result
+        console.log('[Debug] Modal closed, connection result:', { isConnected, status, address });
       }
     } catch (error) {
       console.error('[Debug] Connection error:', error);
-      
-      // Clean up on error
-      try {
-        await modal.disconnect().catch(() => {});
-      } catch (e) {}
     } finally {
-      // Reset connecting state
-      if (!isConnected || chainId === base.id) {
-        setIsConnecting(false);
-      }
+      setIsConnecting(false);
     }
-  }, [isConnected, chainId, switchChain, isConnecting, address, status]);
+  }, [isConnected, chainId, switchChain, isConnecting, status, address]);
 
   // Reset connecting state after successful connection to Base
   useEffect(() => {
