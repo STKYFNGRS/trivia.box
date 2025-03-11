@@ -71,13 +71,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setIsModalBusy(true);
       await modal.open().catch((error) => {
+        // Handle common error cases
         if (error.message === 'Proposal expired') {
+          console.log('[Auth] Retrying after proposal expiration...');
+          return modal.open();
+        }
+        // Add retry for connection errors as well
+        if (error.message && 
+           (error.message.includes('connect') || 
+            error.message.includes('sign') || 
+            error.message.includes('SIWE'))) {
+          console.log('[Auth] Retrying after connection error...');
           return modal.open();
         }
         throw error;
       });
     } catch (error) {
       console.error('Failed to open connect modal:', error);
+      
+      // Force disconnect and try again on next attempt
+      try {
+        await modal.disconnect();
+      } catch (e) {
+        console.warn('Error during disconnect:', e);
+      }
     } finally {
       setIsModalBusy(false);
     }

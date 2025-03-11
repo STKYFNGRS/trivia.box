@@ -2,7 +2,6 @@ import { createAppKit } from '@reown/appkit';
 import { DefaultSIWX, InformalMessenger, LocalStorage } from '@reown/appkit-siwx';
 import { wagmiAdapter } from './wagmi';
 import { base, mainnet } from '@reown/appkit/networks';
-import { CustomEIP155Verifier } from '@/utils/CustomSIWEVerifier';
 
 /**
  * Create AppKit configuration with improved SIWE settings
@@ -32,13 +31,13 @@ if (typeof window !== 'undefined') {
       getNonce: async () => Math.floor(Math.random() * 10000000).toString()
     });
     
-    // Use our custom EIP155 verifier which properly handles EVM chains
-    const verifier = new CustomEIP155Verifier();
-    
     // Explicitly specify our icons for better loading
     const icons = [
       `${window.location.origin}/favicon.ico`,
-      `${window.location.origin}/android-chrome-192x192.png`
+      `${window.location.origin}/favicon-16x16.png`,
+      `${window.location.origin}/favicon-32x32.png`,
+      `${window.location.origin}/android-chrome-192x192.png`,
+      `${window.location.origin}/apple-touch-icon.png`
     ];
     
     // Create the AppKit with proper configuration
@@ -51,13 +50,13 @@ if (typeof window !== 'undefined') {
         url: window.location.origin,
         icons: icons
       },
-      // Always use SIWx with our custom verifier to fix the CaipNetwork issue
+      // Use DefaultSIWX with minimal customization
       siwx: new DefaultSIWX({
         messenger: messenger,
-        verifiers: [verifier],
         // Use a versioned storage key to avoid conflicts
         storage: new LocalStorage({ key: 'trivia-box-siwe-v3' })
       }),
+
       // Project ID from environment
       projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
       // Dark theme for better UI
@@ -66,25 +65,12 @@ if (typeof window !== 'undefined') {
       networks: [base, mainnet]
     });
 
-    // Enable debugging for wallet connection issues
+    // Log any SIWE-related errors for debugging
     window.addEventListener('unhandledrejection', (event) => {
-      // Check for SIWE errors
       if (event.reason?.message && 
          (event.reason.message.includes('SIWE') || 
-          event.reason.message.includes('CAIP') || 
           event.reason.message.includes('sign'))) {
-        
-        console.warn('[AppKit] SIWE error caught:', 
-          event.reason.message
-        );
-
-        // Dispatch a custom event for our error handler component
-        window.dispatchEvent(new CustomEvent('siwe-error', {
-          detail: {
-            type: 'verification-error',
-            message: 'Wallet verification failed. Please try again or switch to Base/Ethereum network.'
-          }
-        }));
+        console.warn('[AppKit] SIWE-related error:', event.reason.message);
       }
     });
     
