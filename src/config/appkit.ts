@@ -27,18 +27,17 @@ if (typeof window !== 'undefined') {
       // Full origin as URI
       uri: window.location.origin,
       // Standardized simple statement as per EIP-4361
-      statement: "Sign in with Ethereum to verify wallet ownership",
+      statement: "Sign this message to verify you own this wallet",
       // Nonce generation - keep it simple
       getNonce: async () => Math.floor(Math.random() * 10000000).toString()
     });
     
     // Define icons with proper full URLs (not relative paths)
     const icons = [
+      `${window.location.origin}/favicon.ico`,
       `${window.location.origin}/android-chrome-192x192.png`,
-      `${window.location.origin}/android-chrome-512x512.png`,
       `${window.location.origin}/favicon-32x32.png`,
-      `${window.location.origin}/favicon-16x16.png`,
-      `${window.location.origin}/favicon.ico?v=${Date.now()}` // Force refresh with timestamp
+      `${window.location.origin}/favicon-16x16.png`
     ];
     
     // Force clean existing connections for a fresh start
