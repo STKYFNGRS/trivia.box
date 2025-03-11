@@ -68,6 +68,15 @@ export default function ClientPage() {
       cleanupWalletConnections();
       preventAutoConnection();
       
+      // Also try to disconnect using the modal directly
+      setTimeout(() => {
+        try {
+          import('@/config/appkit').then(({ modal }) => {
+            modal.disconnect().catch(() => {});
+          }).catch(() => {});
+        } catch (e) {}
+      }, 100);
+      
       // Short delay to allow component to fully render and hydrate
       const timer = setTimeout(() => {
         setInitialLoading(false);

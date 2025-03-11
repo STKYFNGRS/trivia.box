@@ -14,6 +14,19 @@ export default function CustomConnectButton() {
   const { status } = useAppKitState();
   const connectionSavedRef = useRef(false);
 
+  // Add cleanup to avoid auto-reconnect on component mount
+  useEffect(() => {
+    // Clean connection state on component mount
+    const cleanupConnection = async () => {
+      try {
+        // Try to disconnect any existing wallet connection
+        await modal.disconnect().catch(() => {});
+      } catch (e) {}
+    };
+    
+    cleanupConnection();
+  }, []);
+
   // Reset connecting state if AppKit disconnects
   useEffect(() => {
     if (status === 'unauthenticated' && isConnecting) {
@@ -62,66 +75,42 @@ export default function CustomConnectButton() {
           await switchChain({ chainId: base.id });
         }
       } else {
-        // Clear any existing connection state before showing the modal
-        // This ensures we start with a clean slate
+        // Clear any existing connections first
+        console.log('[Debug] Attempting to disconnect any existing connections...');
         try {
           await modal.disconnect().catch(() => {});
         } catch (e) {}
         
-        console.log('[Debug] Opening connect modal');
+        // Small delay after disconnect
+        await new Promise(resolve => setTimeout(resolve, 300));
         
-        // Use a promise with timeout to handle connection
-        const modalPromise = modal.open();
+        console.log('[Debug] Opening connect modal...');
+        await modal.open();
         
-        // Set a timeout in case the modal gets stuck
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Connection timed out')), 60000);
-        });
+        // After connection, log status
+        console.log('[Debug] Modal closed, checking connection status...');
+        console.log('[Debug] isConnected:', isConnected, 'status:', status);
         
-        // Wait for either the modal to complete or timeout
-        await Promise.race([modalPromise, timeoutPromise])
-          .catch(async (error) => {
-            console.warn('[Debug] Connection error or timeout:', error);
-            
-            // If it's a proposal expired error, try again once
-            if (error.message === 'Proposal expired') {
-              console.log('[Debug] Retrying after proposal expiration...');
-              return modal.open();
-            }
-            
-            // For other errors, just throw to be caught by the outer catch
-            throw error;
-          });
-        
-        // After successful connection, immediately save state
-        console.log('[Debug] Modal opened successfully, checking connection...');
-        
-        // Check if we're connected after the modal closes
-        if (isConnected || status === 'authenticated') {
-          // Success - save the connection state
-          console.log('[Debug] Connected successfully!');
-          if (address) {
-            saveConnectionState(address, chainId || base.id);
-          }
-        } else {
-          // Not connected - something went wrong
-          console.warn('[Debug] Modal closed but not connected');
+        // Save connection state if connected
+        if (address) {
+          console.log('[Debug] Saving connection state for address:', address);
+          saveConnectionState(address, chainId || base.id);
         }
       }
     } catch (error) {
-      console.error('Failed to connect:', error);
+      console.error('[Debug] Connection error:', error);
       
-      // Try to disconnect to reset state on error
+      // Clean up on error
       try {
-        await modal.disconnect();
+        await modal.disconnect().catch(() => {});
       } catch (e) {}
     } finally {
-      // Only reset connecting state if we're not in the middle of switching chains
+      // Reset connecting state
       if (!isConnected || chainId === base.id) {
         setIsConnecting(false);
       }
     }
-  }, [isConnected, chainId, switchChain, isConnecting, status, address]);
+  }, [isConnected, chainId, switchChain, isConnecting, address, status]);
 
   // Reset connecting state after successful connection to Base
   useEffect(() => {

@@ -19,6 +19,10 @@ export function cleanupWalletConnections(): void {
     try {
       localStorage.removeItem('wagmi.store');
       localStorage.removeItem('wagmi.cache');
+      localStorage.removeItem('wagmi.connected');
+      sessionStorage.removeItem('wagmi.store');
+      sessionStorage.removeItem('wagmi.cache');
+      sessionStorage.removeItem('wagmi.connected');
     } catch (e) {
       console.warn('Error clearing wagmi storage:', e);
     }
@@ -27,6 +31,12 @@ export function cleanupWalletConnections(): void {
     try {
       localStorage.removeItem('trivia-box-siwe-v3');
       sessionStorage.removeItem('trivia-box-siwe-v3');
+      localStorage.removeItem('@appkit/siwe-storage');
+      sessionStorage.removeItem('@appkit/siwe-storage');
+      localStorage.removeItem('@reown/appkit-siwe');
+      sessionStorage.removeItem('@reown/appkit-siwe');
+      localStorage.removeItem('@appkit/siwe');
+      sessionStorage.removeItem('@appkit/siwe');
     } catch (e) {
       console.warn('Error clearing AppKit storage:', e);
     }
@@ -37,10 +47,15 @@ export function cleanupWalletConnections(): void {
       sessionStorage.removeItem('prevent_disconnect');
       localStorage.removeItem('connected');
       sessionStorage.removeItem('connected');
+      localStorage.removeItem('walletconnect');
+      sessionStorage.removeItem('walletconnect');
+      localStorage.removeItem('WALLETCONNECT_DEEPLINK_CHOICE');
+      localStorage.removeItem('CONNECTOR_ID');
+      localStorage.removeItem('wagmi.wallet');
+      sessionStorage.removeItem('wagmi.wallet');
       
-      // Clear custom AppKit flags if any
-      localStorage.removeItem('@appkit/siwe');
-      sessionStorage.removeItem('@appkit/siwe');
+      // Set a flag to indicate we don't want auto-connection
+      localStorage.setItem('prevent_auto_connect', 'true');
     } catch (e) {
       console.warn('Error clearing additional connection flags:', e);
     }
