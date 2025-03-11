@@ -32,12 +32,17 @@ if (typeof window !== 'undefined') {
       getNonce: async () => Math.floor(Math.random() * 10000000).toString()
     });
     
-    // Define icons with proper full URLs (not relative paths)
+    // Use absolute URLs with explicit protocol for better compatibility
+    const domain = window.location.hostname.replace('www.', '');
+    const protocol = window.location.protocol;
+    const baseUrl = `${protocol}//${domain}`;
+    
+    // Define icons with absolute URLs
     const icons = [
-      `${window.location.origin}/favicon.ico`,
-      `${window.location.origin}/android-chrome-192x192.png`,
-      `${window.location.origin}/favicon-32x32.png`,
-      `${window.location.origin}/favicon-16x16.png`
+      `${baseUrl}/favicon.ico`,
+      `${baseUrl}/android-chrome-192x192.png`,
+      `${baseUrl}/favicon-32x32.png`,
+      `${baseUrl}/favicon-16x16.png`
     ];
     
     // Force clean existing connections for a fresh start
