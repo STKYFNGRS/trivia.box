@@ -38,7 +38,7 @@ if (typeof window !== 'undefined') {
       `${window.location.origin}/android-chrome-512x512.png`,
       `${window.location.origin}/favicon-32x32.png`,
       `${window.location.origin}/favicon-16x16.png`,
-      `${window.location.origin}/favicon.ico`
+      `${window.location.origin}/favicon.ico?v=${Date.now()}` // Force refresh with timestamp
     ];
     
     // Force clean existing connections for a fresh start
