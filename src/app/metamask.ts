@@ -27,7 +27,7 @@ export const initMetaMask = () => {
     
     // Add chain ID meta tag
     const chainIdMeta = document.createElement('meta');
-    chainIdMeta.property = 'eth:chainId';
+    chainIdMeta.setAttribute('property', 'eth:chainId');
     chainIdMeta.content = metamaskConfig.chainId;
     document.head.appendChild(chainIdMeta);
     
