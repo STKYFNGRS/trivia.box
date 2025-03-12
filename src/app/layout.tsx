@@ -40,6 +40,7 @@ export default function RootLayout({
         
         {/* Barebones basic favicon setup */}
         <link rel="icon" href="/favicon.ico" />
+        <link rel="manifest" href="/site.webmanifest" />
         
         {/* MetaMask specific icon - directly reference our special icon */}
         <link rel="icon" type="image/png" sizes="32x32" href="/mm-icon.png" />
