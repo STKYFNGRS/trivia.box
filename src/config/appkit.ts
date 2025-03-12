@@ -33,7 +33,8 @@ if (typeof window !== 'undefined') {
     
     // Define icons with absolute URLs for better compatibility
     const icons = [
-      `${window.location.origin}/favicon.ico`, // This format is critical for third-party extensions
+      `${window.location.origin}/metamask-icon.png`, // First icon is used by MetaMask
+      `${window.location.origin}/favicon.ico`,
       `${window.location.origin}/android-chrome-192x192.png`,
       `${window.location.origin}/favicon-32x32.png`,
       `${window.location.origin}/favicon-16x16.png`
@@ -101,7 +102,9 @@ if (typeof window !== 'undefined') {
     
     // Save modal to window for easier debugging
     if (isDevelopment) {
-      (window as any).__DEBUG_APPKIT_MODAL__ = modal;
+      // Define a proper type for the debug property
+      (window as Window & typeof globalThis & { __DEBUG_APPKIT_MODAL__: typeof modal }).
+        __DEBUG_APPKIT_MODAL__ = modal;
     }
     
     console.log('[AppKit] Successfully initialized with networks:', {
