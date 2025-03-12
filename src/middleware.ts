@@ -16,23 +16,22 @@ export function middleware(request) {
     pathname.includes('chrome') || 
     pathname.includes('apple-touch');
   
-  // Apply CORS headers to icon requests but allow them to be served
+  // Apply CORS headers to icon requests
   if (isIconRequest) {
-    // Create a new Response object
-    const response = new Response(null, {
-      status: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET',
-        'Cache-Control': 'public, max-age=86400'
-      }
-    });
+    // Instead of creating a new response, modify the headers of the original response
+    // This way, the actual icon file content is preserved
+    const response = Response.next();
+    
+    // Add CORS and caching headers
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    response.headers.set('Access-Control-Allow-Methods', 'GET');
+    response.headers.set('Cache-Control', 'public, max-age=86400');
     
     return response;
   }
   
   // For all other requests, continue normally
-  return new Response(null);
+  return Response.next();
 }
 
 // Configure which paths this middleware will run on
