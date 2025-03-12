@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import 'ethereum-identity-kit/css';
 import Providers from "./providers";
-import Script from 'next/script';
 const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
@@ -38,30 +37,14 @@ export default function RootLayout({
         <meta name="theme-color" content="#000000" />
         <meta name="mobile-web-app-capable" content="yes" />
         
-        {/* Barebones basic favicon setup */}
-        <link rel="icon" href="/favicon.ico" />
+        {/* Standard favicon setup */}
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/site.webmanifest" />
         
-        {/* MetaMask specific icon - directly reference our special icon */}
-        <link rel="icon" type="image/png" sizes="32x32" href="/mm-icon.png" />
+        {/* MetaMask specific icon */}
         <meta name="web3-extension-icon" content="/mm-icon.png" />
         <meta property="eth:chainId" content="8453" />
-        
-        {/* Include special MetaMask integration script */}
-        <Script id="metamask-integration" strategy="afterInteractive">
-          {`
-          // Inject special MetaMask icon directly into the DOM
-          document.addEventListener('DOMContentLoaded', function() {
-            const iconLink = document.createElement('link');
-            iconLink.rel = 'icon';
-            iconLink.href = '/mm-icon.png';
-            iconLink.type = 'image/png';
-            document.head.appendChild(iconLink);
-            
-            console.log('[MetaMask] Integration script loaded');
-          });
-          `}
-        </Script>
       </head>
       <body className="dark overflow-x-hidden">
         <Providers>
