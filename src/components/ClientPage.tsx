@@ -11,7 +11,20 @@ import LoadingAnimation from '@/components/ui/LoadingAnimation';
 import FeatureIcons from '@/components/FeatureIcons';
 import Footer from '@/components/shared/Footer';
 import GameModalFallback from '@/components/game/GameModalFallback';
-// Mobile notifications removed as requested
+
+// Helper function for debouncing
+function debounce(func, wait) {
+  let timeout;
+  const debounced = function(...args) {
+    const context = this;
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(context, args), wait);
+  };
+  debounced.cancel = function() {
+    clearTimeout(timeout);
+  };
+  return debounced;
+}
 
 // Dynamically import heavy components with better loading experience
 const GameModal = dynamic(() => import('@/components/game/GameModal'), {
@@ -314,30 +327,46 @@ export default function ClientPage() {
     return () => window.removeEventListener('resetGameState', handleResetGameState);
   }, []);
 
-  // Add a function to manually refresh stats and leaderboard
-  const refreshGameData = useCallback(() => {
-    console.log('📊 ClientPage: Manually refreshing game stats and leaderboard');
-    if (refreshStats) refreshStats(); 
-    if (refreshLeaderboard) refreshLeaderboard();
-  }, [refreshStats, refreshLeaderboard]);
+  // Add a flag to prevent multiple cleanups
+  const cleanupInProgress = useRef(false);
 
-  // Listen for refreshWalletStats events
+  // Add a function to manually refresh stats and leaderboard with debouncing
+  const refreshGameData = useCallback(
+    debounce(() => {
+      console.log('📊 ClientPage: Manually refreshing game stats and leaderboard (debounced)');
+      if (refreshStats) refreshStats(); 
+      if (refreshLeaderboard) refreshLeaderboard();
+    }, 300),
+    [refreshStats, refreshLeaderboard]
+  );
+  
+  // Listen for refreshWalletStats events with debouncing
   useEffect(() => {
-    const handleRefreshStats = () => {
-      console.log('📊 ClientPage: Refreshing stats from event');
+    const handleRefreshStats = debounce(() => {
+      console.log('📊 ClientPage: Refreshing stats from event (debounced)');
       refreshGameData();
-    };
+    }, 300);
 
     window.addEventListener('refreshWalletStats', handleRefreshStats);
-    return () => window.removeEventListener('refreshWalletStats', handleRefreshStats);
+    return () => {
+      window.removeEventListener('refreshWalletStats', handleRefreshStats);
+      handleRefreshStats.cancel(); // Clear any pending debounced calls
+    };
   }, [refreshGameData]);
 
   // Add listener for gameClose and gameCompletion events to properly clean up and refresh stats
   useEffect(() => {
     const handleGameClose = () => {
+      if (cleanupInProgress.current) {
+        console.log('Game cleanup already in progress, skipping redundant call');
+        return;
+      }
+      
+      cleanupInProgress.current = true;
       console.log('Game close event received, cleaning up game state');
+      
       try {
-        // Refresh wallet stats when returning to main screen
+        // Refresh wallet stats when returning to main screen - with debounce built in
         console.log('Refreshing wallet stats after game close');
         window.dispatchEvent(new CustomEvent('refreshWalletStats', { 
           detail: { forceRefresh: true } 
@@ -358,12 +387,13 @@ export default function ClientPage() {
         // Ensure game settings are shown
         window.dispatchEvent(new CustomEvent('showGameSettings'));
 
-        // Force redrawing after a slight delay
+        // Clear cleanup flag after a slight delay
         setTimeout(() => {
-          // Final state reset
-        }, 100);
+          cleanupInProgress.current = false;
+        }, 500);
       } catch (error) {
         console.error('Error during game state cleanup:', error);
+        cleanupInProgress.current = false;
       }
     };
 
@@ -372,6 +402,9 @@ export default function ClientPage() {
       if (event.detail && event.detail.finalScore) {
         console.log(`Game completed with score: ${event.detail.finalScore}`);
       }
+      
+      // Always ensure stats and leaderboard are updated after game completion
+      setTimeout(() => refreshGameData(), 500);
     };
 
     window.addEventListener('gameClose', handleGameClose);

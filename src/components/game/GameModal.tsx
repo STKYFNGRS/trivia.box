@@ -138,7 +138,7 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
       
       // Set up request with timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // Increased from 8s to 15s for more reliability
       
       // Retry logic for API calls
       let retries = 2;
@@ -361,7 +361,7 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
             debugLog('Sending game completion request for wallet:', address);
             // Add timeout protection
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 4000); // Reduced from 8s to 4s
+            const timeoutId = setTimeout(() => controller.abort(), 15000); // Increased from 4s to 15s
             
             // Explicitly save connection state before API call
             // This helps with mobile browsers that might lose connection after the call
@@ -404,11 +404,13 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
                 finalScore: finalStats.finalScore,
                 correctAnswers: finalStats.correctAnswers,
                 totalQuestions: finalStats.totalQuestions,
-                bestStreak: finalStats.bestStreak
+                bestStreak: finalStats.bestStreak,
+                _timestamp: Date.now() // Add timestamp to prevent caching
               }),
               signal: controller.signal
             }).then(async response => {
               clearTimeout(timeoutId);
+              console.log('Game completion API response status:', response.status);
               
               // Check for HTML response which indicates error
               const contentType = response.headers.get('content-type');

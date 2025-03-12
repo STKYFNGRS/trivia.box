@@ -24,17 +24,8 @@ export default function LoadingAnimation({ isLoading, inline = false }: LoadingA
     if (!initialLoadChecked.current) {
       initialLoadChecked.current = true;
       
-      // On initial load or page refresh, don't immediately show the loader
-      const isInitialLoadOrRefresh = !sessionStorage.getItem('app_initialized');
-      if (isInitialLoadOrRefresh) {
-        // Mark as initialized
-        sessionStorage.setItem('app_initialized', 'true');
-        // Don't show loader on initial load/refresh
-        setShouldDisplay(false);
-      } else {
-        // For subsequent state changes, follow isLoading prop
-        setShouldDisplay(isLoading);
-      }
+      // Always show the loader when isLoading is true, regardless of initial load
+      setShouldDisplay(isLoading);
     } else {
       // For subsequent state changes, follow isLoading prop
       setShouldDisplay(isLoading);

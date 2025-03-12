@@ -25,7 +25,7 @@ export function useGameState() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { address: user } = useAccount();
-  const gameController = useRef(new GameController()).current;
+  const gameController = useRef(GameController.getInstance()).current; // Use the proper singleton pattern
   const lastResetTime = useRef<number>(0);
   const lastInitTime = useRef<number>(0);
   const initAttempts = useRef(0);
