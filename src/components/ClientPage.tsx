@@ -16,9 +16,8 @@ import GameModalFallback from '@/components/game/GameModalFallback';
 function debounce(func, wait) {
   let timeout;
   const debounced = function(...args) {
-    const context = this;
     clearTimeout(timeout);
-    timeout = setTimeout(() => func.apply(context, args), wait);
+    timeout = setTimeout(() => func(...args), wait);
   };
   debounced.cancel = function() {
     clearTimeout(timeout);
@@ -50,8 +49,6 @@ export default function ClientPage() {
   const { address, isConnected, chainId } = useAccount();
   const { gameState, initGame, isLoading, error, isMobile, refreshStats, refreshLeaderboard } = useGameState();
   const [initializationAttempts, setInitializationAttempts] = useState(0);
-  // Removed session restored state
-  const [mobileReconnecting, setMobileReconnecting] = useState(false);
   
   // Reference to track if we've attempted connection restoration
   const connectionAttempted = useRef(false);
@@ -207,7 +204,6 @@ export default function ClientPage() {
       // Check if we might need to restore connection
       const checkMobileConnection = async () => {
         try {
-          setMobileReconnecting(true);
           console.log('📱 ClientPage: Checking if mobile wallet connection needs restoration');
 
           // First, check wagmi store directly as a reliable source of connected state
@@ -251,7 +247,6 @@ export default function ClientPage() {
                   if (parsedState?.state?.connections?.[0]?.accounts?.[0]) {
                     console.log('📱 ClientPage: Wallet successfully reconnected');
                     clearInterval(checkWalletConnected);
-                    setMobileReconnecting(false);
 
                     // Force refresh stats
                     window.dispatchEvent(new CustomEvent('refreshWalletStats'));
@@ -265,15 +260,10 @@ export default function ClientPage() {
             // Safety timeout after 10 seconds
             setTimeout(() => {
               clearInterval(checkWalletConnected);
-              setMobileReconnecting(false);
             }, 10000);
-          } else {
-            // No restoration needed or already connected
-            setMobileReconnecting(false);
           }
         } catch (err) {
           console.error('📱 ClientPage: Error checking mobile connection state:', err);
-          setMobileReconnecting(false);
         }
       };
 
@@ -331,14 +321,11 @@ export default function ClientPage() {
   const cleanupInProgress = useRef(false);
 
   // Add a function to manually refresh stats and leaderboard with debouncing
-  const refreshGameData = useCallback(
-    debounce(() => {
-      console.log('📊 ClientPage: Manually refreshing game stats and leaderboard (debounced)');
-      if (refreshStats) refreshStats(); 
-      if (refreshLeaderboard) refreshLeaderboard();
-    }, 300),
-    [refreshStats, refreshLeaderboard]
-  );
+  const refreshGameData = useCallback(() => {
+    console.log('📊 ClientPage: Manually refreshing game stats and leaderboard (debounced)');
+    if (refreshStats) refreshStats(); 
+    if (refreshLeaderboard) refreshLeaderboard();
+  }, [refreshStats, refreshLeaderboard]);
   
   // Listen for refreshWalletStats events with debouncing
   useEffect(() => {
@@ -414,7 +401,7 @@ export default function ClientPage() {
       window.removeEventListener('gameClose', handleGameClose);
       window.removeEventListener('gameCompleted', handleGameCompletion as EventListener);
     };
-  }, [isMobile, address, chainId]);
+  }, [isMobile, address, chainId, refreshGameData]);
 
   // Consider connected when wallet is connected and on Base chain
   const isFullyConnected = isConnected && chainId === 8453;
@@ -428,7 +415,7 @@ export default function ClientPage() {
     <div className="flex flex-col min-h-screen">
       <ParticleBackground gameLoading={isLoading} />
       
-      <LoadingAnimation isLoading={isLoading && initialLoadDone.current && (isConnected || mobileReconnecting)} />
+      <LoadingAnimation isLoading={isLoading && initialLoadDone.current} />
       
       {/* Mobile session restore notification removed as requested */}
       
