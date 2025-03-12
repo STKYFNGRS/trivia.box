@@ -12,7 +12,7 @@ const DURATION = 15;
 const MAX_POINTS = 15;
 
 // Debug logger - only logs when DEBUG_MODE is true
-const debugLog = (...args: any[]) => {
+const debugLog = (...args: unknown[]) => {
   if (DEBUG_MODE) {
     console.log(...args);
   }
@@ -102,7 +102,7 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
       // 1. For timeouts: Force duration to be DURATION seconds
       // 2. For normal answers: Use actual timing but ensure it's valid
       let validStartTime = questionStartTime.current;
-      let validEndTime = endTime;
+      const validEndTime = endTime;
       
       // Force timing to be valid for all submissions
       if (answer === null || endDate.getTime() - startDate.getTime() < 1000) {
@@ -312,13 +312,36 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
     setPotentialPoints(0);
     
     try {
+      // Check if this is the last question
+      const isLastQuestion = currentQuestionIndex + 1 >= questions.length;
+      
+      // If it's the last question, ensure we properly transition to game ended state
+      if (isLastQuestion) {
+        console.log('Last question timed out, transitioning to game completion');
+        // Add this response to our tracking (as incorrect)
+        sessionResponses.current[currentQuestionIndex] = { isCorrect: false };
+        
+        // After a short delay to show the timeout, transition to end screen
+        setTimeout(() => {
+          // Calculate final stats
+          const correctAnswers = sessionResponses.current.filter(r => r?.isCorrect).length;
+          setGameEnded(true);
+          setFinalStats({
+            correctAnswers,
+            totalQuestions: questions.length,
+            bestStreak: gameBestStreak,
+            finalScore: score // Score doesn't change on timeout
+          });
+        }, 1500);
+      }
+
       // Submit a null answer immediately with no delay
       submitAnswer(null);
     } catch (error) {
       console.error('Error in timer expiration handler:', error);
       setError('Timer expiration error');
     }
-  }, [revealed, submitAnswer]);
+  }, [revealed, submitAnswer, currentQuestionIndex, questions, gameBestStreak, score]);
   
   // Handle selecting an answer with proper error handling
   const handleAnswerSelect = useCallback(async (answer: string) => {
@@ -392,7 +415,7 @@ export default function GameModal({ questions, sessionId, onClose, onGameComplet
             }
             
             // Execute API call in the background - don't block UI
-            const completePromise = fetch('/api/game/complete', {
+            fetch('/api/game/complete', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
