@@ -33,9 +33,8 @@ if (typeof window !== 'undefined') {
     
     // Define icons with absolute URLs for better compatibility
     const icons = [
-      `${window.location.origin}/mm-icon.png`, // First icon is used by MetaMask
+      `${window.location.origin}/android-chrome-192x192.png`, // First icon is used by MetaMask
       `${window.location.origin}/favicon.ico`,
-      `${window.location.origin}/android-chrome-192x192.png`,
       `${window.location.origin}/favicon-32x32.png`,
       `${window.location.origin}/favicon-16x16.png`
     ];

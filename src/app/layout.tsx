@@ -37,14 +37,12 @@ export default function RootLayout({
         <meta name="theme-color" content="#000000" />
         <meta name="mobile-web-app-capable" content="yes" />
         
-        {/* Standard favicon setup */}
+        {/* Standard favicon setup using official favicon package */}
         <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/site.webmanifest" />
-        
-        {/* MetaMask specific icon */}
-        <meta name="web3-extension-icon" content="/mm-icon.png" />
-        <meta property="eth:chainId" content="8453" />
       </head>
       <body className="dark overflow-x-hidden">
         <Providers>
