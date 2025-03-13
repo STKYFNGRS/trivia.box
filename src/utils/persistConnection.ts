@@ -4,6 +4,8 @@
  */
 
 import { isMobileDevice } from './deviceDetect';
+import { logger } from './logger';
+import { createSafeMessageSender } from './messageChannelHandler';
 
 // Storage keys
 const CONNECTION_STATE_KEY = 'walletConnectionState';
@@ -21,7 +23,7 @@ const MOBILE_BACKUP_KEY = 'mobile_wallet_backup';
  */
 export function saveConnectionState(address?: string, chainId?: number): void {
   try {
-    console.log('Saving connection state', address ? `for ${address.slice(0, 6)}...` : '(no address)');
+    logger.info(`Saving connection state ${address ? `for ${address.slice(0, 6)}...` : '(no address)'}`);
     
     // Primary storage (localStorage)
     localStorage.setItem(CONNECTION_STATE_KEY, 'connected');
@@ -102,8 +104,27 @@ export function saveConnectionState(address?: string, chainId?: number): void {
         console.warn('Additional mobile persistence failed', mobileErr);
       }
     }
+
+    // If in an iframe context, notify parent safely
+    if (typeof window !== 'undefined' && window.parent !== window) {
+      try {
+        const safeSend = createSafeMessageSender(window.parent);
+        safeSend({ 
+          type: 'CONNECTION_SAVED', 
+          data: { address, chainId }
+        });
+      } catch (err) {
+        logger.warn('Failed to notify parent window of connection save', { 
+          component: 'persistConnection',
+          meta: { error: String(err) } 
+        });
+      }
+    }
   } catch (err) {
-    console.error('Error saving connection state:', err);
+    logger.error('Error saving connection state:', { 
+      component: 'persistConnection',
+      meta: { error: String(err) }
+    });
   }
 }
 
@@ -171,11 +192,29 @@ export function shouldRestoreConnection(): boolean {
                               sessionStorage.getItem('game_completed_address');
       
       // Log for desktop
-      console.log(`${deviceType} restore check - Connection state: ${hasConnectionState}, Address: ${hasAddress ? 'present' : 'missing'}, Game completed: ${hasCompletedGame ? 'yes' : 'no'}`);
+      logger.info(`${deviceType} restore check - Connection state: ${hasConnectionState}, Address: ${hasAddress ? 'present' : 'missing'}, Game completed: ${hasCompletedGame ? 'yes' : 'no'}`);
       
       // If we have game completion data, always restore
       if (hasCompletedGame) {
-        console.log(`${deviceType} detected completed game - will restore connection`);
+        logger.info(`${deviceType} detected completed game - will restore connection`);
+        
+        // Safely notify parent if in iframe
+        if (typeof window !== 'undefined' && window.parent !== window) {
+          try {
+            const safeSend = createSafeMessageSender(window.parent);
+            const address = hasAddress ? localStorage.getItem(CONNECTION_ADDRESS_KEY) : null;
+            safeSend({ 
+              type: 'CONNECTION_RESTORED', 
+              data: { address, source: 'game_completion' }
+            });
+          } catch (err) {
+            logger.warn('Failed to notify parent of connection restoration', { 
+              component: 'persistConnection',
+              meta: { error: String(err) }
+            });
+          }
+        }
+        
         return true;
       }
       
@@ -200,7 +239,10 @@ export function shouldRestoreConnection(): boolean {
     
     return false;
   } catch (err) {
-    console.error('Error checking connection state:', err);
+    logger.error('Error checking connection state:', { 
+      component: 'persistConnection',
+      meta: { error: String(err) }
+    });
     return false;
   }
 }
@@ -387,8 +429,32 @@ export function markConnectionRestored(): void {
         console.error('Error updating mobile connection timestamps:', mobileErr);
       }
     }
+
+    // Notify parent window safely if in iframe
+    if (typeof window !== 'undefined' && window.parent !== window) {
+      try {
+        const safeSend = createSafeMessageSender(window.parent);
+        const { address, chainId } = getSavedConnectionDetails();
+        
+        // Only send if we have an address
+        if (address) {
+          safeSend({ 
+            type: 'CONNECTION_MARKED_RESTORED', 
+            data: { address, chainId, timestamp: Date.now() }
+          });
+        }
+      } catch (err) {
+        logger.warn('Error notifying parent of marked restoration', { 
+          component: 'persistConnection',
+          meta: { error: String(err) }
+        });
+      }
+    }
   } catch (err) {
-    console.error('Error marking connection as restored:', err);
+    logger.error('Error marking connection as restored:', { 
+      component: 'persistConnection',
+      meta: { error: String(err) }
+    });
   }
 }
 
