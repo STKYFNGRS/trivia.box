@@ -91,14 +91,10 @@ if (typeof window !== 'undefined') {
         url: window.location.origin,
         icons: icons
       },
-      // Use enhanced DefaultSIWX with better persistence configuration
+      // Use DefaultSIWX with standard configuration
       siwx: new DefaultSIWX({
         messenger: messenger,
-        storage: storage,
-        // Ensure we keep the session active for the full duration
-        persist: true,
-        // Set session timeout to match the 30-day expiration
-        sessionTimeout: 2592000,
+        storage: storage
       }),
       projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
       themeMode: 'dark',
