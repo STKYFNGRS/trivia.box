@@ -7,7 +7,7 @@ import { config } from '@/config/wagmi';
 import { getAppKit } from '@reown/appkit/react';
 import { modal } from '@/config/appkit';
 import { isMobileDevice } from '@/utils/deviceDetect';
-import { saveConnectionState, shouldRestoreConnection, clearConnectionState, getSavedConnectionDetails, markConnectionRestored } from '@/utils/persistConnection';
+import { saveConnectionState, shouldRestoreConnection, markConnectionRestored } from '@/utils/persistConnection';
 
 // Create a QueryClient with settings optimized for wallet connection and ENS
 const queryClient = new QueryClient({
@@ -17,11 +17,8 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
       staleTime: 1000 * 60 * 5, // 5 minutes for better caching
       gcTime: 1000 * 60 * 60, // 1 hour
-      refetchOnMount: false, // Don't refetch on mount to speed up initial load
-      refetchOnReconnect: false // Don't refetch on reconnect
-      // Note: cacheTime was renamed to gcTime in React Query v5
-    }
-  }
+    },
+  },
 });
 
 // Don't initialize AppKit until component mounts
@@ -56,8 +53,15 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
   
   // Handle connection persistence across refreshes with enhanced mobile support
   useEffect(() => {
-    // Detect mobile device
-    const isMobile = isMobileDevice();
+    // Detect mobile device - with error handling
+    const isMobile = (() => {
+      try {
+        return isMobileDevice();
+      } catch (err) {
+        console.warn('[QueryProviders] Error detecting device type:', err);
+        return false;
+      }
+    })();
     
     // Save connection state more frequently on mobile
     const setupPeriodicSaving = () => {
@@ -130,60 +134,70 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
       
       // Try consolidated mobile data first (most reliable)
       try {
-        // Get wagmi state directly - this is the most reliable source
-        const wagmiStore = localStorage.getItem('wagmi.store');
-        if (wagmiStore) {
-          try {
-            const wagmiData = JSON.parse(wagmiStore);
-            const address = wagmiData?.state?.connections?.[0]?.accounts?.[0];
-            if (address) {
-              // Always force reconnect on mobile if we have an address
-              markConnectionRestored();
-              console.log('Found active wagmi connection on mobile, session restored');
-              return;
-            }
-          } catch (e) {
-            console.warn('Error parsing wagmi store:', e);
-          }
-        }
+        // Run this inside a try-catch to prevent client-side exceptions
+        setReconnectionAttempted(true);
         
-        // Mark as restored even if there's no specific data - just in case
-        if (shouldRestoreConnection()) {
-          markConnectionRestored();
-          console.log('Connection marked as restored based on persistence check');
+        // Wrap all wallet operations in error handling
+        try {
+          // Get wagmi state directly - this is the most reliable source
+          const wagmiStore = localStorage.getItem('wagmi.store');
+          if (wagmiStore) {
+            try {
+              const wagmiData = JSON.parse(wagmiStore);
+              const address = wagmiData?.state?.connections?.[0]?.accounts?.[0];
+              if (address) {
+                // Always force reconnect on mobile if we have an address
+                markConnectionRestored();
+                console.log('Found active wagmi connection on mobile, session restored');
+                return;
+              }
+            } catch (e) {
+              console.warn('Error parsing wagmi store:', e);
+            }
+          }
+          
+          // Mark as restored even if there's no specific data - just in case
+          if (shouldRestoreConnection()) {
+            markConnectionRestored();
+            console.log('Connection marked as restored based on persistence check');
+          }
+        } catch (e) {
+          console.warn('Error during mobile connection restoration:', e);
         }
       } catch (e) {
-        console.warn('Error during mobile connection restoration:', e);
+        console.warn('Error in restoreConnection:', e);
       }
     };
     
     // Handle game completion events - simpler implementation
     const handleGameCompletion = (event: Event) => {
-      const detail = (event as CustomEvent)?.detail;
-      const address = detail?.address;
-      const chainId = detail?.chainId || 8453; // Default to Base chain
-      
-      console.log(`Game completion detected, saving wallet state (${isMobile ? 'mobile' : 'desktop'})`);
-      
-      if (address) {
-        // Save for both desktop and mobile
-        saveConnectionState(address, chainId);
+      // Safe access with optional chaining and type guards
+      try {
+        const detail = (event as CustomEvent)?.detail;
+        const address = detail?.address;
+        const chainId = detail?.chainId || 8453; // Default to Base chain
         
-        // Additional storage for mobile
-        if (isMobile) {
-          try {
-            // Store in both types for redundancy
-            sessionStorage.setItem('game_completed_address', address);
-            sessionStorage.setItem('game_completed_timestamp', Date.now().toString());
-            localStorage.setItem('game_completed_address', address);
-            localStorage.setItem('game_completed_timestamp', Date.now().toString());
-          } catch (e) {
-            console.error('Error saving game completion data:', e);
+        console.log(`Game completion detected, saving wallet state (${isMobile ? 'mobile' : 'desktop'})`);
+        
+        if (address) {
+          // Save for both desktop and mobile
+          saveConnectionState(address, chainId);
+          
+          // Additional storage for mobile
+          if (isMobile) {
+            try {
+              // Store in both types for redundancy
+              localStorage.setItem('game_completed_address', address);
+              localStorage.setItem('game_completed_timestamp', Date.now().toString());
+              sessionStorage.setItem('game_completed_address', address);
+              sessionStorage.setItem('game_completed_timestamp', Date.now().toString());
+            } catch (e) {
+              console.error('Error saving game completion data:', e);
+            }
           }
         }
-      } else {
-        // Fallback
-        handleBeforeUnload();
+      } catch (err) {
+        console.error('Error handling game completion:', err);
       }
     };
     
@@ -193,11 +207,15 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
     
     // Add visibility change listener for mobile
     const handleVisibilityChange = () => {
-      if (isMobile && document.visibilityState === 'visible') {
-        if (shouldRestoreConnection() && !reconnectionAttempted) {
-          console.log('Page visibility changed - checking connection');
-          restoreConnection();
+      try {
+        if (isMobile && document.visibilityState === 'visible') {
+          if (shouldRestoreConnection() && !reconnectionAttempted) {
+            console.log('Page visibility changed - checking connection');
+            restoreConnection();
+          }
         }
+      } catch (err) {
+        console.warn('Error in visibility change handler:', err);
       }
     };
     
@@ -205,8 +223,14 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
       document.addEventListener('visibilitychange', handleVisibilityChange);
     }
     
-    // Restore connection on initial load
-    restoreConnection();
+    // Restore connection on initial load - with delay for React hydration
+    setTimeout(() => {
+      try {
+        restoreConnection();
+      } catch (err) {
+        console.error('Error during initial connection restoration:', err);
+      }
+    }, 1000);
     
     // Set up periodic saving for mobile
     const savingInterval = setupPeriodicSaving();
@@ -228,32 +252,40 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
   
   // Create a function to manually handle reconnection (without modal)
   const manuallyRestoreConnection = async () => {
-    if (shouldRestoreConnection() && !isRestoringConnection.current) {
-      console.log('Manual wallet restoration requested - no modal approach');
-      
-      try {
-        isRestoringConnection.current = true;
+    try {
+      if (shouldRestoreConnection() && !isRestoringConnection.current) {
+        console.log('Manual wallet restoration requested - no modal approach');
         
-        // Just mark the connection as restored without showing a modal
-        markConnectionRestored();
-        console.log('Manual reconnection completed silently');
-      } catch (err) {
-        console.error('Error in manual reconnection:', err);
-      } finally {
-        isRestoringConnection.current = false;
+        try {
+          isRestoringConnection.current = true;
+          
+          // Just mark the connection as restored without showing a modal
+          markConnectionRestored();
+          console.log('Manual reconnection completed silently');
+        } catch (err) {
+          console.error('Error in manual reconnection:', err);
+        } finally {
+          isRestoringConnection.current = false;
+        }
       }
+    } catch (err) {
+      console.error('Error in manuallyRestoreConnection:', err);
     }
   };
   
   // Expose the function to window for potential use
   if (typeof window !== 'undefined') {
-    // Define the extended window type
-    const extendedWindow = window as Window & {
-      __restoreWalletConnection?: () => Promise<void>
-    };
-    
-    // Add the function to the window object
-    extendedWindow.__restoreWalletConnection = manuallyRestoreConnection;
+    try {
+      // Define the extended window type
+      const extendedWindow = window as Window & {
+        __restoreWalletConnection?: () => Promise<void>
+      };
+      
+      // Add the function to the window object
+      extendedWindow.__restoreWalletConnection = manuallyRestoreConnection;
+    } catch (err) {
+      console.warn('Error exposing wallet connection function to window:', err);
+    }
   }
   
   return (

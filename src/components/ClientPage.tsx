@@ -117,52 +117,50 @@ export default function ClientPage() {
       const userAgent = window.navigator.userAgent.toLowerCase();
       const isSamsungDevice = userAgent.includes('sm-n9');
       
-      // Every mobile device needs a reconnection check first
+      // Every mobile device needs a reconnection check first, but we need to ensure hydration is complete
       const checkAndReconnectMobile = async () => {
         try {
-          // Check if we should be reconnecting
-          const { shouldRestoreConnection } = await import('@/utils/persistConnection');
-          const shouldReconnect = await shouldRestoreConnection();
-          
-          if (shouldReconnect && !isConnected) {
-            console.log('📱 Mobile device detected with stored wallet data - attempting reconnection');
+          // Prevent any errors during hydration by wrapping in try/catch
+          try {
+            // Check if we should be reconnecting
+            const { shouldRestoreConnection } = await import('@/utils/persistConnection');
+            const shouldReconnect = await shouldRestoreConnection();
             
-            try {
-              // Try to force wallet reconnection
-              import('@/utils/persistConnection').then(({ getSavedConnectionDetails, markConnectionRestored }) => {
-                // Get the connection details
-                const connectionDetails = getSavedConnectionDetails();
-                if (connectionDetails.address) {
-                  console.log('📱 Found saved connection details, attempting to restore');
-                  markConnectionRestored();
-                  
-                  // Dispatch wallet refresh event
-                  setTimeout(() => {
-                    window.dispatchEvent(new CustomEvent('refreshWalletStats'));
+            if (shouldReconnect && !isConnected) {
+              console.log('📱 Mobile device detected with stored wallet data - attempting reconnection');
+              
+              try {
+                // Try to force wallet reconnection
+                import('@/utils/persistConnection').then(({ getSavedConnectionDetails, markConnectionRestored }) => {
+                  // Get the connection details
+                  const connectionDetails = getSavedConnectionDetails();
+                  if (connectionDetails.address) {
+                    console.log('📱 Found saved connection details, attempting to restore');
+                    markConnectionRestored();
                     
-                    // If still not connected, consider reload as last resort
-                    if (!isConnected) {
-                      if (!window.location.href.includes('?reconnect=true')) {
-                        window.location.href = window.location.href + 
-                          (window.location.href.includes('?') ? '&' : '?') + 'reconnect=true';
-                      }
-                    }
-                  }, 1000);
-                }
-              });
-            } catch (e) {
-              console.warn('📱 Error during mobile wallet reconnection:', e);
+                    // Dispatch wallet refresh event
+                    setTimeout(() => {
+                      window.dispatchEvent(new CustomEvent('refreshWalletStats'));
+                    }, 1000);
+                  }
+                });
+              } catch (e) {
+                console.warn('📱 Error during mobile wallet reconnection:', e);
+              }
             }
+          } catch (e) {
+            console.warn('📱 Error checking mobile connection status:', e);
           }
-        } catch (e) {
-          console.warn('📱 Error checking mobile connection status:', e);
+        } catch (err) {
+          // Catch any top-level errors to prevent client-side exception
+          console.error('📱 Critical error in mobile reconnection:', err);
         }
       };
       
-      // Run reconnection check for all mobile devices
-      setTimeout(() => {
+      // Delay mobile reconnection checks to ensure hydration is complete
+      const reconnectionTimer = setTimeout(() => {
         checkAndReconnectMobile();
-      }, 500);
+      }, 1500); // Increased delay for safer hydration
 
       // Fix for the landing page appearing on refresh issue
       if (isSamsungDevice) {
@@ -195,6 +193,10 @@ export default function ClientPage() {
           }
         }, 500);
       }
+
+      return () => {
+        clearTimeout(reconnectionTimer);
+      };
     }
   }, [isMobile, isConnected]);
 
@@ -290,51 +292,58 @@ export default function ClientPage() {
           }
 
           // Always check for any saved connection, even if wagmi doesn't show it
-          const shouldRestore = hasActiveConnection || persistFlag || await import('@/utils/persistConnection')
-            .then(module => module.shouldRestoreConnection())
-            .catch(() => false);
+          try {
+            // Use setTimeout to delay execution and prevent React hydration errors
+            setTimeout(async () => {
+              const shouldRestore = hasActiveConnection || persistFlag || await import('@/utils/persistConnection')
+                .then(module => module.shouldRestoreConnection())
+                .catch(() => false);
 
-          if (shouldRestore && !isConnected) {
-            console.log('📱 ClientPage: Mobile device needs wallet reconnection');
-
-            // Attempt to save any existing connection data to prevent it from being lost
-            if (address) {
-              try {
-                import('@/utils/persistConnection').then(module => {
-                  module.saveConnectionState(address, chainId || 8453);
-                  console.log('📱 ClientPage: Reinforcing existing mobile connection');
-                }).catch(err => {
-                  console.warn('📱 ClientPage: Error saving mobile wallet state:', err);
-                });
-              } catch (err) {
-                console.warn('📱 ClientPage: Error saving mobile wallet state:', err);
-              }
-            }
-
-            // Keep monitoring for successful connection
-            const checkWalletConnected = setInterval(() => {
-              // Check if we're now connected
-              const wagmiState = window.localStorage.getItem('wagmi.store');
-              if (wagmiState) {
-                try {
-                  const parsedState = JSON.parse(wagmiState);
-                  if (parsedState?.state?.connections?.[0]?.accounts?.[0]) {
-                    console.log('📱 ClientPage: Wallet successfully reconnected');
-                    clearInterval(checkWalletConnected);
-
-                    // Force refresh stats
-                    window.dispatchEvent(new CustomEvent('refreshWalletStats'));
+              if (shouldRestore && !isConnected) {
+                console.log('📱 ClientPage: Mobile device needs wallet reconnection');
+                
+                // Attempt to save any existing connection data to prevent it from being lost
+                if (address) {
+                  try {
+                    import('@/utils/persistConnection').then(module => {
+                      module.saveConnectionState(address, chainId || 8453);
+                      console.log('📱 ClientPage: Reinforcing existing mobile connection');
+                    }).catch(err => {
+                      console.warn('📱 ClientPage: Error saving mobile wallet state:', err);
+                    });
+                  } catch (err) {
+                    console.warn('📱 ClientPage: Error saving mobile wallet state:', err);
                   }
-                } catch (err) {
-                  console.warn('Error parsing wagmi state:', err);
                 }
-              }
-            }, 1000);
 
-            // Safety timeout after 10 seconds
-            setTimeout(() => {
-              clearInterval(checkWalletConnected);
-            }, 10000);
+                // Keep monitoring for successful connection
+                const checkWalletConnected = setInterval(() => {
+                  // Check if we're now connected
+                  const wagmiState = window.localStorage.getItem('wagmi.store');
+                  if (wagmiState) {
+                    try {
+                      const parsedState = JSON.parse(wagmiState);
+                      if (parsedState?.state?.connections?.[0]?.accounts?.[0]) {
+                        console.log('📱 ClientPage: Wallet successfully reconnected');
+                        clearInterval(checkWalletConnected);
+
+                        // Force refresh stats
+                        window.dispatchEvent(new CustomEvent('refreshWalletStats'));
+                      }
+                    } catch (err) {
+                      console.warn('Error parsing wagmi state:', err);
+                    }
+                  }
+                }, 1000);
+
+                // Safety timeout after 10 seconds
+                setTimeout(() => {
+                  clearInterval(checkWalletConnected);
+                }, 10000);
+              }
+            }, 800);
+          } catch (err) {
+            console.error('📱 ClientPage: Error in delayed connection check:', err);
           }
         } catch (err) {
           console.error('📱 ClientPage: Error checking mobile connection state:', err);
@@ -342,9 +351,13 @@ export default function ClientPage() {
       };
 
       // Wait a moment for page to fully load
-      setTimeout(() => {
+      const mobileCheckTimer = setTimeout(() => {
         checkMobileConnection();
-      }, 500);
+      }, 1500); // Increased delay to ensure hydration is complete
+
+      return () => {
+        clearTimeout(mobileCheckTimer);
+      };
     }
   }, [isMobile, isConnected, address, chainId]);
 
