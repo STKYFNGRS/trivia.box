@@ -58,7 +58,9 @@ export function saveConnectionState(address?: string, chainId?: number): void {
           address: address || '',
           chainId: chainId || 0,
           lastUpdated: new Date().toISOString(),
-          mobilePersisted: true
+          mobilePersisted: true,
+          appVersion: '1.1',  // Track version for future migrations
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 day expiration
         };
         
         // Store in both localStorage and sessionStorage for redundancy
@@ -70,6 +72,32 @@ export function saveConnectionState(address?: string, chainId?: number): void {
         // with certain mobile browsers that might clear specific keys
         localStorage.setItem(MOBILE_BACKUP_KEY, connectionString);
         sessionStorage.setItem(MOBILE_BACKUP_KEY, connectionString);
+        
+        // Set cookie backup method for Safari
+        try {
+          if (address) {
+            // Use cookie as a backup method for iOS Safari
+            const expiration = new Date();
+            expiration.setTime(expiration.getTime() + (2 * 60 * 60 * 1000)); // 2 hours
+            
+            document.cookie = `mobile_wallet_address=${address}; path=/; expires=${expiration.toUTCString()}; SameSite=Strict`;
+            document.cookie = `mobile_wallet_timestamp=${Date.now()}; path=/; expires=${expiration.toUTCString()}; SameSite=Strict`;
+            
+            // Also set special flags for preventing sign prompts
+            localStorage.setItem('prevent_disconnect', 'true');
+            sessionStorage.setItem('prevent_disconnect', 'true');
+            
+            // Store in wallet-specific formats that might be recognized by various libraries
+            localStorage.setItem('wallet_connected', 'true');
+            sessionStorage.setItem('wallet_connected', 'true');
+            localStorage.setItem('wallet_last_connected', address);
+            sessionStorage.setItem('wallet_last_connected', address);
+          }
+        } catch (cookieErr) {
+          console.warn('Error setting connection cookies:', cookieErr);
+        }
+        
+        console.log('Mobile connection state saved successfully with additional methods');
       } catch (mobileErr) {
         console.warn('Additional mobile persistence failed', mobileErr);
       }
@@ -94,8 +122,15 @@ export function shouldRestoreConnection(): boolean {
     if (isMobile) {
       // Check for ANY connection data in ANY storage medium
       const hasAnyConnectionData = [
+        // Check SIWE/AppKit storage first
+        localStorage.getItem('trivia-box-siwe-mobile-v1'),
+        sessionStorage.getItem('trivia-box-siwe-mobile-v1'),
+        localStorage.getItem('mobile_wallet_session_backup'),
+        sessionStorage.getItem('mobile_wallet_session_backup'),
+        
         // Check wagmi store - the most reliable source
         localStorage.getItem('wagmi.store'),
+        localStorage.getItem('mobile_wagmi_persistence'),
         
         // Check our custom storage keys
         localStorage.getItem(MOBILE_CONNECTION_KEY),
@@ -111,8 +146,14 @@ export function shouldRestoreConnection(): boolean {
         localStorage.getItem('game_completed_address'),
         sessionStorage.getItem('game_completed_address'),
         localStorage.getItem('prevent_disconnect'),
-        sessionStorage.getItem('prevent_disconnect')
-      ].some(item => item && item !== 'null');
+        sessionStorage.getItem('prevent_disconnect'),
+        
+        // Check mobile-specific flags
+        localStorage.getItem('mobile_wallet_address'),
+        sessionStorage.getItem('mobile_wallet_address'),
+        localStorage.getItem('wallet_last_connected'),
+        sessionStorage.getItem('wallet_last_connected'),
+      ].some(item => item && item !== 'null' && item !== 'undefined');
       
       console.log(`${deviceType} restore check: ${hasAnyConnectionData ? 'WILL RESTORE' : 'No connection data found'}`);
       return hasAnyConnectionData;
@@ -173,12 +214,33 @@ export function getSavedConnectionDetails(): { address?: string; chainId?: numbe
     // For mobile, try consolidated data first
     if (isMobileDevice()) {
       try {
+        // Try SIWE storage first
+        const siweData = localStorage.getItem('trivia-box-siwe-mobile-v1') || 
+                        sessionStorage.getItem('trivia-box-siwe-mobile-v1');
+        
+        if (siweData) {
+          try {
+            const parsed = JSON.parse(siweData);
+            if (parsed && parsed.session && parsed.session.address) {
+              console.log('Retrieved connection details from SIWE storage');
+              return { 
+                address: parsed.session.address,
+                chainId: 8453 // Default to Base chain for SIWE connections
+              };
+            }
+          } catch (e) {
+            console.warn('Error parsing SIWE data:', e);
+          }
+        }
+        
         // Try all possible storage locations
         const mobileDataStr = 
           localStorage.getItem(MOBILE_CONNECTION_KEY) || 
           sessionStorage.getItem(MOBILE_CONNECTION_KEY) ||
           localStorage.getItem(MOBILE_BACKUP_KEY) ||
-          sessionStorage.getItem(MOBILE_BACKUP_KEY);
+          sessionStorage.getItem(MOBILE_BACKUP_KEY) ||
+          localStorage.getItem('mobile_wallet_session_backup') ||
+          sessionStorage.getItem('mobile_wallet_session_backup');
         
         if (mobileDataStr) {
           const mobileData = JSON.parse(mobileDataStr);
@@ -186,7 +248,7 @@ export function getSavedConnectionDetails(): { address?: string; chainId?: numbe
             console.log('Retrieved connection details from mobile-enhanced storage');
             return { 
               address: mobileData.address, 
-              chainId: mobileData.chainId || undefined 
+              chainId: mobileData.chainId || 8453 // Default to Base chain
             };
           }
         }
@@ -196,22 +258,40 @@ export function getSavedConnectionDetails(): { address?: string; chainId?: numbe
           const addressMatch = document.cookie.match(/mobile_wallet_address=([^;]+)/);
           if (addressMatch && addressMatch[1]) {
             console.log('Retrieved connection address from cookie:', addressMatch[1]);
-            return { address: addressMatch[1] };
+            return { address: addressMatch[1], chainId: 8453 };
           }
         }
         
         // Check for game completion data in both storage types
         const gameCompletionAddress = 
+          localStorage.getItem('game_completed_address') ||
           sessionStorage.getItem('game_completed_address') ||
-          localStorage.getItem('game_completed_address');
+          localStorage.getItem('wallet_last_connected') ||
+          sessionStorage.getItem('wallet_last_connected') ||
+          localStorage.getItem('mobile_wallet_address') ||
+          sessionStorage.getItem('mobile_wallet_address');
           
         if (gameCompletionAddress) {
-          console.log('Retrieved connection address from game completion:', gameCompletionAddress);
-          return { address: gameCompletionAddress };
+          console.log('Retrieved connection address from game completion or wallet flags:', gameCompletionAddress);
+          return { address: gameCompletionAddress, chainId: 8453 };
         }
         
         // Check for wagmi store directly as a last resort
         try {
+          // First try mobile persistence key
+          const mobilePersistence = localStorage.getItem('mobile_wagmi_persistence');
+          if (mobilePersistence) {
+            const wagmiData = JSON.parse(mobilePersistence);
+            const address = wagmiData?.state?.connections?.[0]?.accounts?.[0];
+            const chainId = wagmiData?.state?.connections?.[0]?.chains?.[0]?.id;
+            
+            if (address) {
+              console.log('Retrieved connection address from mobile wagmi persistence:', address);
+              return { address, chainId: chainId || 8453 };
+            }
+          }
+          
+          // Fall back to standard wagmi store
           const wagmiStore = localStorage.getItem('wagmi.store');
           if (wagmiStore) {
             const wagmiData = JSON.parse(wagmiStore);
@@ -220,7 +300,7 @@ export function getSavedConnectionDetails(): { address?: string; chainId?: numbe
             
             if (address) {
               console.log('Retrieved connection address from wagmi store:', address);
-              return { address, chainId };
+              return { address, chainId: chainId || 8453 };
             }
           }
         } catch (e) {
@@ -238,7 +318,9 @@ export function getSavedConnectionDetails(): { address?: string; chainId?: numbe
                    undefined;
     
     const chainIdStr = localStorage.getItem(CONNECTION_CHAIN_ID_KEY) || 
-                      sessionStorage.getItem(CONNECTION_CHAIN_ID_KEY);
+                      sessionStorage.getItem(CONNECTION_CHAIN_ID_KEY) || 
+                      '8453'; // Default to Base chain
+                      
     const chainId = chainIdStr ? parseInt(chainIdStr, 10) : undefined;
     
     return { address, chainId };
@@ -274,6 +356,8 @@ export function markConnectionRestored(): void {
           mobileData.timestamp = Date.now();
           mobileData.lastUpdated = new Date().toISOString();
           mobileData.restored = true;
+          // Extend expiration time
+          mobileData.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
           
           const updatedStr = JSON.stringify(mobileData);
           localStorage.setItem(MOBILE_CONNECTION_KEY, updatedStr);
@@ -284,8 +368,15 @@ export function markConnectionRestored(): void {
         
         // Update cookie if using that fallback
         if (document.cookie.includes('mobile_wallet_address')) {
-          document.cookie = `mobile_wallet_timestamp=${Date.now()}; path=/; max-age=7200; SameSite=Strict`;
+          // Extend cookie expiration for 2 more hours
+          const expiration = new Date();
+          expiration.setTime(expiration.getTime() + (2 * 60 * 60 * 1000)); // 2 hours
+          document.cookie = `mobile_wallet_timestamp=${Date.now()}; path=/; expires=${expiration.toUTCString()}; SameSite=Strict`;
         }
+        
+        // Make sure we have the prevent_disconnect flag set
+        localStorage.setItem('prevent_disconnect', 'true');
+        sessionStorage.setItem('prevent_disconnect', 'true');
         
         // Update session flags
         sessionStorage.setItem('wallet_explicit_save', 'true');
@@ -329,11 +420,34 @@ export function clearConnectionState(): void {
       document.cookie = "mobile_wallet_address=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
       document.cookie = "mobile_wallet_timestamp=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
       
+      // Clear all prevention flags
+      localStorage.removeItem('prevent_disconnect');
+      sessionStorage.removeItem('prevent_disconnect');
+      localStorage.removeItem('wallet_connected');
+      sessionStorage.removeItem('wallet_connected');
+      localStorage.removeItem('wallet_last_connected');
+      sessionStorage.removeItem('wallet_last_connected');
+      localStorage.removeItem('mobile_wallet_address');
+      sessionStorage.removeItem('mobile_wallet_address');
+      
       // Clear session flags
       sessionStorage.removeItem('wallet_explicit_save');
       sessionStorage.removeItem('wallet_save_timestamp');
       sessionStorage.removeItem('game_completed_address');
       sessionStorage.removeItem('game_completed_timestamp');
+      localStorage.removeItem('game_completed_address');
+      localStorage.removeItem('game_completed_timestamp');
+      
+      // Clear mobile-specific session backup
+      localStorage.removeItem('mobile_wallet_session_backup');
+      sessionStorage.removeItem('mobile_wallet_session_backup');
+      
+      // Clear Wagmi persistence
+      try {
+        localStorage.removeItem('mobile_wagmi_persistence');
+      } catch (e) {
+        console.warn('Error clearing mobile Wagmi persistence:', e);
+      }
     } catch (additionalErr) {
       console.error('Error clearing additional connection storage:', additionalErr);
     }

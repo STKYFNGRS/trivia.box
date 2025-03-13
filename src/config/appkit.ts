@@ -2,6 +2,7 @@ import { createAppKit } from '@reown/appkit';
 import { DefaultSIWX, InformalMessenger, LocalStorage } from '@reown/appkit-siwx';
 import { wagmiAdapter } from './wagmi';
 import { base, mainnet } from '@reown/appkit/networks';
+import { isMobileDevice } from '@/utils/deviceDetect';
 
 /**
  * Create AppKit configuration with improved SIWE settings
@@ -16,8 +17,22 @@ if (typeof window !== 'undefined') {
       window.location.hostname === 'localhost' || 
       window.location.hostname === '127.0.0.1';
     
+    // Check if running on mobile
+    const isMobile = isMobileDevice();
+    
+    // Set up device-specific storage key to avoid conflicts
+    const storageKey = isMobile ? 'trivia-box-siwe-mobile-v1' : 'trivia-box-siwe-v8';
+    
     // Log environment
-    console.log(`[AppKit] Initializing in ${isDevelopment ? 'development' : 'production'} mode`);
+    console.log(`[AppKit] Initializing in ${isDevelopment ? 'development' : 'production'} mode on ${isMobile ? 'mobile' : 'desktop'}`);
+    
+    // Define icons with absolute URLs for better compatibility
+    const icons = [
+      `${window.location.origin}/android-chrome-192x192.png`, // First icon is used by MetaMask
+      `${window.location.origin}/favicon.ico`,
+      `${window.location.origin}/favicon-32x32.png`,
+      `${window.location.origin}/favicon-16x16.png`
+    ];
     
     // Create a message for SIWE that exactly matches EIP-4361 standard for MetaMask compatibility
     const messenger = new InformalMessenger({
@@ -28,18 +43,44 @@ if (typeof window !== 'undefined') {
       // Standardized simple statement as per EIP-4361
       statement: "Sign this message to verify you own this wallet",
       // Nonce generation - keep it simple
-      getNonce: async () => Math.floor(Math.random() * 10000000).toString()
+      getNonce: async () => Math.floor(Math.random() * 10000000).toString(),
+      // Fixed expiration to be a number (seconds) rather than string
+      // 7 days = 604800 seconds, 1 day = 86400 seconds
+      expiration: isMobile ? 604800 : 86400,
+      // Set resources as plain strings - this is supported by the API
+      resources: icons
     });
     
-    // Define icons with absolute URLs for better compatibility
-    const icons = [
-      `${window.location.origin}/android-chrome-192x192.png`, // First icon is used by MetaMask
-      `${window.location.origin}/favicon.ico`,
-      `${window.location.origin}/favicon-32x32.png`,
-      `${window.location.origin}/favicon-16x16.png`
-    ];
+    // Create standard storage with the proper key
+    const storage = new LocalStorage({ key: storageKey });
     
-    // Create the AppKit with the documented SIWX configuration
+    // Only add mobile-specific storage handling via side effects
+    // We can't modify the storage interface directly due to type constraints
+    if (isMobile && typeof window !== 'undefined') {
+      // Listen for session storage events to create backups
+      window.addEventListener('wallet_session_stored', (e: Event) => {
+        try {
+          if (e instanceof CustomEvent && e.detail) {
+            const sessionData = e.detail;
+            // Create backup in session storage
+            const serialized = JSON.stringify(sessionData);
+            sessionStorage.setItem(`mobile-backup-${storageKey}`, serialized);
+            localStorage.setItem('mobile_wallet_session_backup', serialized);
+            
+            if (sessionData.address) {
+              localStorage.setItem('mobile_wallet_address', sessionData.address);
+              sessionStorage.setItem('mobile_wallet_address', sessionData.address);
+              localStorage.setItem('mobile_wallet_timestamp', Date.now().toString());
+              sessionStorage.setItem('mobile_wallet_timestamp', Date.now().toString());
+            }
+          }
+        } catch (err) {
+          console.warn('[AppKit] Error creating session backup:', err);
+        }
+      });
+    }
+    
+    // Create the AppKit with the enhanced SIWX configuration
     modal = createAppKit({
       adapters: [wagmiAdapter],
       metadata: {
@@ -48,10 +89,12 @@ if (typeof window !== 'undefined') {
         url: window.location.origin,
         icons: icons
       },
-      // Use DefaultSIWX with minimal configuration as per docs
+      // Use DefaultSIWX with standard storage and configuration
+      // Only use supported properties based on API documentation
       siwx: new DefaultSIWX({
         messenger: messenger,
-        storage: new LocalStorage({ key: 'trivia-box-siwe-v8' })
+        storage: storage,
+        // Removed unsupported 'resources' property
       }),
       projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
       themeMode: 'dark',
@@ -92,6 +135,24 @@ if (typeof window !== 'undefined') {
           import('@/utils/persistConnection').then(({ saveConnectionState }) => {
             saveConnectionState(account, chainId || 8453);
             console.log('[AppKit] Connection state saved for:', account);
+            
+            // For mobile, also set additional flags
+            if (isMobile) {
+              localStorage.setItem('mobile_last_connected', account);
+              localStorage.setItem('mobile_last_connection_time', Date.now().toString());
+              localStorage.setItem('prevent_disconnect', 'true');
+              sessionStorage.setItem('prevent_disconnect', 'true');
+              
+              // Dispatch event to create backup in mobile storage
+              window.dispatchEvent(new CustomEvent('wallet_session_stored', { 
+                detail: { 
+                  address: account,
+                  chainId: chainId || 8453,
+                  timestamp: Date.now(),
+                  source: 'appkit-connected'
+                }
+              }));
+            }
           }).catch(e => console.warn('[AppKit] Error importing persistConnection:', e));
         }
       } catch (e) {
