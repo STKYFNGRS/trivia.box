@@ -2,6 +2,7 @@ import React, { memo, useEffect } from 'react';
 import { log } from '@/utils/logger';
 import { Hash, Flame, Target, Trophy } from 'lucide-react';
 import SkeletonLoader from '../ui/SkeletonLoader';
+import { cn } from '@/lib/utils';
 
 interface StatsDisplayProps {
   stats: {
@@ -13,9 +14,16 @@ interface StatsDisplayProps {
   isLoading?: boolean;
   onRankClick?: () => void;
   hasLeaderboard?: boolean;
+  isMobile?: boolean;
 }
 
-const StatsDisplay = memo(function StatsDisplay({ stats, isLoading = false, onRankClick, hasLeaderboard = false }: StatsDisplayProps) {
+const StatsDisplay = memo(function StatsDisplay({ 
+  stats, 
+  isLoading = false, 
+  onRankClick, 
+  hasLeaderboard = false,
+  isMobile = false
+}: StatsDisplayProps) {
   // Add debug logging to see what stats are really being received
   useEffect(() => {
     if (stats) {
@@ -23,6 +31,7 @@ const StatsDisplay = memo(function StatsDisplay({ stats, isLoading = false, onRa
       log.debug(`Best streak value: ${stats.bestStreak}`, { component: 'StatsDisplay' });
     }
   }, [stats]);
+  
   // Loading state
   if (isLoading) {
     return (
@@ -41,24 +50,44 @@ const StatsDisplay = memo(function StatsDisplay({ stats, isLoading = false, onRa
   if (!stats) return null;
   
   return (
-    <div className="bg-[#171923] rounded-xl border border-amber-600/20 p-2">
+    <div className={cn(
+      "bg-[#171923] rounded-xl border border-amber-600/20",
+      isMobile ? "p-3" : "p-2" // Larger padding for mobile
+    )}>
       <div className="flex items-center justify-around">
         {/* Total Score */}
         <div className="text-center flex flex-col items-center px-1">
-          <Hash className="w-4 h-4 text-amber-500 mb-0.5" />
-          <span className="text-amber-500 font-bold text-sm md:text-base">
+          <Hash className={cn(
+            "text-amber-500 mb-0.5",
+            isMobile ? "w-5 h-5" : "w-4 h-4" // Larger icon for mobile
+          )} />
+          <span className={cn(
+            "text-amber-500 font-bold",
+            isMobile ? "text-base" : "text-sm md:text-base" // Always show larger text on mobile
+          )}>
             {stats.totalPoints}
           </span>
-          <span className="text-gray-400 text-xs hidden md:block">Total</span>
+          <span className={cn(
+            "text-gray-400 text-xs",
+            isMobile ? "block text-[10px]" : "hidden md:block" // Always show label on mobile
+          )}>
+            Total
+          </span>
         </div>
         
         {/* Best Streak - Complete overhaul to force proper rendering */}
         <div className="text-center flex flex-col items-center px-1">
-          <Flame className="w-4 h-4 text-orange-500 mb-0.5" />
+          <Flame className={cn(
+            "text-orange-500 mb-0.5",
+            isMobile ? "w-5 h-5" : "w-4 h-4" // Larger icon for mobile
+          )} />
           {/* Use a custom key to force react to re-render this component */}
           <div 
             key={`streak-value-${stats.bestStreak}`}
-            className="text-orange-500 font-bold text-sm md:text-base"
+            className={cn(
+              "text-orange-500 font-bold",
+              isMobile ? "text-base" : "text-sm md:text-base" // Always show larger text on mobile
+            )}
             data-testid="player-best-streak"
           >
             {(() => {
@@ -68,32 +97,63 @@ const StatsDisplay = memo(function StatsDisplay({ stats, isLoading = false, onRa
               return streakValue;
             })()}
           </div>
-          <span className="text-gray-400 text-xs hidden md:block">Streak</span>
+          <span className={cn(
+            "text-gray-400 text-xs",
+            isMobile ? "block text-[10px]" : "hidden md:block" // Always show label on mobile
+          )}>
+            Streak
+          </span>
         </div>
         
         {/* Games Played */}
         <div className="text-center flex flex-col items-center px-1">
-          <Target className="w-4 h-4 text-teal-500 mb-0.5" />
-          <span className="text-teal-500 font-bold text-sm md:text-base">
+          <Target className={cn(
+            "text-teal-500 mb-0.5",
+            isMobile ? "w-5 h-5" : "w-4 h-4" // Larger icon for mobile
+          )} />
+          <span className={cn(
+            "text-teal-500 font-bold",
+            isMobile ? "text-base" : "text-sm md:text-base" // Always show larger text on mobile
+          )}>
             {stats.gamesPlayed}
           </span>
-          <span className="text-gray-400 text-xs hidden md:block">Games</span>
+          <span className={cn(
+            "text-gray-400 text-xs",
+            isMobile ? "block text-[10px]" : "hidden md:block" // Always show label on mobile
+          )}>
+            Games
+          </span>
         </div>
         
         {/* Rank */}
         <div 
-          className="text-center flex flex-col items-center px-1 cursor-pointer hover:opacity-80 transition-opacity"
+          className={cn(
+            "text-center flex flex-col items-center px-1 transition-opacity",
+            hasLeaderboard ? "cursor-pointer hover:opacity-80" : "",
+            isMobile && hasLeaderboard ? "active:opacity-60" : "" // Better touch feedback
+          )}
           onClick={hasLeaderboard ? onRankClick : undefined}
           role={hasLeaderboard ? "button" : undefined}
           tabIndex={hasLeaderboard ? 0 : undefined}
           onKeyDown={hasLeaderboard && onRankClick ? (e) => e.key === 'Enter' && onRankClick() : undefined}
           title={hasLeaderboard ? "View Leaderboard" : ""}
         >
-          <Trophy className="w-4 h-4 text-amber-500 mb-0.5" />
-          <span className="text-amber-500 font-bold text-sm md:text-base">
+          <Trophy className={cn(
+            "text-amber-500 mb-0.5",
+            isMobile ? "w-5 h-5" : "w-4 h-4" // Larger icon for mobile
+          )} />
+          <span className={cn(
+            "text-amber-500 font-bold",
+            isMobile ? "text-base" : "text-sm md:text-base" // Always show larger text on mobile
+          )}>
             {stats.rank || 1}
           </span>
-          <span className="text-gray-400 text-xs hidden md:block">Rank</span>
+          <span className={cn(
+            "text-gray-400 text-xs",
+            isMobile ? "block text-[10px]" : "hidden md:block" // Always show label on mobile
+          )}>
+            Rank
+          </span>
         </div>
       </div>
     </div>

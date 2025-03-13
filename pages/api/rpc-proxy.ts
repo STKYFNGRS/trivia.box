@@ -1,22 +1,28 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextApiRequest, NextApiResponse } from 'next';
 
 /**
  * API route that proxies RPC requests to overcome CORS issues on mobile
  * This is specifically designed to address wallet connection issues when
  * connecting to LlamaRPC endpoints from mobile devices.
  */
-export async function POST(request: NextRequest) {
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  // Only allow POST requests
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+  
   try {
-    // Parse the incoming request
-    const body = await request.json();
-    const { endpoint, payload } = body;
+    // Parse request body
+    const { endpoint, payload } = req.body;
     
     // Validate required parameters
     if (!endpoint || !payload) {
-      return NextResponse.json(
-        { error: 'Missing required parameters: endpoint and payload' },
-        { status: 400 }
-      );
+      return res.status(400).json({ 
+        error: 'Missing required parameters: endpoint and payload' 
+      });
     }
     
     // Whitelist of allowed RPC endpoints
@@ -33,10 +39,7 @@ export async function POST(request: NextRequest) {
     // Ensure requested endpoint is in allowlist
     const targetUrl = allowedEndpoints[endpoint];
     if (!targetUrl) {
-      return NextResponse.json(
-        { error: 'Invalid or unsupported endpoint' },
-        { status: 400 }
-      );
+      return res.status(400).json({ error: 'Invalid or unsupported endpoint' });
     }
     
     // Forward the request to the actual RPC endpoint
@@ -51,18 +54,16 @@ export async function POST(request: NextRequest) {
     // Get the response data
     const data = await response.json();
     
+    // Set CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    
     // Return the proxied response
-    return NextResponse.json(data, {
-      status: response.status,
-      headers: {
-        'Cache-Control': 'no-store, max-age=0',
-      },
-    });
+    return res.status(response.status).json(data);
   } catch (error) {
     console.error('RPC proxy error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }

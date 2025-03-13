@@ -145,24 +145,49 @@ export class MobileEnhancedProvider {
     const network = networkMap[chainId] || 'ethereum';
     
     try {
-      // Custom JsonRpcProvider using our API proxy
-      return new ethers.providers.JsonRpcProvider({
-        url: '/api/rpc-proxy',
-        // Define custom fetch method to use our proxy
-        async fetch(url, payload) {
-          const response = await fetch('/api/rpc-proxy', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              endpoint: network,
-              payload: payload
-            }),
+      // We need to customize the fetcher without modifying JsonRpcProvider directly
+      const customFetcher = async (url: string, payload: any) => {
+        const response = await fetch('/api/rpc-proxy', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            endpoint: network,
+            payload: payload
+          }),
+        });
+        return await response.json();
+      };
+        
+      // Create a standard provider with the proxy URL
+      const provider = new ethers.providers.JsonRpcProvider('/api/rpc-proxy');
+            
+      // Override the send method to use our custom fetcher
+      const originalSend = provider.send.bind(provider);
+      provider.send = async (method, params) => {
+        try {
+          const result = await customFetcher(provider.connection.url, {
+            jsonrpc: '2.0',
+            id: new Date().getTime(),
+            method,
+            params
           });
-          return response.json();
+          
+          // Check for errors in the response
+          if (result.error) {
+            throw new Error(result.error.message || 'Unknown error');
+          }
+          
+          return result.result;
+        } catch (error) {
+          console.error('Error in proxy send:', error);
+          // Fall back to original send method if proxy fails
+          return originalSend(method, params);
         }
-      });
+      };
+      
+      return provider;
     } catch (error) {
       console.error('Failed to create proxy provider:', error);
       return null;
@@ -312,7 +337,7 @@ export class MobileEnhancedProvider {
 /**
  * Create a wallet provider that has enhanced mobile compatibility
  */
-export async function createMobileCompatibleProvider(
+export async function createWeb3Provider(
   provider: ethers.providers.ExternalProvider
 ): Promise<ethers.providers.Web3Provider> {
   try {
@@ -336,7 +361,7 @@ export async function createMobileCompatibleProvider(
  * Detect if we're running on a mobile device
  */
 export function isMobileDevice(): boolean {
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+  return typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
     navigator.userAgent
   );
 }
@@ -345,7 +370,7 @@ export function isMobileDevice(): boolean {
  * Register service worker for better mobile web app experience
  */
 export function registerWalletServiceWorker(): void {
-  if ('serviceWorker' in navigator) {
+  if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/wallet-connection-sw.js')
         .then(registration => {

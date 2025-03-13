@@ -1,52 +1,2715 @@
 {
   "summary": {
-    "totalSuccess": 12,
-    "totalFailed": 11,
-    "totalDuplicates": 2,
-    "timeElapsed": "1.9 minutes",
-    "avgGenerationTime": "3.13",
-    "avgQuestionLength": "85.4",
-    "avgAnswerLength": "7.6"
+    "totalSuccess": 548,
+    "totalFailed": 160,
+    "totalDuplicates": 142,
+    "timeElapsed": "77.5 minutes",
+    "avgGenerationTime": "3.40",
+    "avgQuestionLength": "96.5",
+    "avgAnswerLength": "11.9"
+  },
+  "categoryDistribution": {
+    "technology": 52,
+    "science": 50,
+    "literature": 44,
+    "pop_culture": 67,
+    "history": 50,
+    "geography": 43,
+    "sports": 57,
+    "gaming": 48,
+    "internet": 39,
+    "movies": 56,
+    "music": 42
+  },
+  "difficultyDistribution": {
+    "easy": 246,
+    "medium": 247,
+    "hard": 55
   },
   "rejectionReasons": {
-    "PARSE_ERROR": 1,
-    "ANSWER_IN_QUESTION": 10
+    "ANSWER_IN_QUESTION": 158,
+    "DUPLICATE_QUESTION": 2
   },
   "batchStats": [
     {
       "batchNumber": 1,
-      "successCount": 4,
-      "failureCount": 1,
+      "successCount": 5,
+      "failureCount": 0,
       "duplicateCount": 0,
-      "duration": 26.662
+      "categoryDistribution": {
+        "science": 2,
+        "literature": 2,
+        "geography": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 3
+      },
+      "duration": 29.804
     },
     {
       "batchNumber": 2,
-      "successCount": 3,
+      "successCount": 4,
       "failureCount": 1,
-      "duplicateCount": 1,
-      "duration": 21.665
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "science": 1,
+        "sports": 1,
+        "movies": 2
+      },
+      "difficultyDistribution": {
+        "easy": 3,
+        "hard": 1
+      },
+      "duration": 28.606
     },
     {
       "batchNumber": 3,
-      "successCount": 2,
-      "failureCount": 3,
+      "successCount": 4,
+      "failureCount": 1,
       "duplicateCount": 0,
-      "duration": 18.934
+      "categoryDistribution": {
+        "sports": 1,
+        "music": 1,
+        "technology": 1,
+        "pop_culture": 1
+      },
+      "difficultyDistribution": {
+        "easy": 1,
+        "medium": 3
+      },
+      "duration": 31.934
     },
     {
       "batchNumber": 4,
-      "successCount": 2,
-      "failureCount": 3,
+      "successCount": 5,
+      "failureCount": 0,
       "duplicateCount": 0,
-      "duration": 19.043
+      "categoryDistribution": {
+        "internet": 1,
+        "history": 1,
+        "pop_culture": 1,
+        "geography": 1,
+        "literature": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 2,
+        "hard": 1
+      },
+      "duration": 29.83
     },
     {
       "batchNumber": 5,
+      "successCount": 5,
+      "failureCount": 0,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "history": 1,
+        "internet": 2,
+        "gaming": 1,
+        "technology": 1
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "hard": 1,
+        "easy": 3
+      },
+      "duration": 29.328
+    },
+    {
+      "batchNumber": 6,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "technology": 2,
+        "geography": 2
+      },
+      "difficultyDistribution": {
+        "medium": 3,
+        "easy": 1
+      },
+      "duration": 21.37
+    },
+    {
+      "batchNumber": 7,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "sports": 1,
+        "history": 1,
+        "science": 1,
+        "pop_culture": 1
+      },
+      "difficultyDistribution": {
+        "easy": 4
+      },
+      "duration": 25.625
+    },
+    {
+      "batchNumber": 8,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "history": 1,
+        "literature": 1,
+        "technology": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 1
+      },
+      "duration": 21.966
+    },
+    {
+      "batchNumber": 9,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "science": 1,
+        "movies": 2,
+        "gaming": 1
+      },
+      "difficultyDistribution": {
+        "medium": 4
+      },
+      "duration": 26.605
+    },
+    {
+      "batchNumber": 10,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "pop_culture": 2,
+        "history": 1
+      },
+      "difficultyDistribution": {
+        "medium": 3
+      },
+      "duration": 23.541
+    },
+    {
+      "batchNumber": 11,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "sports": 1,
+        "internet": 1,
+        "history": 1,
+        "gaming": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "hard": 2
+      },
+      "duration": 26.603
+    },
+    {
+      "batchNumber": 12,
+      "successCount": 5,
+      "failureCount": 0,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "internet": 2,
+        "pop_culture": 1,
+        "movies": 1,
+        "literature": 1
+      },
+      "difficultyDistribution": {
+        "medium": 4,
+        "easy": 1
+      },
+      "duration": 30.174
+    },
+    {
+      "batchNumber": 13,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "internet": 1,
+        "pop_culture": 1,
+        "geography": 1,
+        "sports": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 2
+      },
+      "duration": 26.078
+    },
+    {
+      "batchNumber": 14,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "sports": 1,
+        "technology": 1,
+        "gaming": 2
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 3
+      },
+      "duration": 24.825
+    },
+    {
+      "batchNumber": 15,
+      "successCount": 5,
+      "failureCount": 0,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "technology": 2,
+        "pop_culture": 1,
+        "science": 1,
+        "literature": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 2,
+        "hard": 1
+      },
+      "duration": 28.864
+    },
+    {
+      "batchNumber": 16,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "internet": 2,
+        "music": 1,
+        "gaming": 1
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 2,
+        "hard": 1
+      },
+      "duration": 29.74
+    },
+    {
+      "batchNumber": 17,
+      "successCount": 2,
+      "failureCount": 2,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "movies": 2
+      },
+      "difficultyDistribution": {
+        "easy": 1,
+        "hard": 1
+      },
+      "duration": 21.949
+    },
+    {
+      "batchNumber": 18,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "sports": 1,
+        "gaming": 1,
+        "internet": 1,
+        "history": 1
+      },
+      "difficultyDistribution": {
+        "hard": 1,
+        "medium": 1,
+        "easy": 2
+      },
+      "duration": 24.748
+    },
+    {
+      "batchNumber": 19,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "science": 1,
+        "movies": 1,
+        "pop_culture": 1,
+        "music": 1
+      },
+      "difficultyDistribution": {
+        "medium": 3,
+        "easy": 1
+      },
+      "duration": 25.746
+    },
+    {
+      "batchNumber": 20,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "music": 1,
+        "technology": 1,
+        "internet": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 1
+      },
+      "duration": 19.836
+    },
+    {
+      "batchNumber": 21,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "pop_culture": 1,
+        "technology": 1,
+        "geography": 2
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 2,
+        "hard": 1
+      },
+      "duration": 25.57
+    },
+    {
+      "batchNumber": 22,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "literature": 1,
+        "internet": 1,
+        "sports": 1,
+        "movies": 1
+      },
+      "difficultyDistribution": {
+        "medium": 4
+      },
+      "duration": 25.626
+    },
+    {
+      "batchNumber": 23,
+      "successCount": 5,
+      "failureCount": 0,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "sports": 3,
+        "pop_culture": 1,
+        "science": 1
+      },
+      "difficultyDistribution": {
+        "easy": 3,
+        "medium": 2
+      },
+      "duration": 29.185
+    },
+    {
+      "batchNumber": 24,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "geography": 1,
+        "movies": 1,
+        "science": 1,
+        "history": 1
+      },
+      "difficultyDistribution": {
+        "easy": 3,
+        "medium": 1
+      },
+      "duration": 26.585
+    },
+    {
+      "batchNumber": 25,
+      "successCount": 5,
+      "failureCount": 0,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "pop_culture": 2,
+        "music": 1,
+        "technology": 1,
+        "science": 1
+      },
+      "difficultyDistribution": {
+        "easy": 3,
+        "medium": 2
+      },
+      "duration": 27.234
+    },
+    {
+      "batchNumber": 26,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "internet": 2,
+        "technology": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 1
+      },
+      "duration": 20.238
+    },
+    {
+      "batchNumber": 27,
+      "successCount": 2,
+      "failureCount": 1,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "sports": 1,
+        "gaming": 1
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 1
+      },
+      "duration": 17.653
+    },
+    {
+      "batchNumber": 28,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "pop_culture": 2,
+        "geography": 1,
+        "music": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 1,
+        "hard": 1
+      },
+      "duration": 20.922
+    },
+    {
+      "batchNumber": 29,
+      "successCount": 5,
+      "failureCount": 0,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "literature": 1,
+        "pop_culture": 1,
+        "history": 1,
+        "gaming": 2
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 3
+      },
+      "duration": 24.049
+    },
+    {
+      "batchNumber": 30,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "music": 1,
+        "literature": 1,
+        "technology": 1
+      },
+      "difficultyDistribution": {
+        "easy": 3
+      },
+      "duration": 25.399
+    },
+    {
+      "batchNumber": 31,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "history": 1,
+        "movies": 1,
+        "literature": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "hard": 1
+      },
+      "duration": 23.546
+    },
+    {
+      "batchNumber": 32,
+      "successCount": 2,
+      "failureCount": 2,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "science": 1,
+        "sports": 1
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 1
+      },
+      "duration": 20.198
+    },
+    {
+      "batchNumber": 33,
+      "successCount": 3,
+      "failureCount": 0,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "gaming": 2,
+        "literature": 1
+      },
+      "difficultyDistribution": {
+        "hard": 1,
+        "medium": 1,
+        "easy": 1
+      },
+      "duration": 25.819
+    },
+    {
+      "batchNumber": 34,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "gaming": 1,
+        "movies": 1,
+        "science": 1,
+        "internet": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "hard": 2
+      },
+      "duration": 27.71
+    },
+    {
+      "batchNumber": 35,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "sports": 1,
+        "gaming": 1,
+        "technology": 2
+      },
+      "difficultyDistribution": {
+        "medium": 3,
+        "easy": 1
+      },
+      "duration": 24.329
+    },
+    {
+      "batchNumber": 36,
+      "successCount": 2,
+      "failureCount": 3,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "history": 1,
+        "science": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2
+      },
+      "duration": 22.982
+    },
+    {
+      "batchNumber": 37,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "history": 1,
+        "movies": 2
+      },
+      "difficultyDistribution": {
+        "easy": 1,
+        "medium": 2
+      },
+      "duration": 22.693
+    },
+    {
+      "batchNumber": 38,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "internet": 1,
+        "geography": 1,
+        "sports": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 1
+      },
+      "duration": 25.569
+    },
+    {
+      "batchNumber": 39,
+      "successCount": 5,
+      "failureCount": 0,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "gaming": 1,
+        "literature": 1,
+        "movies": 1,
+        "music": 2
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 4
+      },
+      "duration": 27.481
+    },
+    {
+      "batchNumber": 40,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "pop_culture": 1,
+        "history": 2
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 1
+      },
+      "duration": 25.314
+    },
+    {
+      "batchNumber": 41,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "movies": 1,
+        "literature": 1,
+        "geography": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 1
+      },
+      "duration": 25.051
+    },
+    {
+      "batchNumber": 42,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "music": 2,
+        "pop_culture": 1,
+        "internet": 1
+      },
+      "difficultyDistribution": {
+        "medium": 4
+      },
+      "duration": 25.592
+    },
+    {
+      "batchNumber": 43,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "gaming": 2,
+        "sports": 1,
+        "technology": 1
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 3
+      },
+      "duration": 29.727
+    },
+    {
+      "batchNumber": 44,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "pop_culture": 2,
+        "geography": 1,
+        "music": 1
+      },
+      "difficultyDistribution": {
+        "easy": 4
+      },
+      "duration": 41.881
+    },
+    {
+      "batchNumber": 45,
+      "successCount": 5,
+      "failureCount": 0,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "music": 1,
+        "science": 1,
+        "gaming": 1,
+        "pop_culture": 1,
+        "geography": 1
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 3,
+        "hard": 1
+      },
+      "duration": 28.982
+    },
+    {
+      "batchNumber": 46,
+      "successCount": 5,
+      "failureCount": 0,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "sports": 1,
+        "technology": 1,
+        "internet": 1,
+        "movies": 1,
+        "geography": 1
+      },
+      "difficultyDistribution": {
+        "hard": 1,
+        "easy": 2,
+        "medium": 2
+      },
+      "duration": 28.812
+    },
+    {
+      "batchNumber": 47,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "music": 1,
+        "movies": 2,
+        "pop_culture": 1
+      },
+      "difficultyDistribution": {
+        "hard": 1,
+        "easy": 1,
+        "medium": 2
+      },
+      "duration": 28.402
+    },
+    {
+      "batchNumber": 48,
+      "successCount": 5,
+      "failureCount": 0,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "history": 1,
+        "movies": 2,
+        "literature": 1,
+        "pop_culture": 1
+      },
+      "difficultyDistribution": {
+        "medium": 4,
+        "easy": 1
+      },
+      "duration": 28.038
+    },
+    {
+      "batchNumber": 49,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "technology": 1,
+        "history": 1,
+        "music": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 1
+      },
+      "duration": 24.283
+    },
+    {
+      "batchNumber": 50,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "science": 2,
+        "history": 1,
+        "technology": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 2
+      },
+      "duration": 25.335
+    },
+    {
+      "batchNumber": 51,
+      "successCount": 5,
+      "failureCount": 0,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "literature": 2,
+        "sports": 2,
+        "movies": 1
+      },
+      "difficultyDistribution": {
+        "easy": 3,
+        "hard": 1,
+        "medium": 1
+      },
+      "duration": 28.526
+    },
+    {
+      "batchNumber": 52,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "music": 1,
+        "history": 1,
+        "science": 1
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 2
+      },
+      "duration": 24.985
+    },
+    {
+      "batchNumber": 53,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "technology": 1,
+        "pop_culture": 2
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 1
+      },
+      "duration": 22.395
+    },
+    {
+      "batchNumber": 54,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "history": 1,
+        "literature": 1,
+        "science": 1
+      },
+      "difficultyDistribution": {
+        "hard": 1,
+        "medium": 2
+      },
+      "duration": 24.634
+    },
+    {
+      "batchNumber": 55,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "sports": 1,
+        "technology": 2
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 1
+      },
+      "duration": 21.561
+    },
+    {
+      "batchNumber": 56,
+      "successCount": 2,
+      "failureCount": 2,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "sports": 1,
+        "pop_culture": 1
+      },
+      "difficultyDistribution": {
+        "hard": 1,
+        "easy": 1
+      },
+      "duration": 20.883
+    },
+    {
+      "batchNumber": 57,
+      "successCount": 5,
+      "failureCount": 0,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "sports": 1,
+        "history": 1,
+        "technology": 1,
+        "geography": 1,
+        "gaming": 1
+      },
+      "difficultyDistribution": {
+        "easy": 1,
+        "hard": 1,
+        "medium": 3
+      },
+      "duration": 29.497
+    },
+    {
+      "batchNumber": 58,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "gaming": 1,
+        "geography": 1,
+        "music": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 1
+      },
+      "duration": 27.159
+    },
+    {
+      "batchNumber": 59,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "music": 1,
+        "science": 1,
+        "internet": 1,
+        "pop_culture": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 2
+      },
+      "duration": 26.216
+    },
+    {
+      "batchNumber": 60,
+      "successCount": 2,
+      "failureCount": 1,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "movies": 1,
+        "pop_culture": 1
+      },
+      "difficultyDistribution": {
+        "easy": 1,
+        "medium": 1
+      },
+      "duration": 19.612
+    },
+    {
+      "batchNumber": 61,
+      "successCount": 2,
+      "failureCount": 2,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "gaming": 1,
+        "literature": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2
+      },
+      "duration": 22.902
+    },
+    {
+      "batchNumber": 62,
       "successCount": 1,
       "failureCount": 3,
       "duplicateCount": 1,
-      "duration": 15.951
+      "categoryDistribution": {
+        "gaming": 1
+      },
+      "difficultyDistribution": {
+        "medium": 1
+      },
+      "duration": 19.401
+    },
+    {
+      "batchNumber": 63,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "sports": 2,
+        "history": 2
+      },
+      "difficultyDistribution": {
+        "easy": 3,
+        "medium": 1
+      },
+      "duration": 27.742
+    },
+    {
+      "batchNumber": 64,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "music": 1,
+        "history": 1,
+        "gaming": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "hard": 1
+      },
+      "duration": 24.804
+    },
+    {
+      "batchNumber": 65,
+      "successCount": 3,
+      "failureCount": 0,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "sports": 1,
+        "literature": 1,
+        "science": 1
+      },
+      "difficultyDistribution": {
+        "hard": 1,
+        "medium": 1,
+        "easy": 1
+      },
+      "duration": 24.275
+    },
+    {
+      "batchNumber": 66,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "literature": 1,
+        "pop_culture": 1,
+        "technology": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 1
+      },
+      "duration": 22.465
+    },
+    {
+      "batchNumber": 67,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "science": 2,
+        "history": 1,
+        "movies": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "hard": 1,
+        "easy": 1
+      },
+      "duration": 27.897
+    },
+    {
+      "batchNumber": 68,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "movies": 1,
+        "internet": 2,
+        "technology": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 2
+      },
+      "duration": 28.197
+    },
+    {
+      "batchNumber": 69,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "music": 1,
+        "science": 1,
+        "pop_culture": 2
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 2
+      },
+      "duration": 27.99
+    },
+    {
+      "batchNumber": 70,
+      "successCount": 0,
+      "failureCount": 3,
+      "duplicateCount": 2,
+      "categoryDistribution": {},
+      "difficultyDistribution": {},
+      "duration": 14.987
+    },
+    {
+      "batchNumber": 71,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "music": 1,
+        "geography": 2,
+        "movies": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 2
+      },
+      "duration": 24.89
+    },
+    {
+      "batchNumber": 72,
+      "successCount": 3,
+      "failureCount": 0,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "science": 1,
+        "movies": 1,
+        "gaming": 1
+      },
+      "difficultyDistribution": {
+        "easy": 1,
+        "medium": 2
+      },
+      "duration": 25.399
+    },
+    {
+      "batchNumber": 73,
+      "successCount": 5,
+      "failureCount": 0,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "pop_culture": 2,
+        "literature": 1,
+        "sports": 2
+      },
+      "difficultyDistribution": {
+        "hard": 2,
+        "easy": 3
+      },
+      "duration": 31.294
+    },
+    {
+      "batchNumber": 74,
+      "successCount": 2,
+      "failureCount": 2,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "music": 1,
+        "geography": 1
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 1
+      },
+      "duration": 23.37
+    },
+    {
+      "batchNumber": 75,
+      "successCount": 2,
+      "failureCount": 1,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "technology": 1,
+        "pop_culture": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2
+      },
+      "duration": 21.073
+    },
+    {
+      "batchNumber": 76,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "movies": 1,
+        "technology": 1,
+        "music": 1,
+        "sports": 1
+      },
+      "difficultyDistribution": {
+        "easy": 3,
+        "hard": 1
+      },
+      "duration": 24.858
+    },
+    {
+      "batchNumber": 77,
+      "successCount": 2,
+      "failureCount": 1,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "internet": 1,
+        "technology": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2
+      },
+      "duration": 21.954
+    },
+    {
+      "batchNumber": 78,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "gaming": 1,
+        "history": 1,
+        "literature": 1
+      },
+      "difficultyDistribution": {
+        "medium": 3
+      },
+      "duration": 25.257
+    },
+    {
+      "batchNumber": 79,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "literature": 1,
+        "movies": 1,
+        "gaming": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 1
+      },
+      "duration": 22.073
+    },
+    {
+      "batchNumber": 80,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "science": 1,
+        "sports": 1,
+        "history": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 1
+      },
+      "duration": 26.52
+    },
+    {
+      "batchNumber": 81,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "history": 1,
+        "geography": 2
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 1
+      },
+      "duration": 24.183
+    },
+    {
+      "batchNumber": 82,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "geography": 1,
+        "pop_culture": 2,
+        "history": 1
+      },
+      "difficultyDistribution": {
+        "hard": 1,
+        "easy": 2,
+        "medium": 1
+      },
+      "duration": 25.896
+    },
+    {
+      "batchNumber": 83,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "geography": 1,
+        "internet": 2,
+        "music": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 2
+      },
+      "duration": 24.877
+    },
+    {
+      "batchNumber": 84,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "science": 2,
+        "gaming": 2
+      },
+      "difficultyDistribution": {
+        "easy": 1,
+        "hard": 1,
+        "medium": 2
+      },
+      "duration": 26.571
+    },
+    {
+      "batchNumber": 85,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "sports": 1,
+        "movies": 1,
+        "geography": 1,
+        "pop_culture": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "hard": 1,
+        "medium": 1
+      },
+      "duration": 24.415
+    },
+    {
+      "batchNumber": 86,
+      "successCount": 3,
+      "failureCount": 0,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "science": 1,
+        "sports": 1,
+        "technology": 1
+      },
+      "difficultyDistribution": {
+        "easy": 1,
+        "hard": 1,
+        "medium": 1
+      },
+      "duration": 18.981
+    },
+    {
+      "batchNumber": 87,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "technology": 1,
+        "sports": 1,
+        "geography": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 1
+      },
+      "duration": 24.133
+    },
+    {
+      "batchNumber": 88,
+      "successCount": 2,
+      "failureCount": 0,
+      "duplicateCount": 3,
+      "categoryDistribution": {
+        "science": 1,
+        "gaming": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2
+      },
+      "duration": 15.735
+    },
+    {
+      "batchNumber": 89,
+      "successCount": 3,
+      "failureCount": 0,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "pop_culture": 1,
+        "music": 1,
+        "literature": 1
+      },
+      "difficultyDistribution": {
+        "hard": 1,
+        "medium": 2
+      },
+      "duration": 19.558
+    },
+    {
+      "batchNumber": 90,
+      "successCount": 3,
+      "failureCount": 0,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "science": 1,
+        "movies": 1,
+        "geography": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 1
+      },
+      "duration": 18.339
+    },
+    {
+      "batchNumber": 91,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "technology": 1,
+        "pop_culture": 1,
+        "history": 1
+      },
+      "difficultyDistribution": {
+        "easy": 1,
+        "medium": 2
+      },
+      "duration": 18.43
+    },
+    {
+      "batchNumber": 92,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "gaming": 1,
+        "literature": 1,
+        "technology": 1,
+        "movies": 1
+      },
+      "difficultyDistribution": {
+        "easy": 1,
+        "medium": 3
+      },
+      "duration": 21.121
+    },
+    {
+      "batchNumber": 93,
+      "successCount": 2,
+      "failureCount": 3,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "technology": 1,
+        "sports": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2
+      },
+      "duration": 18.623
+    },
+    {
+      "batchNumber": 94,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "pop_culture": 2,
+        "history": 1,
+        "gaming": 1
+      },
+      "difficultyDistribution": {
+        "medium": 3,
+        "easy": 1
+      },
+      "duration": 26.683
+    },
+    {
+      "batchNumber": 95,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "movies": 2,
+        "music": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "hard": 1
+      },
+      "duration": 36.098
+    },
+    {
+      "batchNumber": 96,
+      "successCount": 3,
+      "failureCount": 0,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "literature": 2,
+        "technology": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 1
+      },
+      "duration": 22.13
+    },
+    {
+      "batchNumber": 97,
+      "successCount": 2,
+      "failureCount": 0,
+      "duplicateCount": 3,
+      "categoryDistribution": {
+        "literature": 1,
+        "pop_culture": 1
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 1
+      },
+      "duration": 22.01
+    },
+    {
+      "batchNumber": 98,
+      "successCount": 2,
+      "failureCount": 3,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "pop_culture": 1,
+        "literature": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2
+      },
+      "duration": 19.97
+    },
+    {
+      "batchNumber": 99,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "internet": 1,
+        "geography": 1,
+        "pop_culture": 2
+      },
+      "difficultyDistribution": {
+        "easy": 1,
+        "hard": 1,
+        "medium": 2
+      },
+      "duration": 25.096
+    },
+    {
+      "batchNumber": 100,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "technology": 1,
+        "movies": 1,
+        "geography": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 1
+      },
+      "duration": 25.7
+    },
+    {
+      "batchNumber": 101,
+      "successCount": 2,
+      "failureCount": 2,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "history": 1,
+        "music": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2
+      },
+      "duration": 18.224
+    },
+    {
+      "batchNumber": 102,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "history": 1,
+        "gaming": 1,
+        "technology": 1,
+        "sports": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 2
+      },
+      "duration": 26.727
+    },
+    {
+      "batchNumber": 103,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "movies": 1,
+        "internet": 1,
+        "geography": 1,
+        "literature": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 2
+      },
+      "duration": 26.832
+    },
+    {
+      "batchNumber": 104,
+      "successCount": 5,
+      "failureCount": 0,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "gaming": 1,
+        "music": 1,
+        "movies": 1,
+        "internet": 1,
+        "history": 1
+      },
+      "difficultyDistribution": {
+        "easy": 3,
+        "medium": 1,
+        "hard": 1
+      },
+      "duration": 25.74
+    },
+    {
+      "batchNumber": 105,
+      "successCount": 2,
+      "failureCount": 0,
+      "duplicateCount": 3,
+      "categoryDistribution": {
+        "internet": 1,
+        "movies": 1
+      },
+      "difficultyDistribution": {
+        "hard": 1,
+        "medium": 1
+      },
+      "duration": 20.27
+    },
+    {
+      "batchNumber": 106,
+      "successCount": 1,
+      "failureCount": 2,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "science": 1
+      },
+      "difficultyDistribution": {
+        "medium": 1
+      },
+      "duration": 17.735
+    },
+    {
+      "batchNumber": 107,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "science": 2,
+        "literature": 1,
+        "gaming": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 2
+      },
+      "duration": 22.172
+    },
+    {
+      "batchNumber": 108,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "pop_culture": 1,
+        "movies": 1,
+        "sports": 1
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 2
+      },
+      "duration": 19.398
+    },
+    {
+      "batchNumber": 109,
+      "successCount": 3,
+      "failureCount": 0,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "sports": 2,
+        "history": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 1
+      },
+      "duration": 20.015
+    },
+    {
+      "batchNumber": 110,
+      "successCount": 2,
+      "failureCount": 1,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "movies": 1,
+        "internet": 1
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 1
+      },
+      "duration": 19.055
+    },
+    {
+      "batchNumber": 111,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "science": 1,
+        "technology": 1,
+        "music": 1
+      },
+      "difficultyDistribution": {
+        "hard": 1,
+        "medium": 1,
+        "easy": 1
+      },
+      "duration": 24.294
+    },
+    {
+      "batchNumber": 112,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "pop_culture": 1,
+        "gaming": 1,
+        "movies": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 1
+      },
+      "duration": 24.179
+    },
+    {
+      "batchNumber": 113,
+      "successCount": 5,
+      "failureCount": 0,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "science": 1,
+        "music": 1,
+        "sports": 2,
+        "technology": 1
+      },
+      "difficultyDistribution": {
+        "easy": 3,
+        "medium": 2
+      },
+      "duration": 27.644
+    },
+    {
+      "batchNumber": 114,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "technology": 1,
+        "history": 1,
+        "science": 1
+      },
+      "difficultyDistribution": {
+        "easy": 1,
+        "hard": 1,
+        "medium": 1
+      },
+      "duration": 25.015
+    },
+    {
+      "batchNumber": 115,
+      "successCount": 5,
+      "failureCount": 0,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "sports": 1,
+        "movies": 1,
+        "pop_culture": 1,
+        "gaming": 1,
+        "internet": 1
+      },
+      "difficultyDistribution": {
+        "easy": 3,
+        "medium": 2
+      },
+      "duration": 26.326
+    },
+    {
+      "batchNumber": 116,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "pop_culture": 1,
+        "sports": 1,
+        "literature": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "hard": 1
+      },
+      "duration": 33.478
+    },
+    {
+      "batchNumber": 117,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "geography": 1,
+        "sports": 1,
+        "gaming": 1,
+        "music": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 2
+      },
+      "duration": 29.248
+    },
+    {
+      "batchNumber": 118,
+      "successCount": 3,
+      "failureCount": 0,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "science": 1,
+        "movies": 1,
+        "geography": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 1
+      },
+      "duration": 22.329
+    },
+    {
+      "batchNumber": 119,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "sports": 1,
+        "technology": 1,
+        "science": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 1
+      },
+      "duration": 24.031
+    },
+    {
+      "batchNumber": 120,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "technology": 2,
+        "pop_culture": 1
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 2
+      },
+      "duration": 23.232
+    },
+    {
+      "batchNumber": 121,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "geography": 1,
+        "gaming": 1,
+        "history": 1,
+        "movies": 1
+      },
+      "difficultyDistribution": {
+        "hard": 1,
+        "easy": 1,
+        "medium": 2
+      },
+      "duration": 25.205
+    },
+    {
+      "batchNumber": 122,
+      "successCount": 1,
+      "failureCount": 1,
+      "duplicateCount": 3,
+      "categoryDistribution": {
+        "geography": 1
+      },
+      "difficultyDistribution": {
+        "hard": 1
+      },
+      "duration": 18.91
+    },
+    {
+      "batchNumber": 123,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "geography": 1,
+        "literature": 1,
+        "pop_culture": 1,
+        "sports": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 2
+      },
+      "duration": 24.607
+    },
+    {
+      "batchNumber": 124,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "internet": 1,
+        "literature": 1,
+        "movies": 1,
+        "gaming": 1
+      },
+      "difficultyDistribution": {
+        "easy": 3,
+        "medium": 1
+      },
+      "duration": 28.448
+    },
+    {
+      "batchNumber": 125,
+      "successCount": 3,
+      "failureCount": 0,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "movies": 1,
+        "gaming": 1,
+        "science": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "hard": 1
+      },
+      "duration": 25.692
+    },
+    {
+      "batchNumber": 126,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "history": 2,
+        "pop_culture": 1
+      },
+      "difficultyDistribution": {
+        "hard": 1,
+        "easy": 2
+      },
+      "duration": 24.286
+    },
+    {
+      "batchNumber": 127,
+      "successCount": 3,
+      "failureCount": 0,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "history": 1,
+        "gaming": 1,
+        "literature": 1
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 2
+      },
+      "duration": 24.296
+    },
+    {
+      "batchNumber": 128,
+      "successCount": 2,
+      "failureCount": 3,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "pop_culture": 1,
+        "music": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2
+      },
+      "duration": 20.085
+    },
+    {
+      "batchNumber": 129,
+      "successCount": 2,
+      "failureCount": 2,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "technology": 1,
+        "movies": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2
+      },
+      "duration": 20.55
+    },
+    {
+      "batchNumber": 130,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "literature": 1,
+        "internet": 1,
+        "history": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "hard": 1
+      },
+      "duration": 26.943
+    },
+    {
+      "batchNumber": 131,
+      "successCount": 2,
+      "failureCount": 1,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "music": 1,
+        "technology": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2
+      },
+      "duration": 21.269
+    },
+    {
+      "batchNumber": 132,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "science": 1,
+        "gaming": 1,
+        "music": 1,
+        "pop_culture": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "hard": 2
+      },
+      "duration": 26.585
+    },
+    {
+      "batchNumber": 133,
+      "successCount": 5,
+      "failureCount": 0,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "pop_culture": 1,
+        "science": 1,
+        "geography": 2,
+        "technology": 1
+      },
+      "difficultyDistribution": {
+        "medium": 3,
+        "easy": 2
+      },
+      "duration": 29.667
+    },
+    {
+      "batchNumber": 134,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "literature": 1,
+        "sports": 1,
+        "technology": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 1
+      },
+      "duration": 23.742
+    },
+    {
+      "batchNumber": 135,
+      "successCount": 2,
+      "failureCount": 2,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "geography": 1,
+        "internet": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2
+      },
+      "duration": 21.782
+    },
+    {
+      "batchNumber": 136,
+      "successCount": 2,
+      "failureCount": 2,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "science": 1,
+        "sports": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2
+      },
+      "duration": 20.86
+    },
+    {
+      "batchNumber": 137,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "history": 2,
+        "pop_culture": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2,
+        "easy": 1
+      },
+      "duration": 22.74
+    },
+    {
+      "batchNumber": 138,
+      "successCount": 2,
+      "failureCount": 1,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "music": 1,
+        "internet": 1
+      },
+      "difficultyDistribution": {
+        "hard": 1,
+        "medium": 1
+      },
+      "duration": 22.775
+    },
+    {
+      "batchNumber": 139,
+      "successCount": 5,
+      "failureCount": 0,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "science": 1,
+        "literature": 1,
+        "pop_culture": 1,
+        "history": 1,
+        "gaming": 1
+      },
+      "difficultyDistribution": {
+        "easy": 3,
+        "medium": 2
+      },
+      "duration": 29.642
+    },
+    {
+      "batchNumber": 140,
+      "successCount": 2,
+      "failureCount": 2,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "pop_culture": 2
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 1
+      },
+      "duration": 22.407
+    },
+    {
+      "batchNumber": 141,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "pop_culture": 1,
+        "literature": 1,
+        "technology": 1
+      },
+      "difficultyDistribution": {
+        "easy": 1,
+        "medium": 1,
+        "hard": 1
+      },
+      "duration": 23.892
+    },
+    {
+      "batchNumber": 142,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "internet": 1,
+        "history": 1,
+        "movies": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 1
+      },
+      "duration": 21.741
+    },
+    {
+      "batchNumber": 143,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "music": 1,
+        "technology": 1,
+        "pop_culture": 1
+      },
+      "difficultyDistribution": {
+        "easy": 1,
+        "medium": 2
+      },
+      "duration": 22.585
+    },
+    {
+      "batchNumber": 144,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "science": 2,
+        "sports": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "hard": 1
+      },
+      "duration": 22.499
+    },
+    {
+      "batchNumber": 145,
+      "successCount": 2,
+      "failureCount": 2,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "gaming": 1,
+        "technology": 1
+      },
+      "difficultyDistribution": {
+        "hard": 1,
+        "medium": 1
+      },
+      "duration": 21.508
+    },
+    {
+      "batchNumber": 146,
+      "successCount": 2,
+      "failureCount": 2,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "pop_culture": 1,
+        "geography": 1
+      },
+      "difficultyDistribution": {
+        "hard": 1,
+        "easy": 1
+      },
+      "duration": 21.76
+    },
+    {
+      "batchNumber": 147,
+      "successCount": 2,
+      "failureCount": 1,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "pop_culture": 1,
+        "movies": 1
+      },
+      "difficultyDistribution": {
+        "easy": 1,
+        "medium": 1
+      },
+      "duration": 21.542
+    },
+    {
+      "batchNumber": 148,
+      "successCount": 2,
+      "failureCount": 0,
+      "duplicateCount": 3,
+      "categoryDistribution": {
+        "gaming": 1,
+        "music": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2
+      },
+      "duration": 20.835
+    },
+    {
+      "batchNumber": 149,
+      "successCount": 0,
+      "failureCount": 2,
+      "duplicateCount": 3,
+      "categoryDistribution": {},
+      "difficultyDistribution": {},
+      "duration": 16.563
+    },
+    {
+      "batchNumber": 150,
+      "successCount": 3,
+      "failureCount": 0,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "sports": 2,
+        "movies": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 1
+      },
+      "duration": 23.73
+    },
+    {
+      "batchNumber": 151,
+      "successCount": 2,
+      "failureCount": 1,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "music": 1,
+        "movies": 1
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 1
+      },
+      "duration": 22.291
+    },
+    {
+      "batchNumber": 152,
+      "successCount": 2,
+      "failureCount": 2,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "movies": 1,
+        "music": 1
+      },
+      "difficultyDistribution": {
+        "easy": 1,
+        "medium": 1
+      },
+      "duration": 22.464
+    },
+    {
+      "batchNumber": 153,
+      "successCount": 1,
+      "failureCount": 0,
+      "duplicateCount": 4,
+      "categoryDistribution": {
+        "movies": 1
+      },
+      "difficultyDistribution": {
+        "easy": 1
+      },
+      "duration": 19.863
+    },
+    {
+      "batchNumber": 154,
+      "successCount": 3,
+      "failureCount": 1,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "pop_culture": 1,
+        "music": 1,
+        "literature": 1
+      },
+      "difficultyDistribution": {
+        "easy": 1,
+        "medium": 2
+      },
+      "duration": 26.336
+    },
+    {
+      "batchNumber": 155,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "sports": 1,
+        "geography": 1,
+        "gaming": 1,
+        "technology": 1
+      },
+      "difficultyDistribution": {
+        "easy": 3,
+        "medium": 1
+      },
+      "duration": 26.321
+    },
+    {
+      "batchNumber": 156,
+      "successCount": 2,
+      "failureCount": 2,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "music": 1,
+        "gaming": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2
+      },
+      "duration": 21.618
+    },
+    {
+      "batchNumber": 157,
+      "successCount": 2,
+      "failureCount": 2,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "science": 1,
+        "technology": 1
+      },
+      "difficultyDistribution": {
+        "easy": 1,
+        "medium": 1
+      },
+      "duration": 22.095
+    },
+    {
+      "batchNumber": 158,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "science": 1,
+        "technology": 1,
+        "sports": 2
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 2,
+        "hard": 1
+      },
+      "duration": 23.988
+    },
+    {
+      "batchNumber": 159,
+      "successCount": 2,
+      "failureCount": 2,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "literature": 1,
+        "history": 1
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 1
+      },
+      "duration": 25.189
+    },
+    {
+      "batchNumber": 160,
+      "successCount": 2,
+      "failureCount": 2,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "history": 1,
+        "geography": 1
+      },
+      "difficultyDistribution": {
+        "easy": 1,
+        "medium": 1
+      },
+      "duration": 22.517
+    },
+    {
+      "batchNumber": 161,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "pop_culture": 1,
+        "internet": 1,
+        "history": 2
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 2
+      },
+      "duration": 28.01
+    },
+    {
+      "batchNumber": 162,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "sports": 2,
+        "gaming": 1
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 1,
+        "hard": 1
+      },
+      "duration": 26.349
+    },
+    {
+      "batchNumber": 163,
+      "successCount": 4,
+      "failureCount": 1,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "internet": 1,
+        "literature": 1,
+        "music": 1,
+        "geography": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 2
+      },
+      "duration": 25.007
+    },
+    {
+      "batchNumber": 164,
+      "successCount": 1,
+      "failureCount": 0,
+      "duplicateCount": 4,
+      "categoryDistribution": {
+        "science": 1
+      },
+      "difficultyDistribution": {
+        "medium": 1
+      },
+      "duration": 18.945
+    },
+    {
+      "batchNumber": 165,
+      "successCount": 2,
+      "failureCount": 0,
+      "duplicateCount": 3,
+      "categoryDistribution": {
+        "internet": 1,
+        "history": 1
+      },
+      "difficultyDistribution": {
+        "medium": 1,
+        "easy": 1
+      },
+      "duration": 21.234
+    },
+    {
+      "batchNumber": 166,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "geography": 1,
+        "movies": 1,
+        "sports": 1,
+        "literature": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 2
+      },
+      "duration": 27.518
+    },
+    {
+      "batchNumber": 167,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "sports": 2,
+        "history": 1
+      },
+      "difficultyDistribution": {
+        "easy": 3
+      },
+      "duration": 22.424
+    },
+    {
+      "batchNumber": 168,
+      "successCount": 2,
+      "failureCount": 1,
+      "duplicateCount": 2,
+      "categoryDistribution": {
+        "movies": 1,
+        "geography": 1
+      },
+      "difficultyDistribution": {
+        "medium": 2
+      },
+      "duration": 21.991
+    },
+    {
+      "batchNumber": 169,
+      "successCount": 3,
+      "failureCount": 2,
+      "duplicateCount": 0,
+      "categoryDistribution": {
+        "literature": 1,
+        "pop_culture": 1,
+        "movies": 1
+      },
+      "difficultyDistribution": {
+        "hard": 1,
+        "medium": 2
+      },
+      "duration": 24.012
+    },
+    {
+      "batchNumber": 170,
+      "successCount": 4,
+      "failureCount": 0,
+      "duplicateCount": 1,
+      "categoryDistribution": {
+        "science": 2,
+        "pop_culture": 1,
+        "internet": 1
+      },
+      "difficultyDistribution": {
+        "easy": 2,
+        "medium": 2
+      },
+      "duration": 25.498
     }
   ]
 }
