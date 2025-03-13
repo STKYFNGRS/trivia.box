@@ -26,13 +26,27 @@ if (typeof window !== 'undefined') {
     // Log environment
     console.log(`[AppKit] Initializing in ${isDevelopment ? 'development' : 'production'} mode on ${isMobile ? 'mobile' : 'desktop'}`);
     
-    // Define icons with absolute URLs for better compatibility
+    // Define icons with absolute URLs for better compatibility across all devices
     const icons = [
       `${window.location.origin}/android-chrome-192x192.png`, // First icon is used by MetaMask
       `${window.location.origin}/favicon.ico`,
       `${window.location.origin}/favicon-32x32.png`,
       `${window.location.origin}/favicon-16x16.png`
     ];
+    
+    // Mobile needs additional configuration to ensure proper wallet icons
+    const mobileOptions = isMobile ? {
+      showQrModal: true,
+      explorerExcludedWalletIds: [],
+      explorerRecommendedWalletIds: [],
+      enableAnalytics: false,
+      enableExplorer: true,
+      // This ensures wallet icons are properly displayed on mobile
+      enableInjected: true,
+      // Ensure mobile wallets display properly
+      mobileWallets: [],
+      desktopWallets: []
+    } : {};
     
     // Create a message for SIWE that exactly matches EIP-4361 standard for MetaMask compatibility
     const messenger = new InformalMessenger({
@@ -99,8 +113,8 @@ if (typeof window !== 'undefined') {
       projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
       themeMode: 'dark',
       networks: [base, mainnet],
-      // Ensure proper wallet detection - no need for explicit wallet configuration
-      // The library handles wallet detection and icons internally
+      // Apply mobile-specific options to ensure proper wallet icon display
+      ...(isMobile ? mobileOptions : {})
     });
 
     // Add error handling but don't disconnect on errors

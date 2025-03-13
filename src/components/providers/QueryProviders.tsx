@@ -42,9 +42,19 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
         getAppKit(modal);
         console.log(`[AppKit] Initialized successfully in ${isDevelopment ? 'development' : 'production'} mode`);
         
-        // Don't disable SIWE in development mode to maintain wallet persistence
-        if (isDevelopment) {
-          console.info('[AppKit] Running in development mode - SIWE enabled for better wallet persistence');
+        // Always enable SIWE for better wallet persistence on all platforms
+        console.info(`[AppKit] Running in ${isDevelopment ? 'development' : 'production'} mode - SIWE enabled for better wallet persistence`);
+        
+        // For mobile devices, set special flag to ensure persistence is honored
+        if (isMobileDevice()) {
+          try {
+            // Create a global marker that this is a mobile device with persistence
+            window.localStorage.setItem('mobile_persistence_enabled', 'true');
+            window.sessionStorage.setItem('mobile_persistence_enabled', 'true');
+            console.info('[AppKit] Mobile device detected - enhancing wallet persistence');
+          } catch (e) {
+            console.warn('[AppKit] Could not set mobile persistence flag:', e);
+          }
         }
       } catch (error) {
         console.error('[AppKit] Failed to initialize:', error);
@@ -228,6 +238,21 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
     setTimeout(() => {
       try {
         restoreConnection();
+        
+        // On mobile, check more aggressively for reconnection opportunities
+        if (isMobile) {
+          // Add a second, later check for mobile to handle slower loading
+          setTimeout(() => {
+            try {
+              if (!reconnectionAttempted || shouldRestoreConnection()) {
+                console.log('Secondary mobile connection check running...');
+                restoreConnection();
+              }
+            } catch (e) {
+              console.warn('Error in secondary mobile connection check:', e);
+            }
+          }, 3000);
+        }
       } catch (err) {
         console.error('Error during initial connection restoration:', err);
       }
