@@ -8,7 +8,6 @@ import GameOptions from '@/components/game/GameOptions';
 import CustomConnectButton from '@/components/shared/CustomConnectButton';
 import Header from '@/components/shared/Header';
 import LoadingAnimation from '@/components/ui/LoadingAnimation';
-import FeatureIcons from '@/components/FeatureIcons';
 import Footer from '@/components/shared/Footer';
 import GameModalFallback from '@/components/game/GameModalFallback';
 
@@ -657,8 +656,6 @@ export default function ClientPage() {
                   <p className="text-sm text-gray-300">Earn tokens and NFTs for your knowledge and fast responses.</p>
                 </div>
               </div>
-              
-              <FeatureIcons />
               
               <div className="pt-12 pb-12 animate-fadeIn" style={{ animationDelay: '0.7s' }}>
                 <div className="flex flex-col items-center space-y-3">

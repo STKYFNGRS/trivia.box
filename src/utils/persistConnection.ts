@@ -142,8 +142,20 @@ export function shouldRestoreConnection(): boolean {
     // This is more permissive but fixes issues with mobile reconnection
     if (isMobile) {
       // Check for ANY connection data in ANY storage medium
-      const hasAnyConnectionData = [
-        // Check SIWE/AppKit storage first
+      const hasAnyConnectionData = [        
+        // Check wallet activation flags first (most common)
+        localStorage.getItem('prevent_disconnect'),
+        sessionStorage.getItem('prevent_disconnect'),
+        localStorage.getItem('wallet_connected'),
+        sessionStorage.getItem('wallet_connected'),
+        localStorage.getItem('wallet_last_connected'),
+        sessionStorage.getItem('wallet_last_connected'),
+        localStorage.getItem('mobile_wallet_address'),
+        sessionStorage.getItem('mobile_wallet_address'),
+        localStorage.getItem('mobile_last_connected'),
+        localStorage.getItem('mobile_last_connection_time'),
+
+        // Check SIWE/AppKit storage 
         localStorage.getItem('trivia-box-siwe-mobile-v1'),
         sessionStorage.getItem('trivia-box-siwe-mobile-v1'),
         localStorage.getItem('mobile_wallet_session_backup'),
@@ -165,15 +177,7 @@ export function shouldRestoreConnection(): boolean {
         
         // Check game completion flags
         localStorage.getItem('game_completed_address'),
-        sessionStorage.getItem('game_completed_address'),
-        localStorage.getItem('prevent_disconnect'),
-        sessionStorage.getItem('prevent_disconnect'),
-        
-        // Check mobile-specific flags
-        localStorage.getItem('mobile_wallet_address'),
-        sessionStorage.getItem('mobile_wallet_address'),
-        localStorage.getItem('wallet_last_connected'),
-        sessionStorage.getItem('wallet_last_connected'),
+        sessionStorage.getItem('game_completed_address')
       ].some(item => item && item !== 'null' && item !== 'undefined');
       
       console.log(`${deviceType} restore check: ${hasAnyConnectionData ? 'WILL RESTORE' : 'No connection data found'}`);

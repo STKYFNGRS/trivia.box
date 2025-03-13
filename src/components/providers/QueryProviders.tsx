@@ -38,12 +38,24 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
                           (window.location.hostname === 'localhost' || 
                            window.location.hostname === '127.0.0.1');
 
+        // Before initializing AppKit, force window settings to ensure SIWE is enabled
+        if (typeof window !== 'undefined') {
+          // Override any built-in checks that might disable SIWE
+          (window as any).__SIWE_ALWAYS_ENABLED = true;
+          (window as any).__TRIVIA_BOX_CONFIG = {
+            enableSIWE: true,
+            persistWalletState: true,
+            environment: isDevelopment ? 'development' : 'production'
+          };
+          console.info(`[AppKit] Setting explicit SIWE flag for ${isDevelopment ? 'development' : 'production'} mode`);
+        }
+
         // Initialize AppKit with our config
         getAppKit(modal);
         console.log(`[AppKit] Initialized successfully in ${isDevelopment ? 'development' : 'production'} mode`);
         
         // Always enable SIWE for better wallet persistence on all platforms
-        console.info(`[AppKit] Running in ${isDevelopment ? 'development' : 'production'} mode - SIWE enabled for better wallet persistence`);
+        console.info(`[AppKit] Running in ${isDevelopment ? 'development' : 'production'} mode - SIWE ENABLED for better wallet persistence`);
         
         // For mobile devices, set special flag to ensure persistence is honored
         if (isMobileDevice()) {
@@ -247,6 +259,21 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
               if (!reconnectionAttempted || shouldRestoreConnection()) {
                 console.log('Secondary mobile connection check running...');
                 restoreConnection();
+                
+                // For mobile Safari, add an additional check after animation frame
+                // This catches cases where the DOM has fully rendered
+                requestAnimationFrame(() => {
+                  setTimeout(() => {
+                    try {
+                      if (shouldRestoreConnection()) {
+                        console.log('Final mobile connection check on RAF...');
+                        restoreConnection();
+                      }
+                    } catch (e) {
+                      console.warn('Error in RAF mobile connection check:', e);
+                    }
+                  }, 1000);
+                });
               }
             } catch (e) {
               console.warn('Error in secondary mobile connection check:', e);

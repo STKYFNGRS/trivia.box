@@ -38,13 +38,37 @@ if (typeof window !== 'undefined') {
     const mobileOptions = isMobile ? {
       showQrModal: true,
       explorerExcludedWalletIds: [],
-      explorerRecommendedWalletIds: [],
+      explorerRecommendedWalletIds: [
+        // Explicitly include MetaMask and common wallets to ensure icons display properly
+        'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96', // MetaMask
+        'b021913ba555948a1c81eb3d89b372be46f8354e926679de648e4fa2938f05d0', // Coinbase Wallet
+        '38f5d18bd8522c244bdd70cb4a68e0e718865155811c043f052fb9f1c51de662', // Trust Wallet
+        '4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0'  // Rainbow
+      ],
       enableAnalytics: false,
       enableExplorer: true,
       // This ensures wallet icons are properly displayed on mobile
       enableInjected: true,
-      // Ensure mobile wallets display properly
-      mobileWallets: [],
+      // Ensure mobile wallets display properly with explicitly defined wallets
+      mobileWallets: [
+        {
+          id: 'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96',
+          name: 'MetaMask',
+          links: {
+            native: 'metamask://wc',
+            universal: 'https://metamask.app.link/wc'
+          }
+        },
+        // Include additional wallet entries for better mobile support
+        {
+          id: 'b021913ba555948a1c81eb3d89b372be46f8354e926679de648e4fa2938f05d0',
+          name: 'Coinbase Wallet',
+          links: {
+            native: 'coinbasewallet://wc',
+            universal: 'https://go.cb-w.com/wc'
+          }
+        }
+      ],
       desktopWallets: []
     } : {};
     
