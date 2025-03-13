@@ -194,9 +194,13 @@ export function shouldRestoreConnection(): boolean {
       // Log for desktop
       logger.info(`${deviceType} restore check - Connection state: ${hasConnectionState}, Address: ${hasAddress ? 'present' : 'missing'}, Game completed: ${hasCompletedGame ? 'yes' : 'no'}`);
       
-      // If we have game completion data, always restore
-      if (hasCompletedGame) {
-        logger.info(`${deviceType} detected completed game - will restore connection`);
+      // If we have game completion data or an active wallet session, always restore
+      // This is critical for maintaining wallet state on refresh
+      const hasActiveSession = localStorage.getItem('trivia-box-siwe-mobile-v1') || 
+                            localStorage.getItem('trivia-box-siwe-v8');
+                            
+      if (hasCompletedGame || hasActiveSession) {
+        logger.info(`${deviceType} detected completed game or active wallet connection - preserving wallet state`);
         
         // Safely notify parent if in iframe
         if (typeof window !== 'undefined' && window.parent !== window) {

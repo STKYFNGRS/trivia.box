@@ -42,8 +42,9 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
         getAppKit(modal);
         console.log(`[AppKit] Initialized successfully in ${isDevelopment ? 'development' : 'production'} mode`);
         
+        // Don't disable SIWE in development mode to maintain wallet persistence
         if (isDevelopment) {
-          console.info('[AppKit] Running in development mode - SIWE is disabled to avoid local verification issues');
+          console.info('[AppKit] Running in development mode - SIWE enabled for better wallet persistence');
         }
       } catch (error) {
         console.error('[AppKit] Failed to initialize:', error);

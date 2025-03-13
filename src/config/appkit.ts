@@ -44,9 +44,10 @@ if (typeof window !== 'undefined') {
       statement: "Sign this message to verify you own this wallet",
       // Nonce generation - keep it simple
       getNonce: async () => Math.floor(Math.random() * 10000000).toString(),
-      // Fixed expiration to be a number (seconds) rather than string
-      // 7 days = 604800 seconds, 1 day = 86400 seconds
-      expiration: isMobile ? 604800 : 86400,
+      // Longer expiration time to avoid constant re-signing
+      // 30 days = 2592000 seconds for both mobile and desktop
+      // This helps maintain wallet state across sessions
+      expiration: 2592000,
       // Set resources as plain strings - this is supported by the API
       resources: icons
     });
@@ -81,6 +82,7 @@ if (typeof window !== 'undefined') {
     }
     
     // Create the AppKit with the enhanced SIWX configuration
+    // Make sure we use the built-in wallet icons and connectors correctly
     modal = createAppKit({
       adapters: [wagmiAdapter],
       metadata: {
@@ -89,16 +91,20 @@ if (typeof window !== 'undefined') {
         url: window.location.origin,
         icons: icons
       },
-      // Use DefaultSIWX with standard storage and configuration
-      // Only use supported properties based on API documentation
+      // Use enhanced DefaultSIWX with better persistence configuration
       siwx: new DefaultSIWX({
         messenger: messenger,
         storage: storage,
-        // Removed unsupported 'resources' property
+        // Ensure we keep the session active for the full duration
+        persist: true,
+        // Set session timeout to match the 30-day expiration
+        sessionTimeout: 2592000,
       }),
       projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
       themeMode: 'dark',
-      networks: [base, mainnet]
+      networks: [base, mainnet],
+      // Ensure proper wallet detection - no need for explicit wallet configuration
+      // The library handles wallet detection and icons internally
     });
 
     // Add error handling but don't disconnect on errors
