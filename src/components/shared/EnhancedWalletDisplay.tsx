@@ -11,7 +11,14 @@ import useWalletData from '@/hooks/useWalletData';
 import StatsDisplay from './StatsDisplay';
 import WalletDataService from '@/services/wallet/WalletDataService';
 import { lookupEnsName, lookupEnsAvatar } from '@/lib/ens';
-import { isMobileDevice, registerWalletServiceWorker } from '@/utils/mobileWalletHelper';
+import { isMobileDevice } from '@/utils/deviceDetect';
+
+// Define proper types to replace 'any'
+interface AppKitState {
+  status?: string;
+  connected?: boolean;
+  [key: string]: unknown;
+}
 
 // Import AppKit components dynamically to prevent SSR issues
 const AppKitWrapper = dynamic(
@@ -27,6 +34,23 @@ const AchievementsDropdown = dynamic(() => import('../achievements/AchievementsD
 const LeaderboardModal = dynamic(() => import('../leaderboard/LeaderboardModal'), {
   ssr: false
 });
+
+// Simple helper to register the service worker if available
+function registerWalletServiceWorker(): void {
+  if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+    try {
+      navigator.serviceWorker.register('/wallet-connection-sw.js')
+        .then(registration => {
+          console.log('Wallet service worker registered:', registration.scope);
+        })
+        .catch(error => {
+          console.warn('Wallet service worker registration failed:', error);
+        });
+    } catch (error) {
+      console.warn('Error registering wallet service worker:', error);
+    }
+  }
+}
 
 // Enhanced wallet button with mobile-specific improvements
 const WalletButton = memo(({ 
@@ -105,8 +129,8 @@ WalletButton.displayName = 'WalletButton';
 export default function EnhancedWalletDisplay({ onAchievementsClick, onLeaderboardOpen }: { onAchievementsClick: () => void, onLeaderboardOpen?: (isOpen: boolean) => void }) {
   const { address } = useAccount();
   
-  // State to store AppKit state obtained from the wrapper
-  const [appkitState, setAppkitState] = useState<any>(null);
+  // State to store AppKit state obtained from the wrapper - not used but keeping for future reference
+  const [, setAppkitState] = useState<AppKitState | null>(null);
   
   // Device detection
   const [isUserOnMobile, setIsUserOnMobile] = useState<boolean>(false);
@@ -151,7 +175,10 @@ export default function EnhancedWalletDisplay({ onAchievementsClick, onLeaderboa
         if (typeof window !== 'undefined') {
           const isDevelopment = window.location.hostname === 'localhost' || 
                             window.location.hostname === '127.0.0.1';
-          (window as any).ENV_TYPE = isDevelopment ? 'development' : 'production';
+          
+          // Use a properly typed window with ENV_TYPE
+          (window as Window & { ENV_TYPE?: string }).ENV_TYPE = 
+            isDevelopment ? 'development' : 'production';
         }
         
         log.debug(`Direct ENS resolution attempt for address: ${address}`, { component: 'EnhancedWalletDisplay' });

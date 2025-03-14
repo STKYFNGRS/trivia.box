@@ -1,6 +1,6 @@
 'use client';
 import { useAccount } from 'wagmi';
-import WalletDisplay from './WalletDisplay';
+import EnhancedWalletDisplay from './EnhancedWalletDisplay';
 
 interface HeaderProps {
   onAchievementsClick: () => void;
@@ -18,7 +18,7 @@ export default function Header({ onAchievementsClick, onLeaderboardOpen }: Heade
       <div className="absolute inset-0 -z-10 bg-black/70 backdrop-blur-sm"></div>
       <div className="border-b border-amber-600/20 hardware-accelerated">
         <div className="container mx-auto px-2 sm:px-4 py-2">
-          <WalletDisplay onAchievementsClick={onAchievementsClick} onLeaderboardOpen={onLeaderboardOpen} />
+          <EnhancedWalletDisplay onAchievementsClick={onAchievementsClick} onLeaderboardOpen={onLeaderboardOpen} />
         </div>
       </div>
     </header>

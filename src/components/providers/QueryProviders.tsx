@@ -7,7 +7,7 @@ import { config } from '@/config/wagmi';
 import { getAppKit } from '@reown/appkit/react';
 import { modal } from '@/config/appkit';
 import { isMobileDevice } from '@/utils/deviceDetect';
-import { saveConnectionState, shouldRestoreConnection, markConnectionRestored } from '@/utils/persistConnection';
+import { saveConnectionState, shouldRestoreConnection, markConnectionRestored, getSavedConnectionDetails } from '@/utils/persistConnection';
 
 // Create a QueryClient with settings optimized for wallet connection and ENS
 const queryClient = new QueryClient({
@@ -21,6 +21,22 @@ const queryClient = new QueryClient({
   },
 });
 
+// Define properly typed window interface to avoid any types
+interface TriviaBoxConfig {
+  enableSIWE: boolean;
+  persistWalletState: boolean;
+  environment: 'development' | 'production';
+}
+
+interface WindowWithTriviaBox extends Window {
+  __SIWE_ALWAYS_ENABLED?: boolean;
+  __TRIVIA_BOX_CONFIG?: TriviaBoxConfig;
+  __restoreWalletConnection?: () => Promise<void>;
+  __saveWalletStateOnGameCompletion?: (address: string, chainId?: number) => void;
+  __dispatchGameCompletedEvent?: (address: string, chainId?: number) => void;
+  triggerGameCompleted?: (address: string, chainId?: number) => void;
+}
+
 // Don't initialize AppKit until component mounts
 // This prevents issues during static rendering
 
@@ -28,6 +44,72 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
   const [reconnectionAttempted, setReconnectionAttempted] = useState(false);
   const [lastSaveTimestamp, setLastSaveTimestamp] = useState(0);
   const isRestoringConnection = useRef<boolean>(false);
+  
+  // Define missing utilities that were removed from deleted files
+  
+  // Simple function to save wallet state on game completion
+  const saveWalletStateOnGameCompletion = (address: string, chainId?: number): void => {
+    try {
+      // Call the existing persistence function
+      saveConnectionState(address, chainId);
+      
+      // Set additional game completion specific flags
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('game_completed_address', address);
+        localStorage.setItem('game_completed_timestamp', Date.now().toString());
+        
+        if (isMobileDevice()) {
+          sessionStorage.setItem('game_completed_address', address);
+          sessionStorage.setItem('game_completed_timestamp', Date.now().toString());
+        }
+      }
+      
+      console.log(`Game completion wallet state saved for ${address.slice(0, 6)}...`);
+    } catch (error) {
+      console.error('Error saving wallet state on game completion:', error);
+    }
+  };
+
+  // Simplified function for forced wallet reconnection
+  const forceWalletReconnection = async (): Promise<boolean> => {
+    try {
+      if (!isMobileDevice()) return false;
+      
+      const { address } = getSavedConnectionDetails();
+      if (!address) return false;
+      
+      console.log(`Attempting to force reconnection for address ${address.slice(0, 6)}...`);
+      
+      // Set flags to force reconnection
+      localStorage.setItem('wallet_force_restored', 'true');
+      localStorage.setItem('wallet_last_connected', address);
+      
+      markConnectionRestored();
+      return true;
+    } catch (error) {
+      console.error('Error forcing wallet reconnection:', error);
+      return false;
+    }
+  };
+
+  // Simple wrapper for dispatching game completed events
+  const dispatchGameCompletedEvent = (address: string, chainId = 8453): void => {
+    try {
+      // Save the state first
+      saveWalletStateOnGameCompletion(address, chainId);
+      
+      // Then dispatch the event
+      if (typeof window !== 'undefined') {
+        const event = new CustomEvent('gameCompleted', {
+          detail: { address, chainId, timestamp: Date.now() }
+        });
+        window.dispatchEvent(event);
+        console.log(`Game completed event dispatched for ${address.slice(0, 6)}...`);
+      }
+    } catch (error) {
+      console.error('Error dispatching game completed event:', error);
+    }
+  };
   
   // Initialize AppKit on client-side only after component mounts
   useEffect(() => {
@@ -41,8 +123,9 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
         // Before initializing AppKit, force window settings to ensure SIWE is enabled
         if (typeof window !== 'undefined') {
           // Override any built-in checks that might disable SIWE
-          (window as any).__SIWE_ALWAYS_ENABLED = true;
-          (window as any).__TRIVIA_BOX_CONFIG = {
+          const extWindow = window as unknown as WindowWithTriviaBox;
+          extWindow.__SIWE_ALWAYS_ENABLED = true;
+          extWindow.__TRIVIA_BOX_CONFIG = {
             enableSIWE: true,
             persistWalletState: true,
             environment: isDevelopment ? 'development' : 'production'
@@ -151,7 +234,7 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
       }
     };
     
-    // Handle connection restoration - now with NO MODAL approach
+    // Handle connection restoration - now with improved approach
     const restoreConnection = async () => {
       if (reconnectionAttempted) return; // Prevent multiple attempts
       
@@ -159,6 +242,15 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
       try {
         // Run this inside a try-catch to prevent client-side exceptions
         setReconnectionAttempted(true);
+        
+        // For mobile, use our enhanced force reconnection first
+        if (isMobile) {
+          const reconnected = await forceWalletReconnection();
+          if (reconnected) {
+            console.log('Successfully forced wallet reconnection on mobile');
+            return;
+          }
+        }
         
         // Wrap all wallet operations in error handling
         try {
@@ -192,7 +284,7 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
       }
     };
     
-    // Handle game completion events - simpler implementation
+    // Handle game completion events - improved implementation
     const handleGameCompletion = (event: Event) => {
       // Safe access with optional chaining and type guards
       try {
@@ -203,21 +295,8 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
         console.log(`Game completion detected, saving wallet state (${isMobile ? 'mobile' : 'desktop'})`);
         
         if (address) {
-          // Save for both desktop and mobile
-          saveConnectionState(address, chainId);
-          
-          // Additional storage for mobile
-          if (isMobile) {
-            try {
-              // Store in both types for redundancy
-              localStorage.setItem('game_completed_address', address);
-              localStorage.setItem('game_completed_timestamp', Date.now().toString());
-              sessionStorage.setItem('game_completed_address', address);
-              sessionStorage.setItem('game_completed_timestamp', Date.now().toString());
-            } catch (e) {
-              console.error('Error saving game completion data:', e);
-            }
-          }
+          // Use our function for game completion
+          saveWalletStateOnGameCompletion(address, chainId);
         }
       } catch (err) {
         console.error('Error handling game completion:', err);
@@ -312,6 +391,16 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
         try {
           isRestoringConnection.current = true;
           
+          // Try force reconnection for mobile first
+          if (isMobileDevice()) {
+            const reconnected = await forceWalletReconnection();
+            if (reconnected) {
+              console.log('Manual reconnection completed with force reconnection');
+              isRestoringConnection.current = false;
+              return;
+            }
+          }
+          
           // Just mark the connection as restored without showing a modal
           markConnectionRestored();
           console.log('Manual reconnection completed silently');
@@ -326,18 +415,32 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
     }
   };
   
-  // Expose the function to window for potential use
+  // Expose wallet functions to window for game completion integration
   if (typeof window !== 'undefined') {
     try {
-      // Define the extended window type
-      const extendedWindow = window as Window & {
-        __restoreWalletConnection?: () => Promise<void>
-      };
+      // Add functions to the window object
+      const extWindow = window as unknown as WindowWithTriviaBox;
       
-      // Add the function to the window object
-      extendedWindow.__restoreWalletConnection = manuallyRestoreConnection;
+      extWindow.__restoreWalletConnection = manuallyRestoreConnection;
+      extWindow.__saveWalletStateOnGameCompletion = saveWalletStateOnGameCompletion;
+      extWindow.__dispatchGameCompletedEvent = dispatchGameCompletedEvent;
+      
+      // Legacy function for backwards compatibility
+      extWindow.triggerGameCompleted = (address: string, chainId = 8453) => {
+        saveWalletStateOnGameCompletion(address, chainId);
+        
+        // Legacy event dispatch
+        try {
+          const event = new CustomEvent('gameCompleted', {
+            detail: { address, chainId, timestamp: Date.now() }
+          });
+          window.dispatchEvent(event);
+        } catch (e) {
+          console.warn('Error dispatching legacy game completed event:', e);
+        }
+      };
     } catch (err) {
-      console.warn('Error exposing wallet connection function to window:', err);
+      console.warn('Error exposing wallet functions to window:', err);
     }
   }
   

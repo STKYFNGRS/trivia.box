@@ -1,30 +1,20 @@
-import { createWeb3Provider } from '@/utils/mobileWalletHelper';
 import { ethers } from 'ethers';
-
-// Detect if we're on a mobile device
-const isMobile = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-  navigator.userAgent
-);
+import { isMobileDevice } from '@/utils/deviceDetect';
 
 // Configure providers with mobile-specific options
 export const providerConfig = {
   // Get optimized provider with mobile fallbacks
   getProvider: async (provider: ethers.providers.ExternalProvider) => {
-    if (isMobile) {
-      // Use enhanced provider for mobile
-      return createWeb3Provider(provider);
-    } else {
-      // Use standard provider for desktop
-      return new ethers.providers.Web3Provider(provider);
-    }
+    // Use standard Web3Provider for all devices
+    return new ethers.providers.Web3Provider(provider);
   },
   
   // Mobile-specific RPC configurations
   rpcConfig: {
-    1: ['/api/rpc-proxy', 'https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161'],
-    8453: ['/api/rpc-proxy', 'https://developer-access-mainnet.base.org'],
-    10: ['/api/rpc-proxy', 'https://optimism.llamarpc.com'],
-    137: ['/api/rpc-proxy', 'https://polygon-rpc.com']
+    1: ['https://ethereum.publicnode.com', 'https://cloudflare-eth.com'],
+    8453: ['https://base.publicnode.com', 'https://developer-access-mainnet.base.org'],
+    10: ['https://optimism.publicnode.com', 'https://mainnet.optimism.io'],
+    137: ['https://polygon.publicnode.com', 'https://polygon-rpc.com']
   },
   
   // Enhanced mobile configurations
@@ -36,7 +26,10 @@ export const providerConfig = {
     reconnectOnVisibilityChange: true,
     
     // Cache connection state
-    cachingEnabled: true
+    cachingEnabled: true,
+    
+    // Check if on mobile
+    isMobile: typeof window !== 'undefined' && isMobileDevice()
   }
 };
 
