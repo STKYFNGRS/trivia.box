@@ -37,6 +37,41 @@ interface WindowWithTriviaBox extends Window {
   triggerGameCompleted?: (address: string, chainId?: number) => void;
 }
 
+// Set up global error handler to capture and log unhandled errors
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', function(event) {
+    console.error('Global error caught:', event.error);
+    
+    // Log error for diagnostics
+    try {
+      localStorage.setItem('last_error', JSON.stringify({
+        message: event.error?.message || 'Unknown error',
+        stack: event.error?.stack,
+        timestamp: new Date().toISOString(),
+        url: window.location.href
+      }));
+    } catch (e) {
+      // Ignore storage errors
+    }
+  });
+  
+  window.addEventListener('unhandledrejection', function(event) {
+    console.error('Unhandled promise rejection:', event.reason);
+    
+    // Log for diagnostics
+    try {
+      localStorage.setItem('last_promise_error', JSON.stringify({
+        message: event.reason?.message || 'Unknown promise error',
+        stack: event.reason?.stack,
+        timestamp: new Date().toISOString(),
+        url: window.location.href
+      }));
+    } catch (e) {
+      // Ignore storage errors
+    }
+  });
+}
+
 // Don't initialize AppKit until component mounts
 // This prevents issues during static rendering
 
@@ -55,12 +90,16 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
       
       // Set additional game completion specific flags
       if (typeof window !== 'undefined') {
-        localStorage.setItem('game_completed_address', address);
-        localStorage.setItem('game_completed_timestamp', Date.now().toString());
-        
-        if (isMobileDevice()) {
-          sessionStorage.setItem('game_completed_address', address);
-          sessionStorage.setItem('game_completed_timestamp', Date.now().toString());
+        try {
+          localStorage.setItem('game_completed_address', address);
+          localStorage.setItem('game_completed_timestamp', Date.now().toString());
+          
+          if (isMobileDevice()) {
+            sessionStorage.setItem('game_completed_address', address);
+            sessionStorage.setItem('game_completed_timestamp', Date.now().toString());
+          }
+        } catch (e) {
+          console.warn('Error setting game completion flags:', e);
         }
       }
       
@@ -81,9 +120,14 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
       console.log(`Attempting to force reconnection for address ${address.slice(0, 6)}...`);
       
       // Set flags to force reconnection
-      localStorage.setItem('wallet_force_restored', 'true');
-      localStorage.setItem('wallet_last_connected', address);
+      try {
+        localStorage.setItem('wallet_force_restored', 'true');
+        localStorage.setItem('wallet_last_connected', address);
+      } catch (e) {
+        console.warn('Error setting reconnection flags:', e);
+      }
       
+      // Mark as restored
       markConnectionRestored();
       return true;
     } catch (error) {
@@ -100,11 +144,15 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
       
       // Then dispatch the event
       if (typeof window !== 'undefined') {
-        const event = new CustomEvent('gameCompleted', {
-          detail: { address, chainId, timestamp: Date.now() }
-        });
-        window.dispatchEvent(event);
-        console.log(`Game completed event dispatched for ${address.slice(0, 6)}...`);
+        try {
+          const event = new CustomEvent('gameCompleted', {
+            detail: { address, chainId, timestamp: Date.now() }
+          });
+          window.dispatchEvent(event);
+          console.log(`Game completed event dispatched for ${address.slice(0, 6)}...`);
+        } catch (e) {
+          console.warn('Error dispatching game completed event:', e);
+        }
       }
     } catch (error) {
       console.error('Error dispatching game completed event:', error);
@@ -122,20 +170,28 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
 
         // Before initializing AppKit, force window settings to ensure SIWE is enabled
         if (typeof window !== 'undefined') {
-          // Override any built-in checks that might disable SIWE
-          const extWindow = window as unknown as WindowWithTriviaBox;
-          extWindow.__SIWE_ALWAYS_ENABLED = true;
-          extWindow.__TRIVIA_BOX_CONFIG = {
-            enableSIWE: true,
-            persistWalletState: true,
-            environment: isDevelopment ? 'development' : 'production'
-          };
-          console.info(`[AppKit] Setting explicit SIWE flag for ${isDevelopment ? 'development' : 'production'} mode`);
+          try {
+            // Override any built-in checks that might disable SIWE
+            const extWindow = window as unknown as WindowWithTriviaBox;
+            extWindow.__SIWE_ALWAYS_ENABLED = true;
+            extWindow.__TRIVIA_BOX_CONFIG = {
+              enableSIWE: true,
+              persistWalletState: true,
+              environment: isDevelopment ? 'development' : 'production'
+            };
+            console.info(`[AppKit] Setting explicit SIWE flag for ${isDevelopment ? 'development' : 'production'} mode`);
+          } catch (e) {
+            console.warn('Error configuring SIWE flags:', e);
+          }
         }
 
-        // Initialize AppKit with our config
-        getAppKit(modal);
-        console.log(`[AppKit] Initialized successfully in ${isDevelopment ? 'development' : 'production'} mode`);
+        // Initialize AppKit with our config - with error handling
+        try {
+          getAppKit(modal);
+          console.log(`[AppKit] Initialized successfully in ${isDevelopment ? 'development' : 'production'} mode`);
+        } catch (appkitError) {
+          console.error('[AppKit] Error initializing AppKit:', appkitError);
+        }
         
         // Always enable SIWE for better wallet persistence on all platforms
         console.info(`[AppKit] Running in ${isDevelopment ? 'development' : 'production'} mode - SIWE ENABLED for better wallet persistence`);
@@ -159,6 +215,9 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
   
   // Handle connection persistence across refreshes with enhanced mobile support
   useEffect(() => {
+    // Safety check for window object
+    if (typeof window === 'undefined') return;
+    
     // Detect mobile device - with error handling
     const isMobile = (() => {
       try {
@@ -175,20 +234,26 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
         // Every 15 seconds for mobile, to catch unexpected refreshes
         const interval = setInterval(() => {
           try {
-            // Get current wallet state from wagmi
-            const wagmiState = window.localStorage.getItem('wagmi.store');
-            const wagmiData = wagmiState ? JSON.parse(wagmiState) : null;
-            const account = wagmiData?.state?.connections?.[0]?.accounts?.[0];
-            const chainId = wagmiData?.state?.connections?.[0]?.chains?.[0]?.id;
-            
-            if (account) {
-              const now = Date.now();
-              // Only save if enough time has passed (avoid excessive writes)
-              if (now - lastSaveTimestamp > 10000) { // 10 seconds
-                saveConnectionState(account, chainId);
-                setLastSaveTimestamp(now);
-                console.log('Periodic connection state saved for mobile');
+            // Get current wallet state from wagmi - with additional error handling
+            try {
+              const wagmiState = window.localStorage.getItem('wagmi.store');
+              if (!wagmiState) return; // Skip if no data
+              
+              const wagmiData = JSON.parse(wagmiState);
+              const account = wagmiData?.state?.connections?.[0]?.accounts?.[0];
+              const chainId = wagmiData?.state?.connections?.[0]?.chains?.[0]?.id;
+              
+              if (account) {
+                const now = Date.now();
+                // Only save if enough time has passed (avoid excessive writes)
+                if (now - lastSaveTimestamp > 10000) { // 10 seconds
+                  saveConnectionState(account, chainId);
+                  setLastSaveTimestamp(now);
+                  console.log('Periodic connection state saved for mobile');
+                }
               }
+            } catch (parseError) {
+              console.warn('Error parsing wagmi store during periodic save:', parseError);
             }
           } catch (err) {
             console.error('Error during periodic connection save:', err);
@@ -205,36 +270,52 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
       console.log('Page is about to unload, saving wallet state...');
       
       try {
-        // Get current wallet state
-        const wagmiState = window.localStorage.getItem('wagmi.store');
-        const wagmiData = wagmiState ? JSON.parse(wagmiState) : null;
-        const account = wagmiData?.state?.connections?.[0]?.accounts?.[0];
-        const chainId = wagmiData?.state?.connections?.[0]?.chains?.[0]?.id;
-        
-        if (account) {
-          saveConnectionState(account, chainId);
-          console.log('Connection saved before unload with account:', account.slice(0, 6) + '...');
-          
-          // For mobile, set additional flags
-          if (isMobile) {
-            try {
-              sessionStorage.setItem('wallet_explicit_save', 'true');
-              sessionStorage.setItem('wallet_save_timestamp', Date.now().toString());
-            } catch (e) {
-              console.error('Could not set wallet flags:', e);
-            }
+        // Get current wallet state with added error handling
+        try {
+          const wagmiState = window.localStorage.getItem('wagmi.store');
+          if (!wagmiState) {
+            // Fallback if no wagmi state
+            saveConnectionState();
+            return;
           }
-        } else {
-          // Fallback without specific details
+          
+          const wagmiData = JSON.parse(wagmiState);
+          const account = wagmiData?.state?.connections?.[0]?.accounts?.[0];
+          const chainId = wagmiData?.state?.connections?.[0]?.chains?.[0]?.id;
+          
+          if (account) {
+            saveConnectionState(account, chainId);
+            console.log('Connection saved before unload with account:', account.slice(0, 6) + '...');
+            
+            // For mobile, set additional flags
+            if (isMobile) {
+              try {
+                sessionStorage.setItem('wallet_explicit_save', 'true');
+                sessionStorage.setItem('wallet_save_timestamp', Date.now().toString());
+              } catch (e) {
+                console.error('Could not set wallet flags:', e);
+              }
+            }
+          } else {
+            // Fallback without specific details
+            saveConnectionState();
+          }
+        } catch (parseError) {
+          console.warn('Error getting wallet state before unload:', parseError);
+          // Fallback without parse
           saveConnectionState();
         }
       } catch (err) {
         console.error('Error saving connection before unload:', err);
-        saveConnectionState(); // Fallback
+        try {
+          saveConnectionState(); // Fallback
+        } catch (e) {
+          // Last resort - ignore
+        }
       }
     };
     
-    // Handle connection restoration - now with improved approach
+    // Handle connection restoration - now with improved approach and error handling
     const restoreConnection = async () => {
       if (reconnectionAttempted) return; // Prevent multiple attempts
       
@@ -245,10 +326,14 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
         
         // For mobile, use our enhanced force reconnection first
         if (isMobile) {
-          const reconnected = await forceWalletReconnection();
-          if (reconnected) {
-            console.log('Successfully forced wallet reconnection on mobile');
-            return;
+          try {
+            const reconnected = await forceWalletReconnection();
+            if (reconnected) {
+              console.log('Successfully forced wallet reconnection on mobile');
+              return;
+            }
+          } catch (reconnectError) {
+            console.warn('Error during force reconnection:', reconnectError);
           }
         }
         
@@ -284,19 +369,28 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
       }
     };
     
-    // Handle game completion events - improved implementation
+    // Handle game completion events - improved implementation with better error handling
     const handleGameCompletion = (event: Event) => {
       // Safe access with optional chaining and type guards
       try {
-        const detail = (event as CustomEvent)?.detail;
-        const address = detail?.address;
-        const chainId = detail?.chainId || 8453; // Default to Base chain
+        const customEvent = event as CustomEvent;
+        const detail = customEvent?.detail;
+        
+        if (!detail) {
+          console.warn('Game completion event without details');
+          return;
+        }
+        
+        const address = detail.address;
+        const chainId = detail.chainId || 8453; // Default to Base chain
         
         console.log(`Game completion detected, saving wallet state (${isMobile ? 'mobile' : 'desktop'})`);
         
         if (address) {
           // Use our function for game completion
           saveWalletStateOnGameCompletion(address, chainId);
+        } else {
+          console.warn('Game completion event missing address');
         }
       } catch (err) {
         console.error('Error handling game completion:', err);
@@ -326,14 +420,14 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
     }
     
     // Restore connection on initial load - with delay for React hydration
-    setTimeout(() => {
+    const initialRestoreTimeout = setTimeout(() => {
       try {
         restoreConnection();
         
         // On mobile, check more aggressively for reconnection opportunities
         if (isMobile) {
           // Add a second, later check for mobile to handle slower loading
-          setTimeout(() => {
+          const secondaryTimeout = setTimeout(() => {
             try {
               if (!reconnectionAttempted || shouldRestoreConnection()) {
                 console.log('Secondary mobile connection check running...');
@@ -342,7 +436,7 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
                 // For mobile Safari, add an additional check after animation frame
                 // This catches cases where the DOM has fully rendered
                 requestAnimationFrame(() => {
-                  setTimeout(() => {
+                  const finalTimeout = setTimeout(() => {
                     try {
                       if (shouldRestoreConnection()) {
                         console.log('Final mobile connection check on RAF...');
@@ -352,12 +446,18 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
                       console.warn('Error in RAF mobile connection check:', e);
                     }
                   }, 1000);
+                  
+                  // Cleanup timeout if component unmounts
+                  return () => clearTimeout(finalTimeout);
                 });
               }
             } catch (e) {
               console.warn('Error in secondary mobile connection check:', e);
             }
           }, 3000);
+          
+          // Cleanup timeout if component unmounts
+          return () => clearTimeout(secondaryTimeout);
         }
       } catch (err) {
         console.error('Error during initial connection restoration:', err);
@@ -367,7 +467,7 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
     // Set up periodic saving for mobile
     const savingInterval = setupPeriodicSaving();
     
-    // Cleanup
+    // Cleanup all timeouts and event listeners
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('gameCompleted', handleGameCompletion);
@@ -379,6 +479,8 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
       if (savingInterval) {
         clearInterval(savingInterval);
       }
+      
+      clearTimeout(initialRestoreTimeout);
     };
   }, [reconnectionAttempted, lastSaveTimestamp]);
   
@@ -416,39 +518,55 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
   };
   
   // Expose wallet functions to window for game completion integration
-  if (typeof window !== 'undefined') {
-    try {
-      // Add functions to the window object
-      const extWindow = window as unknown as WindowWithTriviaBox;
-      
-      extWindow.__restoreWalletConnection = manuallyRestoreConnection;
-      extWindow.__saveWalletStateOnGameCompletion = saveWalletStateOnGameCompletion;
-      extWindow.__dispatchGameCompletedEvent = dispatchGameCompletedEvent;
-      
-      // Legacy function for backwards compatibility
-      extWindow.triggerGameCompleted = (address: string, chainId = 8453) => {
-        saveWalletStateOnGameCompletion(address, chainId);
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        // Add functions to the window object
+        const extWindow = window as unknown as WindowWithTriviaBox;
         
-        // Legacy event dispatch
-        try {
-          const event = new CustomEvent('gameCompleted', {
-            detail: { address, chainId, timestamp: Date.now() }
-          });
-          window.dispatchEvent(event);
-        } catch (e) {
-          console.warn('Error dispatching legacy game completed event:', e);
-        }
-      };
-    } catch (err) {
-      console.warn('Error exposing wallet functions to window:', err);
+        extWindow.__restoreWalletConnection = manuallyRestoreConnection;
+        extWindow.__saveWalletStateOnGameCompletion = saveWalletStateOnGameCompletion;
+        extWindow.__dispatchGameCompletedEvent = dispatchGameCompletedEvent;
+        
+        // Legacy function for backwards compatibility
+        extWindow.triggerGameCompleted = (address: string, chainId = 8453) => {
+          try {
+            saveWalletStateOnGameCompletion(address, chainId);
+            
+            // Legacy event dispatch
+            try {
+              const event = new CustomEvent('gameCompleted', {
+                detail: { address, chainId, timestamp: Date.now() }
+              });
+              window.dispatchEvent(event);
+            } catch (e) {
+              console.warn('Error dispatching legacy game completed event:', e);
+            }
+          } catch (error) {
+            console.error('Error in triggerGameCompleted:', error);
+          }
+        };
+      } catch (err) {
+        console.warn('Error exposing wallet functions to window:', err);
+      }
     }
-  }
+    
+    // No cleanup needed for this effect
+  }, []);
   
-  return (
-    <WagmiConfig config={config}>
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
-    </WagmiConfig>
-  );
+  // Wrap in a try/catch to prevent provider initialization errors from crashing the app
+  try {
+    return (
+      <WagmiConfig config={config}>
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      </WagmiConfig>
+    );
+  } catch (error) {
+    console.error('Error initializing providers:', error);
+    // Fallback to just rendering children without providers
+    // This allows the app to at least render something instead of a blank screen
+    return <>{children}</>;
+  }
 }
