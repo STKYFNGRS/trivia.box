@@ -10,78 +10,52 @@ if (!projectId) throw new Error('Project ID is not defined');
 // Check if running on mobile
 const isMobile = typeof window !== 'undefined' ? isMobileDevice() : false;
 
-// Use multiple reliable RPC providers for better ENS resolution
-// Prioritize CORS-friendly endpoints for mobile
-const mainnetRpcUrls = [
-  'https://rpc.ankr.com/eth',
-  'https://ethereum.publicnode.com',
-  'https://eth.meowrpc.com',
-  'https://rpc.mevblocker.io'
-];
-
-// Configure HTTP transports with optimized settings for mobile
-const mainnetTransports = mainnetRpcUrls.map(url => 
-  http(url, {
-    timeout: isMobile ? 15000 : 10000, // Longer timeout for mobile
-    fetchOptions: {
-      cache: 'default',
-      credentials: 'omit', // Avoid CORS issues with credentials
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      }
-    }
-  })
-);
-
-// Base chain RPC settings - use reliable endpoints
-const baseRpcUrls = [
-  'https://base.llamarpc.com',
-  'https://1rpc.io/base',
-  'https://base.meowrpc.com',
-  'https://base.publicnode.com'
-];
-
-const baseTransports = baseRpcUrls.map(url => 
-  http(url, {
-    timeout: isMobile ? 15000 : 10000, // Longer timeout for mobile
-    fetchOptions: {
-      cache: 'default',
-      credentials: 'omit',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      }
-    }
-  })
-);
-
-// Create storage that properly implements the Storage interface
-const wagmiStorage = createStorage({
-  storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-  key: isMobile ? 'mobile_wagmi_persistence' : 'wagmi.store',
+// Simplified RPC configuration - use only public nodes that support CORS
+const mainnetTransport = http('https://ethereum.publicnode.com', {
+  timeout: 15000, // Longer timeout for consistency
 });
 
-// Create wagmi adapter with enhanced ENS resolution configuration
+const baseTransport = http('https://base.publicnode.com', {
+  timeout: 15000, // Longer timeout for consistency
+});
+
+// Fallback option for better reliability
+const mainnetFallbackTransport = fallback([
+  mainnetTransport,
+  http('https://eth.meowrpc.com', { timeout: 15000 }),
+  http('https://rpc.mevblocker.io', { timeout: 15000 })
+], {
+  rank: true,
+  retryCount: isMobile ? 3 : 2
+});
+
+const baseFallbackTransport = fallback([
+  baseTransport,
+  http('https://base.meowrpc.com', { timeout: 15000 }),
+  http('https://1rpc.io/base', { timeout: 15000 })
+], {
+  rank: true,
+  retryCount: isMobile ? 3 : 2
+});
+
+// Create storage with proper implementation
+const wagmiStorage = createStorage({
+  storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+});
+
+// Create wagmi adapter with simplified configuration
 export const wagmiAdapter = new WagmiAdapter({
   projectId,
   networks: [base, mainnet],
   transports: {
-    // Use fallback transport for better reliability
-    [mainnet.id]: fallback(mainnetTransports, {
-      rank: true,
-      retryCount: isMobile ? 5 : 3, // More retries on mobile
-      retryDelay: 1000 // 1 second delay between retries
-    }),
-    // Use fallback for base chain as well
-    [base.id]: fallback(baseTransports, {
-      rank: true,
-      retryCount: isMobile ? 5 : 3,
-      retryDelay: 1000
-    })
+    [mainnet.id]: mainnetFallbackTransport,
+    [base.id]: baseFallbackTransport
   },
-  // Use properly created storage
-  storage: wagmiStorage
+  storage: wagmiStorage,
+  // Enable the features needed for mobile
+  enableInjected: true,
+  enableMobileLinks: true,
+  enablePersistence: true
 });
 
 // Export config for WagmiProvider

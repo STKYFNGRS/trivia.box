@@ -34,43 +34,41 @@ if (typeof window !== 'undefined') {
       `${window.location.origin}/favicon-16x16.png`
     ];
     
-    // Mobile needs additional configuration to ensure proper wallet icons
-    const mobileOptions = isMobile ? {
-      showQrModal: true,
-      explorerExcludedWalletIds: [],
-      explorerRecommendedWalletIds: [
-        // Explicitly include MetaMask and common wallets to ensure icons display properly
-        'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96', // MetaMask
-        'b021913ba555948a1c81eb3d89b372be46f8354e926679de648e4fa2938f05d0', // Coinbase Wallet
-        '38f5d18bd8522c244bdd70cb4a68e0e718865155811c043f052fb9f1c51de662', // Trust Wallet
-        '4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0'  // Rainbow
-      ],
-      enableAnalytics: false,
-      enableExplorer: true,
-      // This ensures wallet icons are properly displayed on mobile
-      enableInjected: true,
-      // Ensure mobile wallets display properly with explicitly defined wallets
-      mobileWallets: [
-        {
-          id: 'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96',
-          name: 'MetaMask',
-          links: {
-            native: 'metamask://wc',
-            universal: 'https://metamask.app.link/wc'
-          }
-        },
-        // Include additional wallet entries for better mobile support
-        {
-          id: 'b021913ba555948a1c81eb3d89b372be46f8354e926679de648e4fa2938f05d0',
-          name: 'Coinbase Wallet',
-          links: {
-            native: 'coinbasewallet://wc',
-            universal: 'https://go.cb-w.com/wc'
-          }
+    // Mobile-specific wallet configuration
+    const mobileWallets = [
+      {
+        id: 'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96',
+        name: 'MetaMask',
+        links: {
+          native: 'metamask://wc',
+          universal: 'https://metamask.app.link/wc'
         }
-      ],
-      desktopWallets: []
-    } : {};
+      },
+      {
+        id: 'b021913ba555948a1c81eb3d89b372be46f8354e926679de648e4fa2938f05d0',
+        name: 'Coinbase Wallet',
+        links: {
+          native: 'coinbasewallet://wc',
+          universal: 'https://go.cb-w.com/wc'
+        }
+      },
+      {
+        id: '38f5d18bd8522c244bdd70cb4a68e0e718865155811c043f052fb9f1c51de662',
+        name: 'Trust Wallet',
+        links: {
+          native: 'trust://wc',
+          universal: 'https://link.trustwallet.com/wc'
+        }
+      },
+      {
+        id: '4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0',
+        name: 'Rainbow',
+        links: {
+          native: 'rainbow://wc',
+          universal: 'https://rnbwapp.com/wc'
+        }
+      }
+    ];
     
     // Create a message for SIWE that exactly matches EIP-4361 standard for MetaMask compatibility
     const messenger = new InformalMessenger({
@@ -93,34 +91,7 @@ if (typeof window !== 'undefined') {
     // Create standard storage with the proper key
     const storage = new LocalStorage({ key: storageKey });
     
-    // Only add mobile-specific storage handling via side effects
-    // We can't modify the storage interface directly due to type constraints
-    if (isMobile && typeof window !== 'undefined') {
-      // Listen for session storage events to create backups
-      window.addEventListener('wallet_session_stored', (e: Event) => {
-        try {
-          if (e instanceof CustomEvent && e.detail) {
-            const sessionData = e.detail;
-            // Create backup in session storage
-            const serialized = JSON.stringify(sessionData);
-            sessionStorage.setItem(`mobile-backup-${storageKey}`, serialized);
-            localStorage.setItem('mobile_wallet_session_backup', serialized);
-            
-            if (sessionData.address) {
-              localStorage.setItem('mobile_wallet_address', sessionData.address);
-              sessionStorage.setItem('mobile_wallet_address', sessionData.address);
-              localStorage.setItem('mobile_wallet_timestamp', Date.now().toString());
-              sessionStorage.setItem('mobile_wallet_timestamp', Date.now().toString());
-            }
-          }
-        } catch (err) {
-          console.warn('[AppKit] Error creating session backup:', err);
-        }
-      });
-    }
-    
     // Create the AppKit with the enhanced SIWX configuration
-    // Make sure we use the built-in wallet icons and connectors correctly
     modal = createAppKit({
       adapters: [wagmiAdapter],
       metadata: {
@@ -137,8 +108,22 @@ if (typeof window !== 'undefined') {
       projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
       themeMode: 'dark',
       networks: [base, mainnet],
-      // Apply mobile-specific options to ensure proper wallet icon display
-      ...(isMobile ? mobileOptions : {})
+      // Apply mobile-specific options
+      ...(isMobile ? {
+        showQrModal: true,
+        explorerExcludedWalletIds: [],
+        explorerRecommendedWalletIds: [
+          'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96', // MetaMask
+          'b021913ba555948a1c81eb3d89b372be46f8354e926679de648e4fa2938f05d0', // Coinbase Wallet
+          '38f5d18bd8522c244bdd70cb4a68e0e718865155811c043f052fb9f1c51de662', // Trust Wallet
+          '4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0'  // Rainbow
+        ],
+        enableAnalytics: false,
+        enableExplorer: true,
+        enableInjected: true,
+        mobileWallets: mobileWallets,
+        desktopWallets: []
+      } : {})
     });
 
     // Add error handling but don't disconnect on errors
@@ -175,24 +160,6 @@ if (typeof window !== 'undefined') {
           import('@/utils/persistConnection').then(({ saveConnectionState }) => {
             saveConnectionState(account, chainId || 8453);
             console.log('[AppKit] Connection state saved for:', account);
-            
-            // For mobile, also set additional flags
-            if (isMobile) {
-              localStorage.setItem('mobile_last_connected', account);
-              localStorage.setItem('mobile_last_connection_time', Date.now().toString());
-              localStorage.setItem('prevent_disconnect', 'true');
-              sessionStorage.setItem('prevent_disconnect', 'true');
-              
-              // Dispatch event to create backup in mobile storage
-              window.dispatchEvent(new CustomEvent('wallet_session_stored', { 
-                detail: { 
-                  address: account,
-                  chainId: chainId || 8453,
-                  timestamp: Date.now(),
-                  source: 'appkit-connected'
-                }
-              }));
-            }
           }).catch(e => console.warn('[AppKit] Error importing persistConnection:', e));
         }
       } catch (e) {

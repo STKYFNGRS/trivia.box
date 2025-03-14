@@ -16,5 +16,10 @@
   "theme_color": "#ffffff",
   "background_color": "#ffffff",
   "display": "standalone",
-  "start_url": "/"
+  "start_url": "/",
+  "id": "/",
+  "scope": "/",
+  "related_applications": [],
+  "prefer_related_applications": false,
+  "orientation": "portrait"
 }
