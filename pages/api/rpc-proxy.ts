@@ -9,19 +9,29 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // Only allow POST requests
+  // Handle OPTIONS request for CORS preflight
+  if (req.method === 'OPTIONS') {
+    // Set CORS headers for preflight request
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+    return res.status(204).end();
+  }
+  
+  // Only allow POST requests for actual data
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
   
   try {
     // Parse request body
-    const { endpoint, payload } = req.body;
+    const { endpoint, payload, directUrl } = req.body;
     
     // Validate required parameters
-    if (!endpoint || !payload) {
+    if ((!endpoint && !directUrl) || !payload) {
       return res.status(400).json({ 
-        error: 'Missing required parameters: endpoint and payload' 
+        error: 'Missing required parameters: either endpoint or directUrl, and payload' 
       });
     }
     
@@ -29,6 +39,7 @@ export default async function handler(
     const allowedEndpoints: Record<string, string> = {
       'eth': 'https://eth.llamarpc.com',
       'base': 'https://base.llamarpc.com',
+      'base-publicnode': 'https://base.publicnode.com',
       'arbitrum': 'https://arbitrum.llamarpc.com',
       'polygon': 'https://polygon.llamarpc.com',
       'optimism': 'https://optimism.llamarpc.com',
@@ -36,10 +47,39 @@ export default async function handler(
       'ethereum': 'https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161'
     };
     
-    // Ensure requested endpoint is in allowlist
-    const targetUrl = allowedEndpoints[endpoint];
-    if (!targetUrl) {
-      return res.status(400).json({ error: 'Invalid or unsupported endpoint' });
+    let targetUrl: string;
+    
+    // If directUrl is provided and it's a valid URL, use it directly
+    if (directUrl && typeof directUrl === 'string' && directUrl.startsWith('https://')) {
+      // Extract domain to check against allowlist
+      try {
+        const url = new URL(directUrl);
+        const domain = url.hostname;
+        
+        // Check if domain is in our allowlist
+        const allowedDomains = [
+          'llamarpc.com',
+          'infura.io',
+          'publicnode.com',
+          'polygon-rpc.com',
+          'optimism.io',
+          'base.org'
+        ];
+        
+        if (!allowedDomains.some(allowed => domain.includes(allowed))) {
+          return res.status(400).json({ error: 'Direct URL domain not allowed' });
+        }
+        
+        targetUrl = directUrl;
+      } catch {
+        return res.status(400).json({ error: 'Invalid direct URL' });
+      }
+    } else {
+      // Use the endpoint mapping
+      targetUrl = allowedEndpoints[endpoint];
+      if (!targetUrl) {
+        return res.status(400).json({ error: 'Invalid or unsupported endpoint' });
+      }
     }
     
     // Forward the request to the actual RPC endpoint

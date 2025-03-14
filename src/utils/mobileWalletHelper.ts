@@ -29,6 +29,10 @@ export class MobileEnhancedProvider {
         '/api/rpc-proxy', // Our proxy
         'https://optimism.llamarpc.com',
       ],
+      '0x2105': [
+        '/api/rpc-proxy', // Our proxy for Base network
+        'https://base.llamarpc.com',
+      ],
       // Add other network IDs as needed
     };
     
@@ -44,6 +48,54 @@ export class MobileEnhancedProvider {
     
     // Store connection info in sessionStorage for persistence
     this.saveConnectionState();
+    
+    // Apply global fetch interceptor for problematic RPC endpoints
+    this.setupFetchInterceptor();
+  }
+  
+  /**
+   * Global fetch interceptor to handle problematic RPC endpoints
+   */
+  private setupFetchInterceptor(): void {
+    if (typeof window !== 'undefined') {
+      const originalFetch = window.fetch;
+      
+      window.fetch = async function(input, init) {
+        const url = input instanceof Request ? input.url : input.toString();
+        
+        // Check if this is a request to a problematic RPC endpoint
+        if (url.includes('base.publicnode.com') || 
+            url.includes('llamarpc.com') ||
+            (url.includes('base') && url.includes('rpc'))) {
+          
+          // Extract payload from the request
+          let payload: any = {};
+          
+          if (init?.body) {
+            try {
+              payload = JSON.parse(init.body.toString());
+            } catch (e) {
+              console.warn('Failed to parse payload for proxying', e);
+            }
+          }
+          
+          // Redirect to our proxy instead
+          return originalFetch('/api/rpc-proxy', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              directUrl: url,
+              payload: payload
+            }),
+          });
+        }
+        
+        // Otherwise, proceed with the original fetch
+        return originalFetch(input, init);
+      };
+    }
   }
   
   /**
@@ -246,7 +298,7 @@ export class MobileEnhancedProvider {
         // First get current chainId to check for proxy needs
         const chainId = (window as any).ethereum.chainId || this.currentChainId;
         
-        // Try to create a proxy provider for mobile compatibility
+        // Always use proxy provider on mobile
         if (this.shouldUseProxy() && chainId) {
           const proxyProvider = this.createProxyProvider(chainId);
           if (proxyProvider) {
@@ -282,8 +334,12 @@ export class MobileEnhancedProvider {
                            
       const isMobileChrome = /Android/i.test(navigator.userAgent) && 
                            /Chrome\/[0-9]/i.test(navigator.userAgent);
-                           
-      return isMobile && (isMobileSafari || isMobileChrome);
+      
+      // More aggressive proxy detection - since we're seeing persistent CORS issues:
+      // Use proxy for all mobile browsers plus Safari on desktop
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      
+      return isMobile || isSafari;
     } catch (error) {
       // If there's an error in detection, default to false
       console.warn('Error in proxy detection:', error);
