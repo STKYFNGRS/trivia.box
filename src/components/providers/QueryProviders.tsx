@@ -1,7 +1,7 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { type ReactNode, useEffect, useState, useRef } from 'react';
+import { type ReactNode, useEffect, useState, useRef, useCallback } from 'react';
 import { WagmiConfig } from 'wagmi';
 import { config } from '@/config/wagmi';
 import { getAppKit } from '@reown/appkit/react';
@@ -83,7 +83,7 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
   // Define missing utilities that were removed from deleted files
   
   // Simple function to save wallet state on game completion
-  const saveWalletStateOnGameCompletion = (address: string, chainId?: number): void => {
+  const saveWalletStateOnGameCompletion = useCallback((address: string, chainId?: number): void => {
     try {
       // Call the existing persistence function
       saveConnectionState(address, chainId);
@@ -107,10 +107,10 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Error saving wallet state on game completion:', error);
     }
-  };
+  }, []);
 
   // Simplified function for forced wallet reconnection
-  const forceWalletReconnection = async (): Promise<boolean> => {
+  const forceWalletReconnection = useCallback(async (): Promise<boolean> => {
     try {
       if (!isMobileDevice()) return false;
       
@@ -134,10 +134,10 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
       console.error('Error forcing wallet reconnection:', error);
       return false;
     }
-  };
+  }, []);
 
   // Simple wrapper for dispatching game completed events
-  const dispatchGameCompletedEvent = (address: string, chainId = 8453): void => {
+  const dispatchGameCompletedEvent = useCallback((address: string, chainId = 8453): void => {
     try {
       // Save the state first
       saveWalletStateOnGameCompletion(address, chainId);
@@ -157,7 +157,7 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Error dispatching game completed event:', error);
     }
-  };
+  }, [saveWalletStateOnGameCompletion]);
   
   // Initialize AppKit on client-side only after component mounts
   useEffect(() => {
@@ -482,10 +482,10 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
       
       clearTimeout(initialRestoreTimeout);
     };
-  }, [reconnectionAttempted, lastSaveTimestamp]);
+  }, [reconnectionAttempted, lastSaveTimestamp, forceWalletReconnection, saveWalletStateOnGameCompletion]);
   
   // Create a function to manually handle reconnection (without modal)
-  const manuallyRestoreConnection = async () => {
+  const manuallyRestoreConnection = useCallback(async () => {
     try {
       if (shouldRestoreConnection() && !isRestoringConnection.current) {
         console.log('Manual wallet restoration requested - no modal approach');
@@ -515,7 +515,7 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error('Error in manuallyRestoreConnection:', err);
     }
-  };
+  }, [forceWalletReconnection]);
   
   // Expose wallet functions to window for game completion integration
   useEffect(() => {
@@ -552,7 +552,7 @@ export default function QueryProviders({ children }: { children: ReactNode }) {
     }
     
     // No cleanup needed for this effect
-  }, []);
+  }, [manuallyRestoreConnection, saveWalletStateOnGameCompletion, dispatchGameCompletedEvent]);
   
   // Wrap in a try/catch to prevent provider initialization errors from crashing the app
   try {

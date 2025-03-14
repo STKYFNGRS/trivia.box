@@ -75,7 +75,7 @@ export default class ErrorBoundary extends React.Component<ErrorBoundaryProps, E
           <div className="bg-amber-900/20 p-4 rounded-lg border border-amber-500/30 max-w-md">
             <h2 className="text-amber-500 text-xl font-bold mb-2">Something went wrong</h2>
             <p className="text-gray-300 mb-4">
-              We encountered an error while loading the game. Let's try to fix this!
+              We encountered an error while loading the game. Let&rsquo;s try to fix this!
             </p>
             
             <div className="space-y-2">
@@ -112,8 +112,20 @@ export default class ErrorBoundary extends React.Component<ErrorBoundaryProps, E
                 }}
                 className="px-4 py-2 border border-amber-600 hover:border-amber-500 transition-colors rounded-md text-amber-500 hover:text-amber-400 w-full"
               >
-                Clear Data & Reload
+                Clear Data &amp; Reload
               </button>
               
               {this.state.error && (
-                <div className="mt-4 p-2 bg-black/50 rounded text
+                <div className="mt-4 p-2 bg-black/50 rounded text-xs text-gray-400 text-left overflow-hidden">
+                  <p className="font-mono">{this.state.error.message}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
