@@ -34,7 +34,7 @@ if (typeof window !== 'undefined') {
       `${window.location.origin}/favicon-16x16.png`
     ];
     
-    // Mobile-specific wallet configuration
+    // Mobile wallet configuration with both deep links and web links
     const mobileWallets = [
       {
         id: 'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96',
@@ -89,7 +89,29 @@ if (typeof window !== 'undefined') {
     });
     
     // Create standard storage with the proper key
-    const storage = new LocalStorage({ key: storageKey });
+    const storage = new LocalStorage({ 
+      key: storageKey
+    });
+    
+    // Mobile options configuration
+    const mobileOptions = isMobile ? {
+      showQrModal: true,
+      explorerExcludedWalletIds: [],
+      explorerRecommendedWalletIds: [
+        'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96', // MetaMask
+        'b021913ba555948a1c81eb3d89b372be46f8354e926679de648e4fa2938f05d0', // Coinbase Wallet
+        '38f5d18bd8522c244bdd70cb4a68e0e718865155811c043f052fb9f1c51de662', // Trust Wallet
+        '4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0'  // Rainbow
+      ],
+      mobileWallets: mobileWallets,
+      desktopWallets: [],
+      modalOptions: {
+        explorerRecommendedWalletIds: [
+          'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96',
+          'b021913ba555948a1c81eb3d89b372be46f8354e926679de648e4fa2938f05d0'
+        ]
+      }
+    } : {};
     
     // Create the AppKit with the enhanced SIWX configuration
     modal = createAppKit({
@@ -108,22 +130,7 @@ if (typeof window !== 'undefined') {
       projectId: process.env.NEXT_PUBLIC_PROJECT_ID || '',
       themeMode: 'dark',
       networks: [base, mainnet],
-      // Apply mobile-specific options
-      ...(isMobile ? {
-        showQrModal: true,
-        explorerExcludedWalletIds: [],
-        explorerRecommendedWalletIds: [
-          'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96', // MetaMask
-          'b021913ba555948a1c81eb3d89b372be46f8354e926679de648e4fa2938f05d0', // Coinbase Wallet
-          '38f5d18bd8522c244bdd70cb4a68e0e718865155811c043f052fb9f1c51de662', // Trust Wallet
-          '4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0'  // Rainbow
-        ],
-        enableAnalytics: false,
-        enableExplorer: true,
-        enableInjected: true,
-        mobileWallets: mobileWallets,
-        desktopWallets: []
-      } : {})
+      ...mobileOptions
     });
 
     // Add error handling but don't disconnect on errors
@@ -166,6 +173,46 @@ if (typeof window !== 'undefined') {
         console.warn('[AppKit] Error saving connection state on connect:', e);
       }
     });
+    
+    // Mobile-specific initialization for better persistence
+    if (isMobile) {
+      try {
+        // Monitor page visibility for connection recovery
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') {
+            // Refresh connection when page becomes visible again
+            console.log('[AppKit] Page became visible, refreshing connection state');
+            
+            // Check if we should restore connection
+            import('@/utils/persistConnection').then(({ shouldRestoreConnection, getSavedConnectionDetails }) => {
+              if (shouldRestoreConnection()) {
+                const { address } = getSavedConnectionDetails();
+                if (address) {
+                  console.log('[AppKit] Restoring connection for address:', address);
+                  // The adapter will handle reconnection during its autoConnect phase
+                }
+              }
+            }).catch(e => console.warn('[AppKit] Error checking connection state:', e));
+          }
+        });
+        
+        // Add window unload handler to save state
+        window.addEventListener('beforeunload', () => {
+          try {
+            const wagmiState = window.localStorage.getItem('wagmi.store');
+            if (wagmiState) {
+              // Save a backup
+              window.localStorage.setItem('mobile_wagmi_persistence', wagmiState);
+              console.log('[AppKit] Saved wagmi state backup before unload');
+            }
+          } catch (e) {
+            console.warn('[AppKit] Error saving state backup:', e);
+          }
+        });
+      } catch (mobileErr) {
+        console.warn('[AppKit] Error setting up mobile-specific handlers:', mobileErr);
+      }
+    }
     
     // Save modal to window for easier debugging
     if (isDevelopment) {
