@@ -1,11 +1,6 @@
 import { config } from "dotenv";
-
-config({ path: ".env.local" });
-config({ path: ".env" });
-
 import { count } from "drizzle-orm";
 import { questions } from "./schema";
-import { db } from "./client";
 
 const sample = [
   {
@@ -101,6 +96,10 @@ const sample = [
 ] as const;
 
 async function main() {
+  config({ path: ".env.local" });
+  config({ path: ".env" });
+  const { db } = await import("./client");
+
   const [{ value: existing }] = await db.select({ value: count() }).from(questions);
   if (existing > 0) {
     console.log("Questions already present; skipping seed.");
