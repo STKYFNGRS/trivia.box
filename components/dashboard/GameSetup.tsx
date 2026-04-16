@@ -55,7 +55,7 @@ export function GameSetup() {
 
   async function createSession() {
     if (!venueAccountId) {
-      toast.error("Select a venue");
+      toast.error("Select a location");
       return;
     }
     setBusy(true);
@@ -142,14 +142,14 @@ export function GameSetup() {
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>1) Venue</CardTitle>
+          <CardTitle>1) Location</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <div className="grid gap-2">
-            <Label>Venue</Label>
+            <Label>Where this game runs</Label>
             <Select value={venueAccountId} onValueChange={(v) => v && setVenueAccountId(v)}>
               <SelectTrigger>
-                <SelectValue placeholder="Select a venue" />
+                <SelectValue placeholder="Select a location" />
               </SelectTrigger>
               <SelectContent>
                 {venues.map((v) => (
@@ -161,7 +161,8 @@ export function GameSetup() {
             </Select>
             {venues.length === 0 ? (
               <div className="text-muted-foreground text-sm">
-                No linked venues yet. Venues can invite you by email, or (later) you can request a link from support.
+                No locations loaded. Refresh the page. If this persists, check that you are signed in — venues can
+                also invite you by email so your profile appears in this list.
               </div>
             ) : null}
           </div>

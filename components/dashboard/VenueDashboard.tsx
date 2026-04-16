@@ -8,10 +8,10 @@ export function VenueDashboard(props: { subscriptionActive: boolean }) {
     <div className="grid gap-4 md:grid-cols-2">
       <Card>
         <CardHeader>
-          <CardTitle>Venue tools</CardTitle>
+          <CardTitle>Venue dashboard</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm text-muted-foreground">
-          <p>Run trivia in-house or with a hired host. Invite hosts by email during signup.</p>
+          <p>Run trivia for this location in-house or with a hired organizer. Same subscription and tools as every organizer.</p>
           <div className="flex flex-wrap gap-2">
             {props.subscriptionActive ? (
               <Link href="/dashboard/games/new" className={cn(buttonVariants())}>

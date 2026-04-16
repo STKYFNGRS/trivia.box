@@ -8,10 +8,13 @@ export function HostDashboard(props: { subscriptionActive: boolean }) {
     <div className="grid gap-4 md:grid-cols-2">
       <Card>
         <CardHeader>
-          <CardTitle>Host tools</CardTitle>
+          <CardTitle>Organizer tools</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm text-muted-foreground">
-          <p>Link venues, run multi-location nights, and keep portable branding during games.</p>
+          <p>
+            Run games from your profile or linked venue locations. When a venue invites you by email, their room
+            appears here automatically.
+          </p>
           <div className="flex flex-wrap gap-2">
             {props.subscriptionActive ? (
               <Link href="/dashboard/games/new" className={cn(buttonVariants())}>

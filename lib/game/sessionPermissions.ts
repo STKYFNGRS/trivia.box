@@ -26,6 +26,9 @@ export async function assertHostCanUseVenue(account: AccountRow, venueAccountId:
   if (account.accountType !== "host") {
     throw new Error("Only hosts or venues can create sessions for a venue");
   }
+  if (venueAccountId === account.id) {
+    return;
+  }
   const rel = await db
     .select({ id: hostVenueRelationships.id })
     .from(hostVenueRelationships)

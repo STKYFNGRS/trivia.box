@@ -31,7 +31,9 @@ export async function GET() {
 
   const venueIds = rels.map((r) => r.venueAccountId);
   if (venueIds.length === 0) {
-    return NextResponse.json({ venues: [] });
+    return NextResponse.json({
+      venues: [{ venueAccountId: account.id, name: account.name, city: account.city }],
+    });
   }
 
   const venueRows = await db
