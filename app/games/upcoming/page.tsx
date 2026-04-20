@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import { CalendarClock, Sparkles } from "lucide-react";
 import Link from "next/link";
@@ -10,6 +11,58 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { db } from "@/lib/db/client";
 import { accounts, sessions, venueProfiles } from "@/lib/db/schema";
 import { cn } from "@/lib/utils";
+
+type UpcomingGameRow = {
+  sessionId: string;
+  status: string;
+  runMode: string;
+  venueName: string;
+  venueCity: string | null;
+  venueSlug: string | null;
+  eventStartsAt: Date;
+  eventTimezone: string;
+  hasPrize: boolean;
+  prizeDescription: string | null;
+  theme: string | null;
+  houseGame: boolean;
+};
+
+async function loadUpcomingGames(now: Date): Promise<UpcomingGameRow[]> {
+  try {
+    return await db
+      .select({
+        sessionId: sessions.id,
+        status: sessions.status,
+        runMode: sessions.runMode,
+        venueName: accounts.name,
+        venueCity: accounts.city,
+        venueSlug: venueProfiles.slug,
+        eventStartsAt: sessions.eventStartsAt,
+        eventTimezone: sessions.eventTimezone,
+        hasPrize: sessions.hasPrize,
+        prizeDescription: sessions.prizeDescription,
+        theme: sessions.theme,
+        houseGame: sessions.houseGame,
+      })
+      .from(sessions)
+      .innerJoin(accounts, eq(sessions.venueAccountId, accounts.id))
+      .leftJoin(venueProfiles, eq(venueProfiles.accountId, accounts.id))
+      .where(
+        and(
+          eq(sessions.listedPublic, true),
+          gte(sessions.eventStartsAt, now),
+          inArray(sessions.status, ["pending", "active"])
+        )
+      )
+      .orderBy(asc(sessions.eventStartsAt))
+      .limit(100);
+  } catch (err) {
+    Sentry.captureException(err, {
+      tags: { route: "/games/upcoming", step: "loadUpcomingGames" },
+    });
+    return [];
+  }
+}
 
 function formatLocal(iso: Date, timeZone: string): string {
   try {
@@ -43,33 +96,7 @@ function formatDateParts(iso: Date, timeZone: string) {
 
 export default async function UpcomingGamesPage() {
   const now = new Date();
-  const games = await db
-    .select({
-      sessionId: sessions.id,
-      status: sessions.status,
-      runMode: sessions.runMode,
-      venueName: accounts.name,
-      venueCity: accounts.city,
-      venueSlug: venueProfiles.slug,
-      eventStartsAt: sessions.eventStartsAt,
-      eventTimezone: sessions.eventTimezone,
-      hasPrize: sessions.hasPrize,
-      prizeDescription: sessions.prizeDescription,
-      theme: sessions.theme,
-      houseGame: sessions.houseGame,
-    })
-    .from(sessions)
-    .innerJoin(accounts, eq(sessions.venueAccountId, accounts.id))
-    .leftJoin(venueProfiles, eq(venueProfiles.accountId, accounts.id))
-    .where(
-      and(
-        eq(sessions.listedPublic, true),
-        gte(sessions.eventStartsAt, now),
-        inArray(sessions.status, ["pending", "active"])
-      )
-    )
-    .orderBy(asc(sessions.eventStartsAt))
-    .limit(100);
+  const games = await loadUpcomingGames(now);
 
   return (
     <MarketingShell wide>

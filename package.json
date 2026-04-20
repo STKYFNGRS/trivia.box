@@ -15,6 +15,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:repair": "node scripts/db-repair.mjs",
+    "db:check-theme": "tsx scripts/check-session-theme.ts",
     "db:seed": "tsx lib/db/seed.ts",
     "db:studio": "drizzle-kit studio"
   },

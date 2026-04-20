@@ -1,4 +1,5 @@
 import { SignedOut } from "@clerk/nextjs";
+import * as Sentry from "@sentry/nextjs";
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import { Dice5, Gamepad2, Library, LogIn, ScanQrCode, Timer } from "lucide-react";
 import Link from "next/link";
@@ -12,6 +13,62 @@ import { db } from "@/lib/db/client";
 import { accounts, sessions, venueProfiles } from "@/lib/db/schema";
 import { getNextHouseGame } from "@/lib/game/houseGames";
 import { cn } from "@/lib/utils";
+
+/**
+ * Shape of a row rendered in the "Coming up" strip. Kept as an explicit alias
+ * so the failure path can return `[]` with the same type — the page must not
+ * crash end-to-end if the DB query throws (e.g. mid-migration schema drift on
+ * `sessions.theme`).
+ */
+type UpcomingRow = {
+  id: string;
+  status: string;
+  houseGame: boolean;
+  runMode: string;
+  joinCode: string;
+  eventStartsAt: Date;
+  eventTimezone: string;
+  theme: string | null;
+  venueName: string;
+  venueCity: string | null;
+  venueSlug: string | null;
+};
+
+async function loadUpcoming(now: Date): Promise<UpcomingRow[]> {
+  try {
+    return await db
+      .select({
+        id: sessions.id,
+        status: sessions.status,
+        houseGame: sessions.houseGame,
+        runMode: sessions.runMode,
+        joinCode: sessions.joinCode,
+        eventStartsAt: sessions.eventStartsAt,
+        eventTimezone: sessions.eventTimezone,
+        theme: sessions.theme,
+        venueName: accounts.name,
+        venueCity: accounts.city,
+        venueSlug: venueProfiles.slug,
+      })
+      .from(sessions)
+      .innerJoin(accounts, eq(sessions.venueAccountId, accounts.id))
+      .leftJoin(venueProfiles, eq(venueProfiles.accountId, accounts.id))
+      .where(
+        and(
+          eq(sessions.listedPublic, true),
+          gte(sessions.eventStartsAt, new Date(now.getTime() - 60 * 60 * 1000)),
+          inArray(sessions.status, ["pending", "active"])
+        )
+      )
+      .orderBy(asc(sessions.eventStartsAt))
+      .limit(4);
+  } catch (err) {
+    Sentry.captureException(err, {
+      tags: { route: "/play", step: "loadUpcoming" },
+    });
+    return [];
+  }
+}
 
 /**
  * Always-on "play" hub.
@@ -38,33 +95,15 @@ function fmtWhen(d: Date, tz: string): string {
 
 export default async function PlayHubPage() {
   const now = new Date();
-  const houseGame = await getNextHouseGame(now).catch(() => null);
-  const upcoming = await db
-    .select({
-      id: sessions.id,
-      status: sessions.status,
-      houseGame: sessions.houseGame,
-      runMode: sessions.runMode,
-      joinCode: sessions.joinCode,
-      eventStartsAt: sessions.eventStartsAt,
-      eventTimezone: sessions.eventTimezone,
-      theme: sessions.theme,
-      venueName: accounts.name,
-      venueCity: accounts.city,
-      venueSlug: venueProfiles.slug,
-    })
-    .from(sessions)
-    .innerJoin(accounts, eq(sessions.venueAccountId, accounts.id))
-    .leftJoin(venueProfiles, eq(venueProfiles.accountId, accounts.id))
-    .where(
-      and(
-        eq(sessions.listedPublic, true),
-        gte(sessions.eventStartsAt, new Date(now.getTime() - 60 * 60 * 1000)),
-        inArray(sessions.status, ["pending", "active"])
-      )
-    )
-    .orderBy(asc(sessions.eventStartsAt))
-    .limit(4);
+  const [houseGame, upcoming] = await Promise.all([
+    getNextHouseGame(now).catch((err) => {
+      Sentry.captureException(err, {
+        tags: { route: "/play", step: "getNextHouseGame" },
+      });
+      return null;
+    }),
+    loadUpcoming(now),
+  ]);
 
   return (
     <MarketingShell wide>
