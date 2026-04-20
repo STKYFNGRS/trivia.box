@@ -2,7 +2,14 @@ import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Emit source maps for client-side chunks so Sentry can associate every
+  // uploaded .map with the bundle it came from. We strip these from the
+  // deployed output via `sourcemaps.deleteSourcemapsAfterUpload` below, so
+  // browsers never actually download them — they only live on Sentry.
+  // Without this, Next only ships server .map files and Sentry emits a
+  // "could not determine a source map reference" warning on every client
+  // chunk during the Vercel build.
+  productionBrowserSourceMaps: true,
 };
 
 /**
