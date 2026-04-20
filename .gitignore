@@ -48,3 +48,6 @@ next-env.d.ts
 # IDE / tools
 /resources
 mcp.json
+
+# Sentry Config File
+.env.sentry-build-plugin
