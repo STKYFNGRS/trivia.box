@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cronAuthOrResponse } from "@/lib/cronAuth";
 import { scheduleNextHouseGame } from "@/lib/game/houseGames";
 
 /**
@@ -15,13 +16,8 @@ import { scheduleNextHouseGame } from "@/lib/game/houseGames";
  * is safe to call more often; the guard just skips extra runs.
  */
 async function run(req: Request) {
-  const secret = process.env.CRON_SECRET?.trim();
-  if (!secret) {
-    return NextResponse.json({ error: "CRON_SECRET is not configured" }, { status: 503 });
-  }
-  if (req.headers.get("authorization")?.trim() !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = cronAuthOrResponse(req);
+  if (unauthorized) return unauthorized;
 
   const now = new Date();
   try {

@@ -353,6 +353,13 @@ export const sessions = pgTable(
      */
     theme: text("theme"),
     listedPublic: boolean("listed_public").notNull().default(true),
+    /**
+     * Host-dashboard soft-hide. Stamped by the "Remove" button on the
+     * Recent games list at `/dashboard/games`; NULL means still visible.
+     * The session + its history tables are intentionally left intact so
+     * player-facing leaderboards / XP / profiles don't forget past games.
+     */
+    hostHiddenAt: timestamp("host_hidden_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

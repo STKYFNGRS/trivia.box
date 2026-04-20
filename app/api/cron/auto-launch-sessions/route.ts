@@ -1,6 +1,7 @@
 import { and, eq, lte, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { cronAuthOrResponse } from "@/lib/cronAuth";
 import { db } from "@/lib/db/client";
 import { sessions } from "@/lib/db/schema";
 import { LaunchBlockedError, launchSession } from "@/lib/game/launchSession";
@@ -21,13 +22,8 @@ const bodySchema = z.object({
  * integration tests can pass `maxSessions` / `nowMs` overrides.
  */
 async function run(req: Request) {
-  const secret = process.env.CRON_SECRET?.trim();
-  if (!secret) {
-    return NextResponse.json({ error: "CRON_SECRET is not configured" }, { status: 503 });
-  }
-  if (req.headers.get("authorization")?.trim() !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = cronAuthOrResponse(req);
+  if (unauthorized) return unauthorized;
 
   // POST can carry overrides in the body; GET (Vercel Cron default) gets the
   // schema defaults. Either way we clamp via zod.

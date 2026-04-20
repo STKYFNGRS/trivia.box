@@ -22,7 +22,7 @@ export default function RootError({
 }) {
   useEffect(() => {
     // No-op when Sentry DSN isn't configured — the SDK init is gated in
-    // `sentry.server.config.ts`/`sentry.client.config.ts`.
+    // `sentry.server.config.ts` / `instrumentation-client.ts`.
     Sentry.captureException(error);
   }, [error]);
 

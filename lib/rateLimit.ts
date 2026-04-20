@@ -156,20 +156,30 @@ export async function enforceRateLimit(name: LimiterName, key: string): Promise<
 }
 
 /**
- * Best-effort IP extraction for rate-limit keys. Prefers the leftmost
- * `X-Forwarded-For` entry (the original client on a proxied request),
- * falls back to `X-Real-IP`, then a literal sentinel so two anonymous
- * requests hitting the same box still share a bucket.
+ * Best-effort IP extraction. Returns the leftmost `X-Forwarded-For` entry
+ * (the original client on a proxied request), falls back to `X-Real-IP`,
+ * then `null` when neither is present (e.g. local dev). This is the
+ * primitive used by both rate-limit bucketing and the anti-cheat
+ * fingerprint hash — returning `null` lets the latter skip hashing a
+ * placeholder value.
  */
-export function clientIpFromRequest(req: Request): string {
+export function clientIpFromHeaders(req: Request): string | null {
   const fwd = req.headers.get("x-forwarded-for");
   if (fwd) {
     const first = fwd.split(",")[0]?.trim();
     if (first) return first;
   }
   const real = req.headers.get("x-real-ip");
-  if (real) return real;
-  return "unknown";
+  return real && real.length > 0 ? real : null;
+}
+
+/**
+ * Rate-limit flavour of {@link clientIpFromHeaders} — replaces a missing
+ * IP with a literal sentinel so two anonymous requests hitting the same
+ * box still share a bucket instead of each getting their own.
+ */
+export function clientIpFromRequest(req: Request): string {
+  return clientIpFromHeaders(req) ?? "unknown";
 }
 
 /** Exported for test introspection. */

@@ -1,6 +1,8 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { zodErrorResponse } from "@/lib/apiError";
+import { isCronAuthorized } from "@/lib/cronAuth";
 import { db } from "@/lib/db/client";
 import { sessions } from "@/lib/db/schema";
 import {
@@ -12,7 +14,6 @@ import {
   sweepStaleSessions,
   type SessionForHost,
 } from "@/lib/game/hostActions";
-import { zodErrorResponse } from "@/lib/apiError";
 
 const bodySchema = z.object({
   /** Max sessions to process in a single tick. Keeps runs bounded. */
@@ -42,18 +43,12 @@ const POST_LOCK_MS = 1000;
  * `setTimeout` chain — so a game keeps running even after the host closes
  * their browser.
  *
- * Guarded by `CRON_SECRET` OR a Vercel `x-vercel-cron` header. Skips paused
- * sessions.
+ * Guarded by {@link isCronAuthorized} — accepts either the Vercel-injected
+ * `x-vercel-cron` header or a `Authorization: Bearer $CRON_SECRET` match.
+ * Skips paused sessions.
  */
-function isAuthorized(req: Request): boolean {
-  if (req.headers.get("x-vercel-cron")) return true;
-  const secret = process.env.CRON_SECRET?.trim();
-  if (!secret) return false;
-  return req.headers.get("authorization")?.trim() === `Bearer ${secret}`;
-}
-
 async function runTick(req: Request, input: unknown) {
-  if (!isAuthorized(req)) {
+  if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

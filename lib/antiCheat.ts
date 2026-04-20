@@ -39,15 +39,12 @@ export function hashDeviceId(deviceId: string | null | undefined): string | null
   return h("dev", deviceId);
 }
 
-/** Best-effort client IP extraction for serverless edge/nodes. */
-export function clientIpFromHeaders(req: Request): string | null {
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) {
-    const first = xff.split(",")[0]?.trim();
-    if (first) return first;
-  }
-  return req.headers.get("x-real-ip") || null;
-}
+// `clientIpFromHeaders` used to live here too — consolidated into
+// `lib/rateLimit.ts` so rate-limit bucketing and anti-cheat hashing share
+// a single extraction primitive. Re-exported here so the existing
+// `import { clientIpFromHeaders } from "@/lib/antiCheat"` callsites keep
+// working without a repo-wide churn.
+export { clientIpFromHeaders } from "./rateLimit";
 
 /**
  * Derive elapsed ms on the server from the stored `timerStartedAtMs` and

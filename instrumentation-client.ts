@@ -1,31 +1,38 @@
-// This file configures the initialization of Sentry on the client.
-// The added config here will be used whenever a users loads a page in their browser.
-// https://docs.sentry.io/platforms/javascript/guides/nextjs/
-
+/**
+ * Sentry - browser runtime config (Next.js 15 + Turbopack canonical location).
+ *
+ * Replaces the legacy `sentry.client.config.ts` per the Sentry/Next.js
+ * deprecation notice (Turbopack refuses to load `sentry.client.config.ts`).
+ *
+ * Intentionally fails open when `NEXT_PUBLIC_SENTRY_DSN` is unset so local
+ * dev, `npm run verify`, and CI builds without Sentry credentials stay
+ * silent. Session replay is armed on errors only (0% baseline) to keep the
+ * privacy scope narrow until we ship a consent surface - we mask all text
+ * and block all media defensively on top of that.
+ */
 import * as Sentry from "@sentry/nextjs";
 
-Sentry.init({
-  dsn: "https://de6dceafe03e43ec0c20c47bacb11c0c@o4511253386690560.ingest.us.sentry.io/4511253406679040",
+const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
 
-  // Add optional integrations for additional features
-  integrations: [Sentry.replayIntegration()],
+if (dsn) {
+  Sentry.init({
+    dsn,
+    environment:
+      process.env.NEXT_PUBLIC_SENTRY_ENV ?? process.env.NODE_ENV,
+    tracesSampleRate: 0.1,
+    replaysSessionSampleRate: 0.0,
+    replaysOnErrorSampleRate: 1.0,
+    integrations: [
+      Sentry.replayIntegration({
+        maskAllText: true,
+        blockAllMedia: true,
+      }),
+    ],
+  });
+}
 
-  // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
-  tracesSampleRate: 1,
-  // Enable logs to be sent to Sentry
-  enableLogs: true,
-
-  // Define how likely Replay events are sampled.
-  // This sets the sample rate to be 10%. You may want this to be 100% while
-  // in development and sample at a lower rate in production
-  replaysSessionSampleRate: 0.1,
-
-  // Define how likely Replay events are sampled when an error occurs.
-  replaysOnErrorSampleRate: 1.0,
-
-  // Enable sending user PII (Personally Identifiable Information)
-  // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
-  sendDefaultPii: true,
-});
-
+/**
+ * Exported so Next.js can hook client-side router transitions into Sentry
+ * traces. No-op when `Sentry.init` above was skipped (DSN unset).
+ */
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

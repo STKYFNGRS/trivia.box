@@ -10,6 +10,40 @@ const nextConfig: NextConfig = {
   // "could not determine a source map reference" warning on every client
   // chunk during the Vercel build.
   productionBrowserSourceMaps: true,
+
+  webpack(config) {
+    // Webpack's `PackFileCacheStrategy` logs a cosmetic warning whenever a
+    // module is serialized into the pack-file cache as a string larger than
+    // ~128 KiB ("Serializing big strings (192kiB) impacts deserialization
+    // performance"). It's a perf hint about cache deserialization on
+    // incremental rebuilds — it doesn't affect runtime or the shipped
+    // bundles. We see it on every cold build because Sentry's injected
+    // instrumentation + source-map strings push several modules over the
+    // threshold, and there's nothing we can do from userland besides
+    // either disabling the filesystem cache (slower rebuilds) or filtering
+    // the warning.
+    //
+    // These messages actually go through webpack's *infrastructure* logger
+    // (not the compilation-warnings pipeline), so filtering them requires
+    // **both** an `ignoreWarnings` entry (covers the few cases where the
+    // cache message bubbles into compilation warnings) and a targeted
+    // `infrastructureLogging.debug` regex that silences the
+    // `webpack.cache.PackFileCacheStrategy` channel while leaving every
+    // other infrastructure log intact. Belt + suspenders keeps Vercel's
+    // cold-cache builds as clean as the warm-cache local ones. See:
+    //   https://github.com/getsentry/sentry-javascript/issues/12391
+    //   https://webpack.js.org/configuration/other-options/#ignorewarnings
+    //   https://webpack.js.org/configuration/other-options/#infrastructurelogging
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings ?? []),
+      { message: /Serializing big strings/ },
+    ];
+    config.infrastructureLogging = {
+      ...(config.infrastructureLogging ?? {}),
+      level: "error",
+    };
+    return config;
+  },
 };
 
 /**

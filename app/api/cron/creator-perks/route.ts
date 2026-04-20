@@ -2,6 +2,7 @@ import { and, eq, gte, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { recomputeCreatorBadges } from "@/lib/creatorPerks";
+import { cronAuthOrResponse } from "@/lib/cronAuth";
 import { db } from "@/lib/db/client";
 import { deckStats, questionDecks } from "@/lib/db/schema";
 
@@ -20,19 +21,11 @@ const bodySchema = z.object({
  *
  * Recommended schedule: daily.
  */
-export async function POST(req: Request) {
-  const secret = process.env.CRON_SECRET?.trim();
-  if (!secret) {
-    return NextResponse.json(
-      { error: "CRON_SECRET is not configured" },
-      { status: 503 }
-    );
-  }
-  if (req.headers.get("authorization")?.trim() !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+async function run(req: Request) {
+  const unauthorized = cronAuthOrResponse(req);
+  if (unauthorized) return unauthorized;
 
-  const json = await req.json().catch(() => ({}));
+  const json = req.method === "POST" ? await req.json().catch(() => ({})) : {};
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -80,3 +73,12 @@ export async function POST(req: Request) {
     results,
   });
 }
+
+export async function GET(req: Request) {
+  return run(req);
+}
+export async function POST(req: Request) {
+  return run(req);
+}
+
+export const dynamic = "force-dynamic";
