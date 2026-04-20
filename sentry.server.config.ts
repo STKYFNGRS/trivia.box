@@ -4,16 +4,18 @@
 
 import * as Sentry from "@sentry/nextjs";
 
-Sentry.init({
-  dsn: "https://de6dceafe03e43ec0c20c47bacb11c0c@o4511253386690560.ingest.us.sentry.io/4511253406679040",
-
-  // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
-  tracesSampleRate: 1,
-
-  // Enable logs to be sent to Sentry
-  enableLogs: true,
-
-  // Enable sending user PII (Personally Identifiable Information)
-  // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
-  sendDefaultPii: true,
-});
+// Fail-open: when `SENTRY_DSN` is not set (local dev, self-hosting, CI
+// preview without Sentry), we skip initialization entirely rather than
+// silently sending to the hardcoded project. Matches the behaviour of the
+// client config and keeps the app bootable without Sentry credentials.
+const dsn = process.env.SENTRY_DSN;
+if (dsn) {
+  Sentry.init({
+    dsn,
+    tracesSampleRate: 1,
+    enableLogs: true,
+    // Enable sending user PII (Personally Identifiable Information)
+    // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
+    sendDefaultPii: true,
+  });
+}

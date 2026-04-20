@@ -29,7 +29,9 @@ export function MarketingShell({
       <FilmGrain />
       <div className="relative z-10 flex min-h-screen flex-col">
         <MarketingNav />
-        <main className={wide ? "flex-1" : "flex-1"}>{children}</main>
+        <main id="main" className={wide ? "flex-1" : "flex-1"}>
+          {children}
+        </main>
         <MarketingFooter />
       </div>
     </div>

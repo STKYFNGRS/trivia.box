@@ -1,4 +1,4 @@
-import { getAnthropicApiKey, getAnthropicModelId } from "@/lib/ai/anthropicConfig";
+import { getClaudeApiKey, getClaudeModelId } from "@/lib/ai/anthropicConfig";
 
 type AnthropicContentBlock = { type: string; text?: string };
 
@@ -50,11 +50,11 @@ export async function anthropicMessagesJson<T>(input: {
   user: string;
   maxTokens?: number;
 }): Promise<{ data: T; meta: AnthropicCallMeta }> {
-  const key = getAnthropicApiKey();
+  const key = getClaudeApiKey();
   if (!key) {
-    throw new Error("No Claude API key configured (set ANTHROPIC_API_KEY or CLAUDE_API_KEY)");
+    throw new Error("No Claude API key configured (set CLAUDE_API_KEY)");
   }
-  const model = getAnthropicModelId();
+  const model = getClaudeModelId();
   const maxTokens = input.maxTokens ?? 8192;
 
   let attempt = 0;

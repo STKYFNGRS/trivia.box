@@ -5,7 +5,6 @@ import {
   duplicateScoreForBody,
   getDuplicateRejectThreshold,
 } from "@/lib/ai/dedupe";
-import { getQuestionLlmProvider } from "@/lib/ai/provider";
 import { getCategoryLabels } from "@/lib/questionTaxonomy";
 import { db } from "@/lib/db/client";
 import { questionDrafts } from "@/lib/db/schema";
@@ -36,37 +35,6 @@ export type QuestionPipelineResult = {
   provider: string;
   outcome: "pending_review" | "rejected_self_review" | "rejected_duplicate";
 };
-
-async function openaiJson<T>(system: string, user: string): Promise<T> {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) {
-    throw new Error("OPENAI_API_KEY is not set");
-  }
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      temperature: 0.7,
-    }),
-  });
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`OpenAI error ${res.status}: ${t.slice(0, 200)}`);
-  }
-  const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-  const raw = data.choices?.[0]?.message?.content;
-  if (!raw) throw new Error("Empty OpenAI response");
-  return JSON.parse(raw) as T;
-}
 
 function coerceGenerated(
   raw: unknown,
@@ -154,23 +122,6 @@ Include exactly one question in the array. Category must be exactly one of: ${al
   };
 }
 
-async function generateWithOpenAI(
-  input: QuestionPipelineInput,
-  allowedSet: Set<string>,
-  forcedSubcategory: string | undefined
-): Promise<{
-  questions: GeneratedQuestion[];
-  usage: Record<string, unknown>;
-}> {
-  const subLine = forcedSubcategory ? `Subcategory must be: ${forcedSubcategory}.` : "";
-  const gen = await openaiJson<Record<string, unknown>>(
-    `You write bar trivia questions. Return ONLY valid JSON with keys: body (string question), correctAnswer (string), wrongAnswers (array of exactly 3 plausible wrong strings), category (string), subcategory (string), difficulty (1|2|3), timeHint (10|20|30 optional, default 20).`,
-    `Category: ${input.category}. ${subLine} Topic hint: ${input.topicHint ?? "general"}. ${input.notesForGeneration ? `Notes: ${input.notesForGeneration}` : ""}`
-  );
-  const one = coerceGenerated(gen, input.category, allowedSet, forcedSubcategory);
-  return { questions: one ? [one] : [], usage: {} };
-}
-
 async function selfReviewAnthropic(items: GeneratedQuestion[]): Promise<{
   reviews: { index: number; verdict: "pass" | "fail"; reason: string }[];
   usage: Record<string, number | undefined>;
@@ -195,33 +146,13 @@ One entry per input index. Be strict on factual errors or ambiguous questions.`,
   return { reviews, usage: { input: meta.inputTokens, output: meta.outputTokens } };
 }
 
-async function selfReviewOpenAI(items: GeneratedQuestion[]): Promise<{
-  reviews: { index: number; verdict: "pass" | "fail"; reason: string }[];
-}> {
-  const q = items[0];
-  if (!q) return { reviews: [] };
-  const fact = await openaiJson<{ verdict?: "pass" | "fail"; note?: string }>(
-    `You verify trivia factual accuracy. Return JSON { verdict: "pass"|"fail", note: string }.`,
-    `Question: ${q.body}\nCorrect: ${q.correctAnswer}\nWrong: ${q.wrongAnswers.join(" | ")}`
-  );
-  // Mirror the Anthropic path: any non-"pass" verdict is treated as fail so a
-  // malformed LLM response can never silently approve a draft.
-  const verdict = fact.verdict === "pass" ? "pass" : "fail";
-  return {
-    reviews: [
-      {
-        index: 0,
-        verdict,
-        reason: (fact.note ?? (verdict === "fail" ? "missing self-review verdict" : "")) || "",
-      },
-    ],
-  };
-}
-
 const PIPELINE_VERSION = "taxonomy-dedupe-v1";
 
 export async function runQuestionDraftPipeline(input: QuestionPipelineInput): Promise<QuestionPipelineResult> {
-  const provider = getQuestionLlmProvider();
+  // Provider is pinned to Claude. The field is kept in the log + return
+  // shape so historical drafts and `QuestionReview` (which reads
+  // `log.provider`) keep working.
+  const provider = "anthropic" as const;
   const allowedLabels = await getCategoryLabels();
   if (allowedLabels.length === 0) {
     throw new Error(
@@ -245,20 +176,11 @@ export async function runQuestionDraftPipeline(input: QuestionPipelineInput): Pr
     resolved: { category: input.category, subcategory: subLabel },
   };
 
-  let gen: GeneratedQuestion[] = [];
-  let genUsage: Record<string, unknown> = {};
-
   const forcedSub = input.subcategoryLabel?.trim() ? subLabel : undefined;
 
-  if (provider === "anthropic") {
-    const r = await generateWithAnthropic(input, allowedLabels, allowedSet, forcedSub);
-    gen = r.questions;
-    genUsage = r.usage;
-  } else {
-    const r = await generateWithOpenAI(input, allowedSet, forcedSub);
-    gen = r.questions;
-    genUsage = r.usage;
-  }
+  const generated = await generateWithAnthropic(input, allowedLabels, allowedSet, forcedSub);
+  let gen: GeneratedQuestion[] = generated.questions;
+  const genUsage: Record<string, unknown> = generated.usage;
 
   (log.steps as Record<string, unknown>).generate = { count: gen.length, usage: genUsage };
   if (gen.length === 0) {
@@ -320,16 +242,9 @@ export async function runQuestionDraftPipeline(input: QuestionPipelineInput): Pr
 
   const forReview = [{ ...base }];
 
-  let reviews: { index: number; verdict: "pass" | "fail"; reason: string }[] = [];
-  let reviewUsage: Record<string, unknown> = {};
-  if (provider === "anthropic") {
-    const r = await selfReviewAnthropic(forReview);
-    reviews = r.reviews;
-    reviewUsage = r.usage;
-  } else {
-    const r = await selfReviewOpenAI(forReview);
-    reviews = r.reviews;
-  }
+  const reviewed = await selfReviewAnthropic(forReview);
+  const reviews = reviewed.reviews;
+  const reviewUsage: Record<string, unknown> = reviewed.usage;
   (log.steps as Record<string, unknown>).selfReview = { reviews, usage: reviewUsage };
 
   const reviewByIndex = new Map<number, { verdict: "pass" | "fail"; reason: string }>();

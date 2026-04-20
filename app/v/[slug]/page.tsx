@@ -67,8 +67,11 @@ export async function generateMetadata({
   const { slug } = await params;
   const venue = await getVenueProfileBySlug(slug);
   if (!venue) return { title: "Venue not found" };
+  // Root layout template is "%s · trivia.box", so we return the bare name
+  // and let the template add the suffix once. Previously this double-
+  // suffixed ("Acme · Trivia.Box · trivia.box").
   return {
-    title: `${venue.displayName} · Trivia.Box`,
+    title: venue.displayName,
     description: venue.tagline ?? venue.description ?? `${venue.displayName} on Trivia.Box`,
   };
 }

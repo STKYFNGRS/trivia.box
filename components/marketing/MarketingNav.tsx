@@ -1,5 +1,6 @@
 "use client";
 
+import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { buttonVariants } from "@/components/ui/button";
@@ -15,7 +16,14 @@ const NAV_LINKS = [
 /**
  * Site-wide marketing nav. Sticky at the top, shrinks its padding after a
  * small scroll threshold. The brand mark is a neon gradient chip + wordmark;
- * primary CTA on the right takes any visitor directly into `/play`.
+ * the right-side CTAs swap between "Sign in / Play now" (visitors) and
+ * "Dashboard + avatar menu" (signed-in users) via Clerk's
+ * `<SignedIn>/<SignedOut>` primitives so we never show a "Sign in" button to
+ * someone already authenticated.
+ *
+ * Also renders a visually-hidden skip-link that becomes visible on focus,
+ * targeting `#main` on the wrapping `MarketingShell` `<main>` for keyboard
+ * accessibility.
  */
 export function MarketingNav() {
   const [scrolled, setScrolled] = useState(false);
@@ -35,6 +43,12 @@ export function MarketingNav() {
           : "border-b border-transparent bg-transparent"
       )}
     >
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-50 focus:rounded-md focus:bg-white focus:px-3 focus:py-1.5 focus:text-sm focus:font-semibold focus:text-black"
+      >
+        Skip to content
+      </a>
       <div
         className={cn(
           "mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-6 transition-all duration-300",
@@ -77,30 +91,51 @@ export function MarketingNav() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <Link
-            href="/sign-in"
-            className={cn(
-              buttonVariants({ variant: "ghost", size: "sm" }),
-              "hidden text-white/80 hover:bg-white/10 hover:text-white sm:inline-flex"
-            )}
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/play"
-            className={cn(
-              buttonVariants({ size: "sm" }),
-              "h-8 px-3 text-[0.8rem] font-bold uppercase tracking-[0.14em] text-[color:var(--primary-foreground)]"
-            )}
-            style={{
-              background:
-                "linear-gradient(135deg, var(--neon-magenta), var(--neon-violet))",
-              boxShadow:
-                "0 0 0 1px color-mix(in oklab, var(--neon-magenta) 45%, transparent), 0 8px 24px -8px color-mix(in oklab, var(--neon-magenta) 70%, transparent)",
-            }}
-          >
-            Play now
-          </Link>
+          <SignedOut>
+            <Link
+              href="/sign-in"
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "sm" }),
+                "hidden text-white/80 hover:bg-white/10 hover:text-white sm:inline-flex"
+              )}
+            >
+              Sign in
+            </Link>
+            <Link
+              href="/sign-up"
+              className={cn(
+                buttonVariants({ size: "sm" }),
+                "h-8 px-3 text-[0.8rem] font-bold uppercase tracking-[0.14em] text-[color:var(--primary-foreground)]"
+              )}
+              style={{
+                background:
+                  "linear-gradient(135deg, var(--neon-magenta), var(--neon-violet))",
+                boxShadow:
+                  "0 0 0 1px color-mix(in oklab, var(--neon-magenta) 45%, transparent), 0 8px 24px -8px color-mix(in oklab, var(--neon-magenta) 70%, transparent)",
+              }}
+            >
+              Play now
+            </Link>
+          </SignedOut>
+          <SignedIn>
+            <Link
+              href="/dashboard"
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "sm" }),
+                "hidden text-white/80 hover:bg-white/10 hover:text-white sm:inline-flex"
+              )}
+            >
+              Dashboard
+            </Link>
+            <UserButton
+              afterSignOutUrl="/"
+              appearance={{
+                elements: {
+                  avatarBox: "size-8 ring-1 ring-white/20",
+                },
+              }}
+            />
+          </SignedIn>
         </div>
       </div>
     </header>

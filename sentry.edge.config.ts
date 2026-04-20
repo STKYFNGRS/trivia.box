@@ -5,16 +5,15 @@
 
 import * as Sentry from "@sentry/nextjs";
 
-Sentry.init({
-  dsn: "https://de6dceafe03e43ec0c20c47bacb11c0c@o4511253386690560.ingest.us.sentry.io/4511253406679040",
-
-  // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
-  tracesSampleRate: 1,
-
-  // Enable logs to be sent to Sentry
-  enableLogs: true,
-
-  // Enable sending user PII (Personally Identifiable Information)
-  // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
-  sendDefaultPii: true,
-});
+// Fail-open: see comment in `sentry.server.config.ts`. Skipping init when
+// `SENTRY_DSN` is unset means the edge runtime boots cleanly without
+// credentials.
+const dsn = process.env.SENTRY_DSN;
+if (dsn) {
+  Sentry.init({
+    dsn,
+    tracesSampleRate: 1,
+    enableLogs: true,
+    sendDefaultPii: true,
+  });
+}

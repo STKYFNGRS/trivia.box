@@ -1,7 +1,11 @@
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
 import { SignUpFlow } from "@/components/auth/SignUpFlow";
 import { FilmGrain } from "@/components/marketing/FilmGrain";
 
-export default function Page() {
+export default async function Page() {
+  const { userId } = await auth();
+  if (userId) redirect("/dashboard");
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--stage-bg)] text-white">
       <FilmGrain />

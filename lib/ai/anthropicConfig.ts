@@ -1,17 +1,17 @@
 /**
- * Anthropic’s documented env is `ANTHROPIC_API_KEY`; many teams also use `CLAUDE_API_KEY`.
- * Either works; `ANTHROPIC_*` wins when both are set.
+ * Claude is the only supported question-generation provider. We read a
+ * single env var — `CLAUDE_API_KEY` — to keep ops simple. If the key is
+ * missing, callers throw a typed error and the admin UI surfaces a clear
+ * `LLM_NOT_CONFIGURED` hint.
  */
-export function getAnthropicApiKey(): string | undefined {
-  const primary = process.env.ANTHROPIC_API_KEY?.trim();
-  const alias = process.env.CLAUDE_API_KEY?.trim();
-  return primary || alias || undefined;
+export function getClaudeApiKey(): string | undefined {
+  return process.env.CLAUDE_API_KEY?.trim() || undefined;
 }
 
-export function getAnthropicModelId(): string {
-  return (
-    process.env.ANTHROPIC_MODEL?.trim() ||
-    process.env.CLAUDE_MODEL?.trim() ||
-    "claude-sonnet-4-20250514"
-  );
+/**
+ * Model override (optional). Defaults to the latest Sonnet snapshot we've
+ * qualified the prompts against; bump here when upgrading the pipeline.
+ */
+export function getClaudeModelId(): string {
+  return process.env.CLAUDE_MODEL?.trim() || "claude-sonnet-4-20250514";
 }

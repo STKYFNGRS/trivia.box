@@ -1,35 +1,19 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { desc, eq } from "drizzle-orm";
-import { Gift, Inbox, Trophy } from "lucide-react";
+import { Gift } from "lucide-react";
 import { getCurrentAccount } from "@/lib/accounts";
 import { BecomeHostCard } from "@/components/billing/BecomeHostCard";
 import { XpLevelBadge } from "@/components/player/XpLevelBadge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PlayerStatCards } from "@/components/player/PlayerStatCards";
+import { TrophyWall } from "@/components/player/TrophyWall";
+import { RecentGamesTable } from "@/components/player/RecentGamesTable";
+import { Card, CardContent } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusPill } from "@/components/ui/status-pill";
 import { listPlayerClaims } from "@/lib/prizes";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { db } from "@/lib/db/client";
-import {
-  accounts,
-  achievementDefinitions,
-  playerAchievementGrants,
-  playerSessions,
-  playerStats,
-  sessions,
-  venueProfiles,
-} from "@/lib/db/schema";
 import { getPublicPlayerStats } from "@/lib/game/publicPlayerStats";
 import { getPlayerByAccountId } from "@/lib/players";
 
@@ -45,34 +29,6 @@ function formatRank(rank: number | null | undefined): string | null {
   if (rank === 2) return "2nd";
   if (rank === 3) return "3rd";
   return `${rank}th`;
-}
-
-function statusPillFor(status: string) {
-  if (status === "active") {
-    return (
-      <StatusPill tone="success" dot pulse>
-        Live
-      </StatusPill>
-    );
-  }
-  if (status === "paused") {
-    return (
-      <StatusPill tone="warning" dot pulse>
-        Paused
-      </StatusPill>
-    );
-  }
-  if (status === "pending") {
-    return (
-      <StatusPill tone="info" dot>
-        Scheduled
-      </StatusPill>
-    );
-  }
-  if (status === "completed") {
-    return <StatusPill tone="neutral">Completed</StatusPill>;
-  }
-  return <StatusPill tone="neutral">{status}</StatusPill>;
 }
 
 export default async function PlayerDashboardPage() {
@@ -91,56 +47,17 @@ export default async function PlayerDashboardPage() {
     redirect("/dashboard");
   }
 
-  const trophies = await db
-    .select({
-      title: achievementDefinitions.title,
-      description: achievementDefinitions.description,
-      slug: achievementDefinitions.slug,
-      earnedAt: playerAchievementGrants.earnedAt,
-    })
-    .from(playerAchievementGrants)
-    .innerJoin(
-      achievementDefinitions,
-      eq(achievementDefinitions.id, playerAchievementGrants.achievementId),
-    )
-    .where(eq(playerAchievementGrants.playerId, player.id))
-    .orderBy(desc(playerAchievementGrants.earnedAt));
-
-  const rollupRows = await db
-    .select()
-    .from(playerStats)
-    .where(eq(playerStats.playerId, player.id))
-    .limit(1);
-  const rollup = rollupRows[0] ?? null;
-
-  const recentGames = await db
-    .select({
-      sessionId: sessions.id,
-      status: sessions.status,
-      eventStartsAt: sessions.eventStartsAt,
-      score: playerSessions.score,
-      rank: playerSessions.rank,
-      joinedAt: playerSessions.joinedAt,
-      venueDisplayName: venueProfiles.displayName,
-      venueSlug: venueProfiles.slug,
-      venueName: accounts.name,
-    })
-    .from(playerSessions)
-    .innerJoin(sessions, eq(sessions.id, playerSessions.sessionId))
-    .innerJoin(accounts, eq(accounts.id, sessions.venueAccountId))
-    .leftJoin(venueProfiles, eq(venueProfiles.accountId, sessions.venueAccountId))
-    .where(eq(playerSessions.playerId, player.id))
-    .orderBy(desc(playerSessions.joinedAt))
-    .limit(8);
-
-  const totalPoints = Number(rollup?.totalPoints ?? 0);
-  const totalXp = Number(rollup?.totalXp ?? 0);
-  const gamesPlayed = rollup?.totalGames ?? stats.gamesPlayed;
-  const longestStreak = rollup?.longestStreak ?? 0;
-  const bestFinish = formatRank(rollup?.bestRank);
-  const fastest = formatMs(rollup?.fastestCorrectMs);
-
+  // Codes are surfaced *only* on the owner dashboard, so we fetch claims
+  // separately here. The public profile uses `stats.prizes` (no codes).
   const claims = await listPlayerClaims(player.id, { status: "all" });
+
+  const { rollup } = stats;
+  const totalPoints = rollup.totalPoints;
+  const totalXp = rollup.totalXp;
+  const gamesPlayed = rollup.totalGames;
+  const longestStreak = rollup.longestStreak;
+  const bestFinish = formatRank(rollup.bestRank);
+  const fastest = formatMs(rollup.fastestCorrectMs);
 
   return (
     <div className="flex flex-col gap-8">
@@ -240,158 +157,29 @@ export default async function PlayerDashboardPage() {
 
       {account.accountType === "player" ? <BecomeHostCard /> : null}
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="shadow-[var(--shadow-card)]">
-          <CardHeader>
-            <CardTitle className="tracking-tight">Career</CardTitle>
-          </CardHeader>
-          <CardContent className="text-muted-foreground space-y-1 text-sm">
-            <div className="flex justify-between">
-              <span>Games played</span>
-              <span className="text-foreground font-medium tabular-nums">
-                {(rollup?.totalGames ?? stats.gamesPlayed).toLocaleString()}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span>Correct answers</span>
-              <span className="text-foreground font-medium tabular-nums">
-                {(rollup?.totalCorrect ?? stats.correctAnswers).toLocaleString()}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span>Accuracy</span>
-              <span className="text-foreground font-medium tabular-nums">{stats.accuracy}%</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Best category</span>
-              <span className="text-foreground font-medium">{stats.bestCategory}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Venues visited</span>
-              <span className="text-foreground font-medium tabular-nums">
-                {stats.venuesVisited}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+      <PlayerStatCards
+        stats={{
+          totalGames: gamesPlayed,
+          totalCorrect: rollup.totalCorrect,
+          totalPoints,
+          accuracy: stats.accuracy,
+          bestCategory: stats.bestCategory,
+          venuesVisited: stats.venuesVisited,
+          longestStreak,
+          fastestCorrectMs: rollup.fastestCorrectMs,
+          bestRank: rollup.bestRank,
+          wins: stats.wins,
+          second: stats.second,
+          third: stats.third,
+        }}
+      />
 
-        <Card className="shadow-[var(--shadow-card)]">
-          <CardHeader>
-            <CardTitle className="tracking-tight">Points &amp; speed</CardTitle>
-          </CardHeader>
-          <CardContent className="text-muted-foreground space-y-1 text-sm">
-            <div className="flex justify-between">
-              <span>Total points</span>
-              <span className="text-foreground font-semibold tabular-nums">
-                {totalPoints.toLocaleString()}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span>Longest streak</span>
-              <span className="text-foreground font-medium tabular-nums">{longestStreak}</span>
-            </div>
-            {fastest ? (
-              <div className="flex justify-between">
-                <span>Fastest correct</span>
-                <span className="text-foreground font-medium tabular-nums">{fastest}</span>
-              </div>
-            ) : null}
-            {bestFinish ? (
-              <div className="flex justify-between">
-                <span>Best finish</span>
-                <span className="text-foreground font-medium">{bestFinish}</span>
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-[var(--shadow-card)]">
-          <CardHeader>
-            <CardTitle className="tracking-tight">Podium</CardTitle>
-          </CardHeader>
-          <CardContent className="text-muted-foreground space-y-1 text-sm">
-            <div className="flex justify-between">
-              <span>1st</span>
-              <span className="text-foreground font-medium tabular-nums">{stats.wins}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>2nd</span>
-              <span className="text-foreground font-medium tabular-nums">{stats.second}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>3rd</span>
-              <span className="text-foreground font-medium tabular-nums">{stats.third}</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <section className="flex flex-col gap-4">
-        <SectionHeader
-          title="Recent games"
-          description="Your last eight sessions across any venue."
-        />
-        {recentGames.length === 0 ? (
-          <EmptyState
-            icon={<Inbox className="size-6" aria-hidden />}
-            title="No games yet"
-            description="Join one with a six-letter code."
-            actions={
-              <Link href="/join" className={cn(buttonVariants({ size: "sm" }))}>
-                Join a game
-              </Link>
-            }
-          />
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-[var(--shadow-card)]">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Venue</TableHead>
-                  <TableHead>When</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Rank</TableHead>
-                  <TableHead className="text-right">Score</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentGames.map((g) => {
-                  const venueLabel = g.venueDisplayName ?? g.venueName;
-                  const when = g.eventStartsAt
-                    ? new Date(g.eventStartsAt)
-                    : new Date(g.joinedAt);
-                  return (
-                    <TableRow key={g.sessionId}>
-                      <TableCell className="font-medium text-foreground">
-                        {g.venueSlug ? (
-                          <Link
-                            href={`/v/${g.venueSlug}`}
-                            className="hover:underline underline-offset-4"
-                          >
-                            {venueLabel}
-                          </Link>
-                        ) : (
-                          venueLabel
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-xs tabular-nums">
-                        {when.toLocaleString()}
-                      </TableCell>
-                      <TableCell>{statusPillFor(g.status)}</TableCell>
-                      <TableCell className="text-right font-medium tabular-nums">
-                        {formatRank(g.rank) ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-right font-semibold tabular-nums">
-                        {g.score.toLocaleString()}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </section>
+      <RecentGamesTable
+        rows={stats.recentGames}
+        description="Your last sessions across any venue."
+        emptyCtaHref="/join"
+        emptyCtaLabel="Join a game"
+      />
 
       <section className="flex flex-col gap-4">
         <SectionHeader
@@ -409,14 +197,7 @@ export default async function PlayerDashboardPage() {
             <CardContent className="pt-6">
               <ul className="divide-y divide-border/70">
                 {claims.map((c) => {
-                  const rankLabel =
-                    c.finalRank === 1
-                      ? "1st"
-                      : c.finalRank === 2
-                        ? "2nd"
-                        : c.finalRank === 3
-                          ? "3rd"
-                          : `${c.finalRank}th`;
+                  const rankLabel = formatRank(c.finalRank) ?? "—";
                   const tone =
                     c.status === "redeemed"
                       ? "success"
@@ -462,35 +243,15 @@ export default async function PlayerDashboardPage() {
         )}
       </section>
 
-      <section className="flex flex-col gap-4">
-        <SectionHeader
-          title="Trophies"
-          description="Earned by playing games and answering questions."
-        />
-        {trophies.length === 0 ? (
-          <EmptyState
-            icon={<Trophy className="size-6" aria-hidden />}
-            title="No trophies yet"
-            description="Play games and answer questions to unlock achievements."
-          />
-        ) : (
-          <Card className="shadow-[var(--shadow-card)]">
-            <CardContent className="text-muted-foreground pt-6 text-sm">
-              <ul className="divide-y divide-border/70">
-                {trophies.map((t) => (
-                  <li key={t.slug} className="flex flex-col gap-0.5 py-3 first:pt-0 last:pb-0">
-                    <div className="text-foreground font-medium">{t.title}</div>
-                    <div>{t.description}</div>
-                    <div className="text-xs opacity-80 tabular-nums">
-                      {t.earnedAt.toISOString().slice(0, 10)}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        )}
-      </section>
+      <TrophyWall
+        items={stats.achievements.map((a) => ({
+          slug: a.slug,
+          title: a.title,
+          description: a.description,
+          icon: a.icon,
+          earnedAt: a.earnedAt,
+        }))}
+      />
     </div>
   );
 }

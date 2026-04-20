@@ -361,12 +361,9 @@ export function QuestionGenerate(props: {
         ) : null}
 
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <StatusPill tone="neutral">Providers</StatusPill>
+          <StatusPill tone="neutral">Provider</StatusPill>
           <span>
-            set <code className="text-foreground">ANTHROPIC_API_KEY</code> or{" "}
-            <code className="text-foreground">CLAUDE_API_KEY</code> for Claude, or{" "}
-            <code className="text-foreground">OPENAI_API_KEY</code> with{" "}
-            <code className="text-foreground">QUESTION_LLM_PROVIDER=openai</code>.
+            set <code className="text-foreground">CLAUDE_API_KEY</code> to enable generation.
           </span>
         </div>
       </CardContent>

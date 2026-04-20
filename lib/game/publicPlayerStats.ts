@@ -1,8 +1,81 @@
 import { and, count, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { answers, playerSessions, playerVenues, players, questions, sessionQuestions } from "@/lib/db/schema";
+import {
+  accounts,
+  achievementDefinitions,
+  answers,
+  playerAchievementGrants,
+  playerSessions,
+  playerStats,
+  playerVenues,
+  players,
+  prizeClaims,
+  questions,
+  sessionQuestions,
+  sessions,
+  venueProfiles,
+} from "@/lib/db/schema";
 
-export async function getPublicPlayerStats(username: string) {
+/**
+ * Shape returned to both the owner dashboard (`/dashboard/player`) and the
+ * public profile (`/u/[username]`). The public profile never exposes
+ * `claimCode`, so the prize shape here omits it at the type level — every
+ * caller reuses the exact same fields.
+ *
+ * Kept as a single server round-trip of small, indexed queries (8 of them,
+ * all on `player_id` keys) so the profile page stays a cheap server
+ * component and we don't need to denormalize yet.
+ */
+export type PublicPlayerStats = {
+  player: { id: string; username: string; createdAt: Date };
+  gamesPlayed: number;
+  totalAnswers: number;
+  correctAnswers: number;
+  accuracy: number;
+  wins: number;
+  second: number;
+  third: number;
+  bestCategory: string;
+  venuesVisited: number;
+  lastSession: { joinedAt: Date; score: number; rank: number | null } | null;
+  rollup: {
+    totalXp: number;
+    totalPoints: number;
+    longestStreak: number;
+    bestRank: number | null;
+    fastestCorrectMs: number | null;
+    totalGames: number;
+    totalCorrect: number;
+  };
+  achievements: {
+    slug: string;
+    title: string;
+    description: string | null;
+    icon: string | null;
+    earnedAt: Date;
+  }[];
+  prizes: {
+    prizeLabel: string;
+    venueName: string;
+    finalRank: number;
+    status: string;
+    expiresAt: Date | null;
+    createdAt: Date;
+  }[];
+  recentGames: {
+    sessionId: string;
+    status: string;
+    eventStartsAt: Date | null;
+    score: number | null;
+    rank: number | null;
+    venueSlug: string | null;
+    venueName: string | null;
+  }[];
+};
+
+export async function getPublicPlayerStats(
+  username: string,
+): Promise<PublicPlayerStats | null> {
   const playerRows = await db
     .select({ id: players.id, username: players.username, createdAt: players.createdAt })
     .from(players)
@@ -67,6 +140,84 @@ export async function getPublicPlayerStats(username: string) {
     .orderBy(desc(playerSessions.joinedAt))
     .limit(1);
 
+  const rollupRows = await db
+    .select({
+      totalXp: playerStats.totalXp,
+      totalPoints: playerStats.totalPoints,
+      longestStreak: playerStats.longestStreak,
+      bestRank: playerStats.bestRank,
+      fastestCorrectMs: playerStats.fastestCorrectMs,
+      totalGames: playerStats.totalGames,
+      totalCorrect: playerStats.totalCorrect,
+    })
+    .from(playerStats)
+    .where(eq(playerStats.playerId, player.id))
+    .limit(1);
+  const rollupRow = rollupRows[0];
+
+  const rollup = {
+    totalXp: Number(rollupRow?.totalXp ?? 0),
+    totalPoints: Number(rollupRow?.totalPoints ?? 0),
+    longestStreak: rollupRow?.longestStreak ?? 0,
+    bestRank: rollupRow?.bestRank ?? null,
+    fastestCorrectMs: rollupRow?.fastestCorrectMs ?? null,
+    totalGames: rollupRow?.totalGames ?? gamesPlayed,
+    totalCorrect: rollupRow?.totalCorrect ?? correctAnswers,
+  };
+
+  const achievementRows = await db
+    .select({
+      slug: achievementDefinitions.slug,
+      title: achievementDefinitions.title,
+      description: achievementDefinitions.description,
+      icon: achievementDefinitions.icon,
+      earnedAt: playerAchievementGrants.earnedAt,
+    })
+    .from(playerAchievementGrants)
+    .innerJoin(
+      achievementDefinitions,
+      eq(achievementDefinitions.id, playerAchievementGrants.achievementId),
+    )
+    .where(eq(playerAchievementGrants.playerId, player.id))
+    .orderBy(desc(playerAchievementGrants.earnedAt));
+
+  // Public surfaces never read `claimCode` — we stop the field at the DB
+  // boundary by not selecting it. If anyone ever tries to render a code
+  // on the public profile, TypeScript will fail first.
+  const prizeRows = await db
+    .select({
+      prizeLabel: prizeClaims.prizeLabel,
+      venueName: accounts.name,
+      finalRank: prizeClaims.finalRank,
+      status: prizeClaims.status,
+      expiresAt: prizeClaims.expiresAt,
+      createdAt: prizeClaims.createdAt,
+    })
+    .from(prizeClaims)
+    .innerJoin(accounts, eq(accounts.id, prizeClaims.venueAccountId))
+    .where(eq(prizeClaims.playerId, player.id))
+    .orderBy(desc(prizeClaims.createdAt))
+    .limit(24);
+
+  const recentGameRows = await db
+    .select({
+      sessionId: sessions.id,
+      status: sessions.status,
+      eventStartsAt: sessions.eventStartsAt,
+      score: playerSessions.score,
+      rank: playerSessions.rank,
+      venueSlug: venueProfiles.slug,
+      venueDisplayName: venueProfiles.displayName,
+      venueName: accounts.name,
+    })
+    .from(playerSessions)
+    .innerJoin(sessions, eq(sessions.id, playerSessions.sessionId))
+    .innerJoin(accounts, eq(accounts.id, sessions.venueAccountId))
+    .leftJoin(venueProfiles, eq(venueProfiles.accountId, sessions.venueAccountId))
+    .where(eq(playerSessions.playerId, player.id))
+    .orderBy(desc(playerSessions.joinedAt))
+    .limit(10);
+
   return {
     player,
     gamesPlayed,
@@ -79,5 +230,17 @@ export async function getPublicPlayerStats(username: string) {
     bestCategory: bestCategoryRows[0]?.category ?? "—",
     venuesVisited,
     lastSession: lastSessionRows[0] ?? null,
+    rollup,
+    achievements: achievementRows,
+    prizes: prizeRows,
+    recentGames: recentGameRows.map((g) => ({
+      sessionId: g.sessionId,
+      status: g.status,
+      eventStartsAt: g.eventStartsAt,
+      score: g.score,
+      rank: g.rank,
+      venueSlug: g.venueSlug,
+      venueName: g.venueDisplayName ?? g.venueName,
+    })),
   };
 }

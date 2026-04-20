@@ -46,5 +46,19 @@ export default withSentryConfig(nextConfig, {
      // Automatically tree-shake Sentry logger statements to reduce bundle size
      removeDebugLogging: true,
    },
- }
+ },
+
+ // Delete the raw `.map` files from the Vercel output after upload so we
+ // don't ship source maps to end users (they stay on Sentry for stack-trace
+ // symbolication).
+ sourcemaps: {
+   deleteSourcemapsAfterUpload: true,
+ },
+
+ // Create + finalize a Sentry release per build so deploys show up in the
+ // release health dashboard and stack traces are tied to the right commit.
+ release: {
+   create: true,
+   finalize: true,
+ },
 });

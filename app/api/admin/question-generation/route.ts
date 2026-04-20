@@ -20,13 +20,13 @@ const bodySchema = z.object({
 function classifyGenerationError(e: unknown): { status: number; body: Record<string, unknown> } {
   const msg = e instanceof Error ? e.message : String(e);
 
-  if (msg.includes("No Claude API key configured") || msg === "OPENAI_API_KEY is not set") {
+  if (msg.includes("No Claude API key configured")) {
     return {
       status: 503,
       body: {
-        error: "No LLM API key configured for the selected provider.",
+        error: "No LLM API key configured.",
         code: "LLM_NOT_CONFIGURED",
-        hint: "Set ANTHROPIC_API_KEY or CLAUDE_API_KEY (same key; either name works), or OPENAI_API_KEY with QUESTION_LLM_PROVIDER=openai.",
+        hint: "Set CLAUDE_API_KEY to enable question generation.",
       },
     };
   }

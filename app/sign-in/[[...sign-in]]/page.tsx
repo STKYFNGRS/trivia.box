@@ -1,9 +1,16 @@
 import { SignIn } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { cinematicClerkAppearance } from "@/components/auth/clerkAppearance";
 import { FilmGrain } from "@/components/marketing/FilmGrain";
 
-export default function Page() {
+export default async function Page() {
+  // Already signed-in visitors shouldn't see the sign-in screen — bounce them
+  // straight to their dashboard. This mirrors the auth-aware nav so we never
+  // dead-end a logged-in user on a "sign in" surface.
+  const { userId } = await auth();
+  if (userId) redirect("/dashboard");
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--stage-bg)] p-6 text-white">
       <FilmGrain />
