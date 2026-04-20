@@ -1,6 +1,6 @@
 import { ClerkProvider } from "@clerk/nextjs";
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Geist, Geist_Mono, Unbounded } from "next/font/google";
 import { Suspense } from "react";
 import { PostHogProvider } from "@/components/analytics/PostHogProvider";
 import { Toaster } from "@/components/ui/sonner";
@@ -12,16 +12,69 @@ export const dynamic = "force-dynamic";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
 });
 
+// Chunky geometric display face for arcade-neon hero + section titles. We
+// only preload the heavy weights we actually use in the landing hero.
+const unbounded = Unbounded({
+  variable: "--font-unbounded",
+  subsets: ["latin"],
+  weight: ["600", "700", "800"],
+  display: "swap",
+});
+
+const SITE_URL = (() => {
+  const env = process.env.NEXT_PUBLIC_SITE_URL;
+  if (env) return env.replace(/\/$/, "");
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return "http://localhost:3000";
+})();
+
 export const metadata: Metadata = {
-  title: "trivia.box",
-  description: "Bar trivia platform for hosts and venues.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "trivia.box · Bar trivia, rebuilt.",
+    template: "%s · trivia.box",
+  },
+  description:
+    "Play live trivia in your local bar, in solo mode any time, or in a free house game every 15 minutes. Host smarter trivia nights with community decks and a real-time scoreboard.",
+  applicationName: "trivia.box",
+  keywords: [
+    "trivia",
+    "bar trivia",
+    "pub quiz",
+    "live trivia",
+    "multiplayer trivia",
+    "trivia for hosts",
+    "trivia venue",
+  ],
+  openGraph: {
+    type: "website",
+    url: SITE_URL,
+    siteName: "trivia.box",
+    title: "trivia.box · Bar trivia, rebuilt.",
+    description:
+      "Free house games every 15 minutes, live venue nights, and solo runs. Play now, host tomorrow.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "trivia.box · Bar trivia, rebuilt.",
+    description:
+      "Free house games every 15 minutes, live venue nights, and solo runs.",
+  },
+  robots: { index: true, follow: true },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0a0613",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({
@@ -44,7 +97,9 @@ export default function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} ${unbounded.variable} antialiased`}
+      >
         {publishableKey ? (
           <ClerkProvider publishableKey={publishableKey}>{themed}</ClerkProvider>
         ) : (

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentAccount } from "@/lib/accounts";
+import { CreatorPerksCard } from "@/components/dashboard/CreatorPerksCard";
 import { HostDashboard } from "@/components/dashboard/HostDashboard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
@@ -59,6 +60,8 @@ export default async function DashboardHomePage() {
           Manage billing from the header banner or by reactivating a subscription.
         </CardContent>
       </Card>
+
+      <CreatorPerksCard accountId={account.id} />
     </div>
   );
 }

@@ -49,6 +49,12 @@ export function DashboardShell(props: {
               >
                 My decks
               </Link>
+              <Link
+                href="/dashboard/stats"
+                className={cn(pathname?.startsWith("/dashboard/stats") && "text-foreground font-medium")}
+              >
+                Stats
+              </Link>
             </nav>
           </div>
           <div className="flex items-center gap-2">

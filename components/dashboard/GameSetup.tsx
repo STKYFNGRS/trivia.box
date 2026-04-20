@@ -55,7 +55,24 @@ type DeckOption = {
   ownerName?: string;
 };
 
-const defaultCategories = ["Sports", "Pop Culture", "History"] as const;
+/**
+ * Fallback categories used before the taxonomy endpoint responds (or if the
+ * API is unreachable). Once `/api/dashboard/categories` loads, the live
+ * taxonomy replaces these everywhere. Keeps the wizard usable during SSR /
+ * slow networks.
+ */
+const FALLBACK_CATEGORIES = ["Sports", "Pop Culture", "History"] as const;
+
+type CategoryOption = {
+  id: string;
+  slug: string;
+  label: string;
+  totalVetted: number;
+  eligibleCount: number;
+};
+
+/** Minimum vetted pool size we require before a category is a candidate for the random default. */
+const MIN_POOL_FOR_RANDOM_DEFAULT = 10;
 
 type RoundSource = "random" | "myDeck" | "communityDeck" | "custom" | "pinned";
 
@@ -74,6 +91,12 @@ type RoundLine = {
   pinnedText: string;
   randomFillText: string;
   customQuestions: CustomQ[];
+  /**
+   * When true on a custom round, any short-fall is filled from the vetted
+   * pool (category-matched smart pull). Lets hosts mix a few signature
+   * questions with platform content without writing a full round.
+   */
+  customFillWithRandom: boolean;
   /** Empty string means "inherit session default"; otherwise 5..60 step 5. */
   secondsPerQuestion: "" | TimerSeconds;
 };
@@ -89,17 +112,79 @@ function emptyCustom(): CustomQ {
   return { body: "", correctAnswer: "", wrongAnswers: ["", "", ""], difficulty: 2 };
 }
 
-function makeRoundLine(i: number): RoundLine {
+function makeRoundLine(category: string): RoundLine {
   return {
-    category: defaultCategories[i % defaultCategories.length]!,
+    category,
     source: "random",
     myDeckId: "",
     communityDeckId: "",
     pinnedText: "",
     randomFillText: "",
     customQuestions: [],
+    customFillWithRandom: false,
     secondsPerQuestion: "",
   };
+}
+
+/**
+ * Default start time is one hour from now, rounded up to the next 15-minute
+ * mark. E.g. invoked at 17:34 -> 18:45. Returns both the `YYYY-MM-DD` date
+ * and `HH:mm` time strings interpreted in the caller's local clock (which is
+ * what the browser's `date`/`time` inputs render against).
+ */
+function defaultEventDateTime(): { date: string; time: string } {
+  const now = new Date();
+  const inHour = new Date(now.getTime() + 60 * 60 * 1000);
+  const minute = inHour.getMinutes();
+  const remainder = minute % 15;
+  if (remainder !== 0) {
+    inHour.setMinutes(minute + (15 - remainder));
+  }
+  inHour.setSeconds(0);
+  inHour.setMilliseconds(0);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const date = `${inHour.getFullYear()}-${pad(inHour.getMonth() + 1)}-${pad(inHour.getDate())}`;
+  const time = `${pad(inHour.getHours())}:${pad(inHour.getMinutes())}`;
+  return { date, time };
+}
+
+/**
+ * Pick a random category label for a round, preferring categories with a
+ * healthy vetted pool. Falls back to any label we know if no option meets
+ * the minimum. `exclude` keeps sibling rounds from drawing the same label
+ * until we run out of eligible categories.
+ */
+function pickRandomCategory(options: CategoryOption[], exclude: Set<string>): string {
+  const candidates = options.filter(
+    (c) => c.totalVetted >= MIN_POOL_FOR_RANDOM_DEFAULT && !exclude.has(c.label)
+  );
+  const pool = candidates.length > 0
+    ? candidates
+    : options.filter((c) => !exclude.has(c.label));
+  const source = pool.length > 0 ? pool : options;
+  if (source.length === 0) return FALLBACK_CATEGORIES[0];
+  const pick = source[Math.floor(Math.random() * source.length)]!;
+  return pick.label;
+}
+
+/**
+ * Build `count` round lines with random categories. Each round draws a
+ * distinct label when possible, then wraps if `count > available categories`.
+ */
+function seedRoundLines(count: number, options: CategoryOption[]): RoundLine[] {
+  const picked: string[] = [];
+  const used = new Set<string>();
+  for (let i = 0; i < count; i += 1) {
+    if (options.length > 0 && used.size >= options.length) {
+      used.clear();
+    }
+    const label = options.length > 0
+      ? pickRandomCategory(options, used)
+      : FALLBACK_CATEGORIES[i % FALLBACK_CATEGORIES.length]!;
+    used.add(label);
+    picked.push(label);
+  }
+  return picked.map((c) => makeRoundLine(c));
 }
 
 export function GameSetup() {
@@ -129,20 +214,37 @@ export function GameSetup() {
   const [venuesError, setVenuesError] = useState<string | null>(null);
   const [packagesLoading, setPackagesLoading] = useState(true);
 
+  const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+
   const [roundLines, setRoundLines] = useState<RoundLine[]>(() =>
-    Array.from({ length: 4 }, (_, i) => makeRoundLine(i))
+    // Initial seed uses fallback labels; a subsequent effect reseeds once
+    // the live category list arrives so defaults reflect the real pool.
+    Array.from({ length: 4 }, (_, i) =>
+      makeRoundLine(FALLBACK_CATEGORIES[i % FALLBACK_CATEGORIES.length]!)
+    )
   );
+  const [categoriesInitialized, setCategoriesInitialized] = useState(false);
 
   useEffect(() => {
     setRoundLines((prev) => {
       const n = Math.min(12, Math.max(1, rounds));
+      if (prev.length === n) return prev;
       const next = prev.slice(0, n);
+      const used = new Set<string>(next.map((r) => r.category));
       while (next.length < n) {
-        next.push(makeRoundLine(next.length));
+        if (categoryOptions.length > 0 && used.size >= categoryOptions.length) {
+          used.clear();
+        }
+        const label = categoryOptions.length > 0
+          ? pickRandomCategory(categoryOptions, used)
+          : FALLBACK_CATEGORIES[next.length % FALLBACK_CATEGORIES.length]!;
+        used.add(label);
+        next.push(makeRoundLine(label));
       }
       return next;
     });
-  }, [rounds]);
+  }, [rounds, categoryOptions]);
 
   async function refreshVenues(preferAccountId?: string) {
     setVenuesLoading(true);
@@ -243,6 +345,46 @@ export function GameSetup() {
     })();
   }, []);
 
+  // Load the taxonomy whenever the selected venue changes; eligibility counts
+  // are scoped to the venue (last-90-days history filter mirrors smart pull).
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setCategoriesLoading(true);
+      try {
+        const qs = venueAccountId ? `?venueAccountId=${encodeURIComponent(venueAccountId)}` : "";
+        const res = await fetch(`/api/dashboard/categories${qs}`);
+        if (!res.ok) {
+          if (!cancelled) setCategoryOptions([]);
+          return;
+        }
+        const data = (await res.json()) as { categories?: CategoryOption[] };
+        if (cancelled) return;
+        setCategoryOptions(data.categories ?? []);
+      } catch {
+        if (!cancelled) setCategoryOptions([]);
+      } finally {
+        if (!cancelled) setCategoriesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [venueAccountId]);
+
+  // Once live categories arrive, reseed the default round lines so each round
+  // gets a random draw from the real pool. We only do this the first time so
+  // subsequent venue changes don't clobber in-progress edits.
+  useEffect(() => {
+    if (categoriesInitialized) return;
+    if (categoryOptions.length === 0) return;
+    setCategoriesInitialized(true);
+    setRoundLines((prev) => {
+      if (prev.length === 0) return prev;
+      return seedRoundLines(prev.length, categoryOptions);
+    });
+  }, [categoryOptions, categoriesInitialized]);
+
   const joinUrl = useMemo(() => {
     if (!joinCode) return null;
     const base = window.location.origin;
@@ -251,8 +393,8 @@ export function GameSetup() {
 
   const browserTz =
     typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "America/Los_Angeles" : "America/Los_Angeles";
-  const [eventLocalDate, setEventLocalDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [eventLocalTime, setEventLocalTime] = useState("19:30");
+  const [eventLocalDate, setEventLocalDate] = useState(() => defaultEventDateTime().date);
+  const [eventLocalTime, setEventLocalTime] = useState(() => defaultEventDateTime().time);
   const [eventTimezone, setEventTimezone] = useState(browserTz);
   const [hasPrize, setHasPrize] = useState(false);
   const [prizeDescription, setPrizeDescription] = useState("");
@@ -350,9 +492,22 @@ export function GameSetup() {
           return { ...base, deckId };
         }
         if (line.source === "custom") {
-          if (line.customQuestions.length !== perRound) {
+          const filledCount = line.customQuestions.length;
+          if (filledCount === 0) {
             throw new Error(
-              `Round ${idx + 1}: you need exactly ${perRound} custom question(s); currently ${line.customQuestions.length}.`
+              `Round ${idx + 1}: add at least one custom question or change the source.`
+            );
+          }
+          if (!line.customFillWithRandom && filledCount !== perRound) {
+            throw new Error(
+              `Round ${idx + 1}: you wrote ${filledCount} of ${perRound} custom questions. Either add ${
+                perRound - filledCount
+              } more or enable "Fill rest from vetted pool".`
+            );
+          }
+          if (line.customFillWithRandom && filledCount > perRound) {
+            throw new Error(
+              `Round ${idx + 1}: you wrote ${filledCount} custom questions but the round is only ${perRound} long.`
             );
           }
           for (const [qIdx, q] of line.customQuestions.entries()) {
@@ -363,14 +518,17 @@ export function GameSetup() {
               );
             }
           }
+          const customPayload = line.customQuestions.map((q) => ({
+            body: q.body.trim(),
+            correctAnswer: q.correctAnswer.trim(),
+            wrongAnswers: q.wrongAnswers.map((w) => w.trim()) as [string, string, string],
+            difficulty: q.difficulty,
+          }));
+          const fillCount = line.customFillWithRandom ? perRound - filledCount : 0;
           return {
             ...base,
-            customQuestions: line.customQuestions.map((q) => ({
-              body: q.body.trim(),
-              correctAnswer: q.correctAnswer.trim(),
-              wrongAnswers: q.wrongAnswers.map((w) => w.trim()) as [string, string, string],
-              difficulty: q.difficulty,
-            })),
+            customQuestions: customPayload,
+            ...(fillCount > 0 ? { randomFillCount: fillCount } : {}),
           };
         }
         if (line.source === "pinned") {
@@ -853,7 +1011,7 @@ export function GameSetup() {
                 <div className="font-medium text-sm">Round {idx + 1}</div>
                 <div className="grid gap-2 md:grid-cols-2">
                   <div className="grid gap-2">
-                    <Label className="text-xs">Category label (for scoreboard)</Label>
+                    <Label className="text-xs">Category</Label>
                     <Select
                       value={line.category}
                       onValueChange={(v) => {
@@ -864,14 +1022,56 @@ export function GameSetup() {
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
-                        {defaultCategories.map((c) => (
-                          <SelectItem key={c} value={c}>
-                            {c}
-                          </SelectItem>
-                        ))}
+                      <SelectContent className="max-h-72">
+                        {(categoryOptions.length > 0
+                          ? categoryOptions.map((c) => ({
+                              label: c.label,
+                              eligible: c.eligibleCount,
+                              total: c.totalVetted,
+                            }))
+                          : FALLBACK_CATEGORIES.map((label) => ({
+                              label,
+                              eligible: 0,
+                              total: 0,
+                            }))
+                        ).map((opt) => {
+                          const countLabel = categoryOptions.length > 0
+                            ? ` — ${opt.eligible} ready${opt.eligible !== opt.total ? ` / ${opt.total} total` : ""}`
+                            : "";
+                          const thin = categoryOptions.length > 0 && opt.eligible < perRound;
+                          return (
+                            <SelectItem key={opt.label} value={opt.label} label={opt.label}>
+                              <span className={thin ? "text-muted-foreground" : undefined}>
+                                {opt.label}
+                                <span className="text-muted-foreground">{countLabel}</span>
+                              </span>
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
+                    {(() => {
+                      if (categoriesLoading || categoryOptions.length === 0) return null;
+                      const opt = categoryOptions.find((c) => c.label === line.category);
+                      if (!opt) {
+                        return (
+                          <p className="text-amber-600 dark:text-amber-500 text-xs">
+                            No vetted questions tagged &quot;{line.category}&quot; yet — pick another category or add questions first.
+                          </p>
+                        );
+                      }
+                      if (line.source !== "random") return null;
+                      if (opt.eligibleCount < perRound) {
+                        return (
+                          <p className="text-amber-600 dark:text-amber-500 text-xs">
+                            Only {opt.eligibleCount} question{opt.eligibleCount === 1 ? "" : "s"} available at this
+                            venue right now; this round needs {perRound}. Pick a different category or reduce
+                            questions per round.
+                          </p>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                   <div className="grid gap-2">
                     <Label className="text-xs">Source</Label>
@@ -986,9 +1186,25 @@ export function GameSetup() {
                 {line.source === "custom" ? (
                   <div className="flex flex-col gap-3">
                     <div className="text-muted-foreground text-xs">
-                      Write <strong>{perRound}</strong> question(s) for this round. They are stored as a hidden deck
-                      tied to this game — they don&apos;t enter the public pool unless you publish the deck later.
+                      Write up to <strong>{perRound}</strong> question(s) for this round. They are stored as a hidden
+                      deck tied to this game — they never enter the public pool unless you publish the deck later.
+                      Enable <em>Fill rest from vetted pool</em> to mix custom writes with smart-pulled trivia.
                     </div>
+                    <label className="flex items-start gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 size-4 accent-foreground"
+                        checked={line.customFillWithRandom}
+                        onChange={(e) =>
+                          updateLine(idx, { customFillWithRandom: e.target.checked })
+                        }
+                      />
+                      <span>
+                        Fill the remaining{" "}
+                        <strong>{Math.max(0, perRound - line.customQuestions.length)}</strong>{" "}
+                        from the vetted pool (category: <em>{line.category}</em>).
+                      </span>
+                    </label>
                     {line.customQuestions.map((q, qIdx) => (
                       <div key={qIdx} className="bg-background flex flex-col gap-2 rounded-md border p-3">
                         <div className="flex items-center justify-between">
@@ -1051,7 +1267,7 @@ export function GameSetup() {
                         </div>
                       </div>
                     ))}
-                    <div>
+                    <div className="flex flex-wrap items-center gap-2">
                       <Button
                         type="button"
                         variant="outline"
@@ -1061,6 +1277,11 @@ export function GameSetup() {
                       >
                         Add custom question ({line.customQuestions.length}/{perRound})
                       </Button>
+                      {line.customFillWithRandom && line.customQuestions.length < perRound ? (
+                        <span className="text-muted-foreground text-xs">
+                          +{perRound - line.customQuestions.length} from vetted pool
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                 ) : null}

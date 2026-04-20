@@ -58,24 +58,37 @@ export function JoinClient() {
   const padded = joinCode.padEnd(6, "·");
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--stage-bg)] px-6 py-12 text-white">
+    <div className="relative flex min-h-[calc(100vh-14rem)] items-center justify-center overflow-hidden px-6 py-12 text-white">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse at 50% 0%, rgb(34 211 238 / 0.18), transparent 55%), radial-gradient(ellipse at center, transparent 55%, rgb(0 0 0 / 0.55) 100%)",
+            "radial-gradient(ellipse at 50% 0%, color-mix(in oklab, var(--neon-magenta) 18%, transparent), transparent 55%), radial-gradient(ellipse at 80% 100%, color-mix(in oklab, var(--neon-cyan) 14%, transparent), transparent 55%)",
         }}
       />
 
       <div className="relative z-10 w-full max-w-xl">
         <div className="mb-10 text-center">
-          <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/80 ring-1 ring-white/15 backdrop-blur">
-            <Sparkles className="h-3.5 w-3.5" />
+          <span
+            className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/85 backdrop-blur"
+            style={{
+              borderColor:
+                "color-mix(in oklab, var(--neon-magenta) 35%, transparent)",
+              background:
+                "color-mix(in oklab, var(--neon-magenta) 10%, transparent)",
+            }}
+          >
+            <Sparkles className="h-3.5 w-3.5" style={{ color: "var(--neon-lime)" }} />
             Ready to play
           </span>
-          <h1 className="mt-4 text-4xl font-black tracking-tight md:text-5xl">Enter the join code</h1>
-          <p className="mt-2 text-sm text-white/70 md:text-base">
+          <h1
+            className="mt-4 font-[family-name:var(--font-display)] font-extrabold tracking-[-0.03em] text-white"
+            style={{ fontSize: "clamp(2.25rem, 6vw, 4rem)", lineHeight: 1 }}
+          >
+            Enter the join code
+          </h1>
+          <p className="mt-3 text-sm text-white/70 md:text-base">
             Grab the six-character code from the host&rsquo;s display and type it in.
           </p>
         </div>
@@ -90,7 +103,14 @@ export function JoinClient() {
               <SignInButton mode="modal">
                 <Button
                   type="button"
-                  className="h-11 w-full bg-[var(--stage-accent)] text-slate-950 hover:bg-[var(--stage-accent)]/90"
+                  className="h-11 w-full font-bold uppercase tracking-[0.12em]"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, var(--neon-magenta), var(--neon-violet))",
+                    color: "oklch(0.1 0.02 270)",
+                    boxShadow:
+                      "0 0 0 1px color-mix(in oklab, var(--neon-magenta) 40%, transparent), 0 10px 30px -10px color-mix(in oklab, var(--neon-magenta) 55%, transparent)",
+                  }}
                 >
                   Sign in to continue
                 </Button>
@@ -129,23 +149,37 @@ export function JoinClient() {
                 Join code
               </Label>
 
-              <div className="relative mt-3 rounded-xl ring-1 ring-white/10 transition focus-within:ring-2 focus-within:ring-[var(--stage-accent)]">
+              <div className="relative mt-3">
                 <div
                   aria-hidden
-                  className="pointer-events-none flex select-none items-center justify-center gap-2 py-2 font-mono text-5xl font-black uppercase tracking-[0.35em] text-white md:text-6xl"
+                  className="pointer-events-none flex select-none items-center justify-center gap-2 py-2 font-mono text-4xl font-black uppercase tracking-tight md:text-5xl"
                 >
-                  {padded.split("").map((ch, i) => (
-                    <span
-                      key={i}
-                      className={
-                        i < joinCode.length
-                          ? "inline-block min-w-[0.8ch] text-white"
-                          : "inline-block min-w-[0.8ch] text-white/20"
-                      }
-                    >
-                      {ch}
-                    </span>
-                  ))}
+                  {padded.split("").map((ch, i) => {
+                    const filled = i < joinCode.length;
+                    const isCursor = i === joinCode.length;
+                    return (
+                      <span
+                        key={i}
+                        className="inline-flex h-14 w-12 items-center justify-center rounded-lg border transition md:h-16 md:w-14"
+                        style={{
+                          background: filled
+                            ? "color-mix(in oklab, var(--neon-magenta) 14%, transparent)"
+                            : "color-mix(in oklab, var(--stage-surface) 75%, transparent)",
+                          borderColor: filled
+                            ? "color-mix(in oklab, var(--neon-magenta) 55%, transparent)"
+                            : isCursor
+                              ? "color-mix(in oklab, var(--neon-cyan) 55%, transparent)"
+                              : "color-mix(in oklab, white 14%, transparent)",
+                          color: filled ? "white" : "color-mix(in oklab, white 20%, transparent)",
+                          boxShadow: filled
+                            ? "0 0 24px -8px color-mix(in oklab, var(--neon-magenta) 55%, transparent)"
+                            : undefined,
+                        }}
+                      >
+                        {filled ? ch : ""}
+                      </span>
+                    );
+                  })}
                 </div>
                 <input
                   id="code"
@@ -168,7 +202,14 @@ export function JoinClient() {
               <Button
                 type="submit"
                 disabled={loading || joinCode.length !== 6}
-                className="mt-6 h-12 w-full bg-[var(--stage-accent)] text-base font-semibold text-slate-950 hover:bg-[var(--stage-accent)]/90"
+                className="mt-6 h-12 w-full text-base font-bold uppercase tracking-[0.12em]"
+                style={{
+                  background:
+                    "linear-gradient(135deg, var(--neon-magenta), var(--neon-violet))",
+                  color: "oklch(0.1 0.02 270)",
+                  boxShadow:
+                    "0 0 0 1px color-mix(in oklab, var(--neon-magenta) 40%, transparent), 0 16px 40px -12px color-mix(in oklab, var(--neon-magenta) 60%, transparent)",
+                }}
               >
                 {loading ? "Joining…" : "Enter game"}
               </Button>

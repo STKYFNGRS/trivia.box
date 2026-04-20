@@ -50,33 +50,52 @@ const roundSchema = z
     questionIds: z.array(z.string().uuid()).max(50).optional(),
     /** Source a deck owned by the caller or an approved public deck. */
     deckId: z.string().uuid().optional(),
-    /** Inline-authored questions for this game; stored under a hidden `game_scoped` deck. */
+    /**
+     * Inline-authored questions for this game; stored under a hidden
+     * `game_scoped` deck. May be fewer than `questionsPerRound` when
+     * `randomFillCount` makes up the difference.
+     */
     customQuestions: z.array(customQuestionSchema).min(1).max(50).optional(),
-    /** If set, must equal `questionsPerRound - questionIds.length` (explicit random smart-pull count). */
+    /**
+     * Explicit random smart-pull count. When set alongside `questionIds` or
+     * `customQuestions`, fills the remainder of the round from the vetted
+     * pool. `questionIds.length + customQuestions.length + randomFillCount`
+     * must equal `questionsPerRound`.
+     */
     randomFillCount: z.number().int().min(0).max(50).optional(),
     /** Per-round override; NULL means "use the session default". */
     secondsPerQuestion: secondsPerQuestionSchema.optional(),
   })
   .superRefine((r, ctx) => {
-    const primaries =
-      (r.questionIds?.length ? 1 : 0) +
-      (r.deckId ? 1 : 0) +
-      (r.customQuestions?.length ? 1 : 0);
-    if (primaries > 1) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Pick only one source per round: questionIds, deckId, or customQuestions",
-      });
+    // Deck source is still exclusive - a deck is an authoritative ordered
+    // list, mixing smart-pull into it would break host expectations.
+    if (r.deckId) {
+      if (r.questionIds?.length || r.customQuestions?.length || r.randomFillCount !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "deckId cannot be combined with questionIds, customQuestions, or randomFillCount",
+        });
+      }
+      return;
     }
     const pins = r.questionIds?.length ?? 0;
+    const customs = r.customQuestions?.length ?? 0;
     if (r.randomFillCount !== undefined) {
-      const sum = pins + r.randomFillCount;
+      const sum = pins + customs + r.randomFillCount;
       if (sum !== r.questionsPerRound) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: `questionIds.length (${pins}) + randomFillCount (${r.randomFillCount}) must equal questionsPerRound (${r.questionsPerRound})`,
+          message: `pinned (${pins}) + custom (${customs}) + randomFillCount (${r.randomFillCount}) must equal questionsPerRound (${r.questionsPerRound})`,
         });
       }
+    } else if (customs > 0 && customs !== r.questionsPerRound) {
+      // Without explicit randomFillCount, customs must be a full round
+      // (legacy behavior). Hosts who want a partial custom + smart-pull mix
+      // pass randomFillCount.
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `customQuestions (${customs}) must equal questionsPerRound (${r.questionsPerRound}) unless randomFillCount is set`,
+      });
     }
   });
 
@@ -365,21 +384,42 @@ export async function POST(req: Request) {
           questionsPerRound: r.questionsPerRound,
         });
       } else if (r.customQuestions?.length) {
-        if (r.customQuestions.length !== r.questionsPerRound) {
+        // Custom questions may be a partial list; the remainder is pulled
+        // from the vetted pool for the round's category when `randomFillCount`
+        // is set. The sum is already validated by `roundSchema.superRefine`,
+        // but we guard again with a friendly error.
+        const fillCount = r.randomFillCount ?? 0;
+        if (r.customQuestions.length + fillCount !== r.questionsPerRound) {
           return NextResponse.json(
             {
-              error: `Round ${r.roundNumber}: custom questions (${r.customQuestions.length}) must match questionsPerRound (${r.questionsPerRound}).`,
+              error: `Round ${r.roundNumber}: custom (${r.customQuestions.length}) + smart-pull fill (${fillCount}) must equal questionsPerRound (${r.questionsPerRound}).`,
             },
             { status: 400 }
           );
         }
-        questions = await materializeCustomQuestions({
+        const customs = await materializeCustomQuestions({
           ownerAccountId: account.id,
           sessionLabel,
           customQuestions: r.customQuestions,
           defaultCategory: r.category,
           gameScopedDeckIdRef,
         });
+        if (fillCount > 0) {
+          // Excludes both the session-level accumulator and the custom
+          // questions we just created so smart-pull can't re-pick them.
+          const fills = await buildRoundQuestions({
+            venueAccountId: body.venueAccountId,
+            roundNumber: r.roundNumber,
+            category: r.category,
+            questionsPerRound: fillCount,
+            questionIds: undefined,
+            randomFillCount: fillCount,
+            excludeQuestionIds: [...exclude, ...customs.map((q) => q.id)],
+          });
+          questions = [...customs, ...fills];
+        } else {
+          questions = customs;
+        }
       } else {
         let roundQuestionIds = r.questionIds;
         if (!roundQuestionIds?.length && packageQuestionIds.length) {

@@ -26,16 +26,37 @@ export function PlayerDashboardShell(props: { username: string; children: React.
                 Home
               </Link>
               <Link
-                href={`/u/${encodeURIComponent(props.username)}`}
-                className={cn(pathname?.startsWith("/u/") && "text-foreground font-medium")}
+                href="/play/solo"
+                className={cn(pathname?.startsWith("/play/solo") && "text-foreground font-medium")}
               >
-                Public profile
+                Play solo
+              </Link>
+              <Link
+                href="/play"
+                className={cn(
+                  pathname === "/play" && "text-foreground font-medium",
+                  "hidden sm:inline"
+                )}
+              >
+                House games
               </Link>
               <Link
                 href="/games/upcoming"
-                className={cn(pathname?.startsWith("/games/upcoming") && "text-foreground font-medium")}
+                className={cn(
+                  pathname?.startsWith("/games/upcoming") && "text-foreground font-medium",
+                  "hidden md:inline"
+                )}
               >
-                Upcoming trivia
+                Upcoming
+              </Link>
+              <Link
+                href={`/u/${encodeURIComponent(props.username)}`}
+                className={cn(
+                  pathname?.startsWith("/u/") && "text-foreground font-medium",
+                  "hidden md:inline"
+                )}
+              >
+                Profile
               </Link>
               <Link href="/join" className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-8 px-2")}>
                 Join a game

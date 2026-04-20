@@ -231,7 +231,7 @@ export async function runQuestionDraftPipeline(input: QuestionPipelineInput): Pr
   const allowedSet = new Set(allowedLabels);
   if (!allowedSet.has(input.category)) {
     throw new Error(
-      `Unknown category "${input.category}". Pick an active category label from the taxonomy (see /admin/question-taxonomy).`
+      `Unknown category "${input.category}". Pick an active category label from the taxonomy (see /admin/questions?view=taxonomy).`
     );
   }
 

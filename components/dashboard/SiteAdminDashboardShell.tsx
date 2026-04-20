@@ -55,6 +55,12 @@ export function SiteAdminDashboardShell(props: {
                 My decks
               </Link>
               <Link
+                href="/dashboard/stats"
+                className={cn(pathname?.startsWith("/dashboard/stats") && "text-foreground font-medium")}
+              >
+                Stats
+              </Link>
+              <Link
                 href="/dashboard/player"
                 className={cn(pathname?.startsWith("/dashboard/player") && "text-foreground font-medium")}
               >

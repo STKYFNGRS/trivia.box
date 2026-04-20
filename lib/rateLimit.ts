@@ -20,7 +20,13 @@ import { ApiError } from "@/lib/apiError";
  *   GET/POST that we don't have a tighter key for.
  */
 
-type LimiterName = "publicJoin" | "publicAnswer" | "adminGenerate" | "anonymous";
+type LimiterName =
+  | "publicJoin"
+  | "publicAnswer"
+  | "publicSoloStart"
+  | "publicSoloAnswer"
+  | "adminGenerate"
+  | "anonymous";
 
 type LimiterConfig = {
   limit: number;
@@ -30,6 +36,10 @@ type LimiterConfig = {
 const CONFIGS: Record<LimiterName, LimiterConfig> = {
   publicJoin: { limit: 10, window: "1 m" },
   publicAnswer: { limit: 120, window: "1 m" },
+  // Solo sessions have a cheap start, but runaway loops would flood `questions`.
+  // 10/min/key is plenty for humans (tops out around one session every 6s).
+  publicSoloStart: { limit: 10, window: "1 m" },
+  publicSoloAnswer: { limit: 180, window: "1 m" },
   adminGenerate: { limit: 30, window: "1 h" },
   anonymous: { limit: 60, window: "1 m" },
 };
@@ -45,6 +55,36 @@ function getRedis(): Redis | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Phase 4.4 fail-closed boot check. Called from `instrumentation.ts` at
+ * process start: refuses to boot in production without Upstash configured,
+ * so we can never accidentally ship a release that silently disables
+ * rate-limiting. `RATE_LIMIT_ALLOW_UNCONFIGURED=1` is an explicit escape
+ * hatch for emergency deploys.
+ */
+export function assertRateLimitConfigured(): void {
+  if (process.env.NODE_ENV !== "production") return;
+  if (process.env.RATE_LIMIT_ALLOW_UNCONFIGURED === "1") {
+    console.warn(
+      "[rateLimit] Running without Upstash in production — RATE_LIMIT_ALLOW_UNCONFIGURED=1 is set."
+    );
+    return;
+  }
+  if (!redis) {
+    throw new Error(
+      "Rate limiting is not configured. Set UPSTASH_REDIS_REST_URL and " +
+        "UPSTASH_REDIS_REST_TOKEN, or RATE_LIMIT_ALLOW_UNCONFIGURED=1 to " +
+        "temporarily fail-open."
+    );
+  }
+}
+
+/** Counter of fail-open invocations; reset by tests. Monitored by ops. */
+let failOpenCount = 0;
+export function getFailOpenCount(): number {
+  return failOpenCount;
 }
 
 const cache: Partial<Record<LimiterName, Ratelimit>> = {};
@@ -83,11 +123,26 @@ export async function checkRateLimit(
 ): Promise<RateLimitResult> {
   const limiter = getLimiter(name);
   if (!limiter) {
-    // Fail open — no Upstash env means no enforcement.
+    // Fail open — no Upstash env means no enforcement. Track and log once
+    // per minute so ops can spot a production misconfiguration even when
+    // `RATE_LIMIT_ALLOW_UNCONFIGURED=1` is set.
+    failOpenCount += 1;
+    maybeWarnFailOpen(name);
     return { allowed: true, remaining: null, reset: null };
   }
   const res = await limiter.limit(key);
   return { allowed: res.success, remaining: res.remaining, reset: res.reset };
+}
+
+let lastWarnAt = 0;
+function maybeWarnFailOpen(name: LimiterName) {
+  const now = Date.now();
+  if (now - lastWarnAt < 60_000) return;
+  lastWarnAt = now;
+  console.warn(
+    `[rateLimit] fail-open on "${name}" — Upstash client unavailable. ` +
+      `Total fail-opens this process: ${failOpenCount}.`
+  );
 }
 
 /**

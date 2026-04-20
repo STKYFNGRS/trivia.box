@@ -39,6 +39,13 @@ export const accounts = pgTable(
     stripeCustomerId: text("stripe_customer_id"),
     stripeSubscriptionId: text("stripe_subscription_id"),
     subscriptionActive: boolean("subscription_active").notNull().default(false),
+    /**
+     * Creator free-tier perk window. Phase 3.3 grants this for hitting
+     * badge thresholds (e.g. 3 approved decks, top-rated deck); host-gate
+     * checks read `subscriptionActive || creatorFreeUntil > now()`. Null
+     * when no perk is active.
+     */
+    creatorFreeUntil: timestamp("creator_free_until", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("accounts_email_unique").on(t.email)]
@@ -122,6 +129,14 @@ export const questionDecks = pgTable(
     name: text("name").notNull(),
     slug: text("slug").notNull(),
     description: text("description"),
+    /** Optional cover art for marketplace listings. Raw bytes stored in Neon. */
+    coverImageMime: text("cover_image_mime"),
+    coverImageBytes: bytea("cover_image_bytes"),
+    coverUpdatedAt: timestamp("cover_updated_at", { withTimezone: true }),
+    /** Free-form discovery tags (e.g. "80s", "geography", "hard"). */
+    tags: text("tags").array(),
+    /** Site-admin curated "front-page" badge. */
+    featured: boolean("featured").notNull().default(false),
     defaultCategory: text("default_category"),
     defaultSubcategory: text("default_subcategory"),
     visibility: text("visibility").notNull().default("private"),
@@ -138,6 +153,92 @@ export const questionDecks = pgTable(
     uniqueIndex("question_decks_owner_slug_unique").on(t.ownerAccountId, t.slug),
     index("question_decks_visibility_idx").on(t.visibility),
     index("question_decks_owner_idx").on(t.ownerAccountId),
+  ]
+);
+
+/** Player-submitted 1..5 ratings of public decks. Unique per (deck, player). */
+export const deckRatings = pgTable(
+  "deck_ratings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    deckId: uuid("deck_id")
+      .notNull()
+      .references(() => questionDecks.id, { onDelete: "cascade" }),
+    playerId: uuid("player_id")
+      .notNull()
+      .references(() => players.id, { onDelete: "cascade" }),
+    score: integer("score").notNull(), // 1..5 enforced in app
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("deck_ratings_deck_player_unique").on(t.deckId, t.playerId),
+    index("deck_ratings_deck_idx").on(t.deckId),
+  ]
+);
+
+/**
+ * Materialized rollup of deck popularity / quality, refreshed on session
+ * completion and on rating inserts. Kept as a separate table so the deck
+ * marketplace can sort without aggregating on every page load.
+ */
+export const deckStats = pgTable("deck_stats", {
+  deckId: uuid("deck_id")
+    .primaryKey()
+    .references(() => questionDecks.id, { onDelete: "cascade" }),
+  timesUsed: integer("times_used").notNull().default(0),
+  /** Sum of (playerCount * timesUsed) across sessions that drew from this deck. */
+  totalPlayerPlays: integer("total_player_plays").notNull().default(0),
+  ratingCount: integer("rating_count").notNull().default(0),
+  avgRating: integer("avg_rating_x100").notNull().default(0), // rating * 100 for integer math
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Creator perks: badges awarded when a host hits thresholds like
+ * "first approved deck," "3 approved decks," etc. Exposed on public
+ * profiles and used to gate free-tier perks.
+ */
+export const creatorBadges = pgTable(
+  "creator_badges",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // creator | prolific_creator | top_rated_creator | featured_creator
+    awardedAt: timestamp("awarded_at", { withTimezone: true }).notNull().defaultNow(),
+    note: text("note"),
+  },
+  (t) => [
+    uniqueIndex("creator_badges_account_kind_unique").on(t.accountId, t.kind),
+    index("creator_badges_account_idx").on(t.accountId),
+  ]
+);
+
+/**
+ * Append-only ledger of creator perks granted. The primary write is
+ * `free_month_organizer` (grants 30d of `creatorFreeUntil` on the
+ * account). Kept append-only so we can audit why a given account has a
+ * free window, and so we can extend later to waived review fees,
+ * referral bonuses, etc.
+ */
+export const creatorPerkGrants = pgTable(
+  "creator_perk_grants",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    note: text("note"),
+    grantedAt: timestamp("granted_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("creator_perk_grants_account_idx").on(t.accountId),
+    index("creator_perk_grants_kind_idx").on(t.kind),
   ]
 );
 
@@ -226,10 +327,23 @@ export const sessions = pgTable(
     eventTimezone: text("event_timezone").notNull(),
     hasPrize: boolean("has_prize").notNull().default(false),
     prizeDescription: text("prize_description"),
+    /** How many top finishers earn a prize claim (1..5). NULL = legacy sessions. */
+    prizeTopN: integer("prize_top_n"),
+    /** Optional per-rank prize labels, 0-indexed. Falls back to `prizeDescription`. */
+    prizeLabels: text("prize_labels").array(),
+    /** Internal details shown on the claim page (redemption rules, expiry). */
+    prizeInstructions: text("prize_instructions"),
+    /** When prize claims expire after session completion. */
+    prizeExpiresAt: timestamp("prize_expires_at", { withTimezone: true }),
+    /** Free-to-play "house" session scheduled every 15 minutes by the cron. */
+    houseGame: boolean("house_game").notNull().default(false),
     listedPublic: boolean("listed_public").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("sessions_join_code_unique").on(t.joinCode)]
+  (t) => [
+    uniqueIndex("sessions_join_code_unique").on(t.joinCode),
+    index("sessions_house_idx").on(t.houseGame, t.eventStartsAt),
+  ]
 );
 
 export const rounds = pgTable(
@@ -331,15 +445,37 @@ export const answers = pgTable(
     answerGiven: text("answer_given").notNull(),
     isCorrect: boolean("is_correct").notNull(),
     timeToAnswerMs: integer("time_to_answer_ms").notNull(),
-    /** Kahoot-style points scaled by `timeToAnswerMs`. Includes any streak bonus. */
+    /**
+     * Server-derived elapsed time. Populated by the public answer endpoint
+     * (migration 0010) and used by scoring in place of the client-supplied
+     * `timeToAnswerMs`, which is now telemetry-only. Old rows remain NULL.
+     */
+    serverElapsedMs: integer("server_elapsed_ms"),
+    /** Kahoot-style points scaled by server elapsed time. Includes any streak bonus. */
     pointsAwarded: integer("points_awarded").notNull().default(0),
     /** Streak count after this answer (0 on wrong, prev+1 on correct). */
     streakAtAnswer: integer("streak_at_answer").notNull().default(0),
+    /**
+     * Cheat-prevention fingerprints. All three are hashed / opaque strings -
+     * the raw IP is never stored. Admins use these to cluster suspicious
+     * answer patterns (e.g. 10 "correct" answers from the same ipHash in a
+     * single session).
+     */
+    ipHash: text("ip_hash"),
+    uaHash: text("ua_hash"),
+    deviceId: text("device_id"),
+    /**
+     * Admin "this score doesn't count" marker. When set, ranks / stats
+     * rollups exclude the row. Keeps history immutable while letting
+     * operators cleanup cheating without deleting rows.
+     */
+    disqualifiedAt: timestamp("disqualified_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("answers_player_idx").on(t.playerId),
     index("answers_sq_idx").on(t.sessionQuestionId),
+    index("answers_ip_hash_idx").on(t.ipHash),
     // One answer per player per question: enforced at the DB level so that
     // concurrent answer submissions can never double-score.
     uniqueIndex("answers_player_session_question_uidx").on(t.playerId, t.sessionQuestionId),
@@ -359,6 +495,8 @@ export const playerStats = pgTable("player_stats", {
   totalAnswered: integer("total_answered").notNull().default(0),
   totalCorrect: integer("total_correct").notNull().default(0),
   totalPoints: bigint("total_points", { mode: "number" }).notNull().default(0),
+  /** Lifetime XP separate from points so we can tune economies independently. */
+  totalXp: bigint("total_xp", { mode: "number" }).notNull().default(0),
   totalGames: integer("total_games").notNull().default(0),
   bestRank: integer("best_rank"),
   longestStreak: integer("longest_streak").notNull().default(0),
@@ -366,6 +504,79 @@ export const playerStats = pgTable("player_stats", {
   lastPlayedAt: timestamp("last_played_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Append-only ledger of XP awards. The rollup on `player_stats.totalXp` is
+ * derived; this table is the source of truth and also what powers the
+ * "activity feed" on the player profile.
+ */
+export const playerXpEvents = pgTable(
+  "player_xp_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    playerId: uuid("player_id")
+      .notNull()
+      .references(() => players.id, { onDelete: "cascade" }),
+    /** e.g. `session_complete`, `solo_complete`, `streak_bonus`, `deck_rated`. */
+    kind: text("kind").notNull(),
+    amount: integer("amount").notNull(),
+    /** Optional refs so admins can trace an award back to a game / solo run. */
+    sessionId: uuid("session_id").references(() => sessions.id, {
+      onDelete: "set null",
+    }),
+    soloSessionId: uuid("solo_session_id").references(() => soloSessions.id, {
+      onDelete: "set null",
+    }),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("player_xp_events_player_idx").on(t.playerId, t.createdAt),
+    index("player_xp_events_kind_idx").on(t.kind),
+  ]
+);
+
+/**
+ * Host-configured real-world prize for a game session. The host defines the
+ * prize up front (e.g. "$50 tab, winner only"), and after the final
+ * leaderboard is computed the session-completed hook materializes
+ * `prizeClaims` rows for the eligible players.
+ */
+export const prizeClaims = pgTable(
+  "prize_claims",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    playerId: uuid("player_id")
+      .notNull()
+      .references(() => players.id, { onDelete: "cascade" }),
+    /** Redeemable at which venue (usually the host venue of `sessionId`). */
+    venueAccountId: uuid("venue_account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    finalRank: integer("final_rank").notNull(),
+    prizeLabel: text("prize_label").notNull(),
+    /** Free-form details (how to claim, expiry). Surfaced on the claim page. */
+    prizeDetails: text("prize_details"),
+    /** Short alphanumeric code the player shows at the venue to redeem. */
+    claimCode: text("claim_code").notNull(),
+    status: text("status").notNull().default("pending"), // pending | redeemed | expired | void
+    redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+    redeemedByAccountId: uuid("redeemed_by_account_id").references(() => accounts.id, {
+      onDelete: "set null",
+    }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("prize_claims_code_unique").on(t.claimCode),
+    index("prize_claims_player_idx").on(t.playerId),
+    index("prize_claims_venue_idx").on(t.venueAccountId, t.status),
+    index("prize_claims_session_idx").on(t.sessionId),
+  ]
+);
 
 export const playerVenues = pgTable(
   "player_venues",
@@ -516,6 +727,62 @@ export const playerAchievementGrants = pgTable(
   (t) => [
     uniqueIndex("player_achievement_unique").on(t.playerId, t.achievementId),
     index("player_achievement_player_idx").on(t.playerId),
+  ]
+);
+
+/**
+ * Solo play: a single player grinds vetted questions against a clock without
+ * touching the hosted-session / venue machinery. Each row is one run - when
+ * a player finishes (or abandons after `SOLO_TIMEOUT_MS`), `completedAt` is
+ * set and the row stops accepting answers.
+ */
+export const soloSessions = pgTable(
+  "solo_sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    playerId: uuid("player_id").references(() => players.id, { onDelete: "cascade" }),
+    /** Opaque cookie-backed id for anon play; one of `playerId` / `guestId` is set. */
+    guestId: text("guest_id"),
+    speed: text("speed").notNull().default("standard"), // chill | standard | blitz
+    questionCount: integer("question_count").notNull().default(10),
+    /** Null or empty array means "mix of everything". */
+    categoryFilter: text("category_filter").array(),
+    timerSeconds: integer("timer_seconds").notNull(),
+    status: text("status").notNull().default("active"), // active | completed | abandoned
+    totalScore: integer("total_score").notNull().default(0),
+    correctCount: integer("correct_count").notNull().default(0),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("solo_sessions_player_idx").on(t.playerId),
+    index("solo_sessions_guest_idx").on(t.guestId),
+  ]
+);
+
+export const soloQuestions = pgTable(
+  "solo_questions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    soloSessionId: uuid("solo_session_id")
+      .notNull()
+      .references(() => soloSessions.id, { onDelete: "cascade" }),
+    questionId: uuid("question_id")
+      .notNull()
+      .references(() => questions.id, { onDelete: "restrict" }),
+    position: integer("position").notNull(),
+    /** Server wall-clock when the question was first shown to this player. */
+    shownAtMs: bigint("shown_at_ms", { mode: "number" }),
+    answered: boolean("answered").notNull().default(false),
+    correct: boolean("correct").notNull().default(false),
+    /** Server-derived elapsed time between `shownAtMs` and answer receipt. */
+    timeToAnswerMs: integer("time_to_answer_ms"),
+    answerGiven: text("answer_given"),
+    pointsAwarded: integer("points_awarded").notNull().default(0),
+  },
+  (t) => [
+    index("solo_questions_session_idx").on(t.soloSessionId),
+    uniqueIndex("solo_questions_session_position_unique").on(t.soloSessionId, t.position),
   ]
 );
 

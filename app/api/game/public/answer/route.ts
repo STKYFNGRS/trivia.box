@@ -6,6 +6,13 @@ import { db } from "@/lib/db/client";
 import { playerSessions, sessionQuestions, sessions } from "@/lib/db/schema";
 import { getLeaderboardTop, recordAnswer } from "@/lib/game/scoring";
 import { apiErrorResponse, zodErrorResponse } from "@/lib/apiError";
+import {
+  clientIpFromHeaders,
+  deriveServerElapsedMs,
+  hashDeviceId,
+  hashIp,
+  hashUserAgent,
+} from "@/lib/antiCheat";
 import { enforceRateLimit } from "@/lib/rateLimit";
 
 const schema = z.object({
@@ -13,7 +20,11 @@ const schema = z.object({
   playerId: z.string().uuid(),
   sessionQuestionId: z.string().uuid(),
   answer: z.string().min(1),
+  /** Client-reported elapsed; we store it for telemetry only — the
+   *  server derives the authoritative elapsed value from `timerStartedAtMs`. */
   timeToAnswerMs: z.number().int().min(0).max(10 * 60 * 1000),
+  /** Optional client-generated device marker (cookie / localStorage). Hashed before storage. */
+  deviceId: z.string().min(1).max(128).optional(),
 });
 
 /**
@@ -84,7 +95,12 @@ export async function POST(req: Request) {
   }
 
   const sqRows = await db
-    .select({ id: sessionQuestions.id, status: sessionQuestions.status })
+    .select({
+      id: sessionQuestions.id,
+      status: sessionQuestions.status,
+      timerSeconds: sessionQuestions.timerSeconds,
+      timerStartedAtMs: sessionQuestions.timerStartedAtMs,
+    })
     .from(sessionQuestions)
     .where(
       and(
@@ -104,11 +120,29 @@ export async function POST(req: Request) {
     return errJson(409, "Question no longer active — resync and try again", ERR.STALE_QUESTION);
   }
 
+  // Phase 4.3: authoritative elapsed comes from the stored
+  // `timerStartedAtMs`, not the client's self-report. If we somehow don't
+  // have a timer start (legacy rows), fall back to the client value — the
+  // `server_elapsed_ms` column stays null so the admin tooling can
+  // still surface "client-trusted" rows.
+  const serverElapsedMs = deriveServerElapsedMs({
+    timerStartedAtMs: sq.timerStartedAtMs,
+    timerSeconds: sq.timerSeconds,
+  });
+
+  const ipHash = hashIp(clientIpFromHeaders(req));
+  const uaHash = hashUserAgent(req.headers.get("user-agent"));
+  const deviceId = hashDeviceId(body.deviceId);
+
   const result = await recordAnswer({
     playerId: body.playerId,
     sessionQuestionId: body.sessionQuestionId,
     answerGiven: body.answer,
     timeToAnswerMs: body.timeToAnswerMs,
+    serverElapsedMs,
+    ipHash,
+    uaHash,
+    deviceId,
   });
 
   if (result.alreadyAnswered) {

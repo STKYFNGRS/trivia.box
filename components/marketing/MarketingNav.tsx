@@ -1,0 +1,108 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+const NAV_LINKS = [
+  { href: "/play", label: "Play" },
+  { href: "/decks", label: "Decks" },
+  { href: "/leaderboards", label: "Leaderboards" },
+  { href: "/games/upcoming", label: "Upcoming" },
+];
+
+/**
+ * Site-wide marketing nav. Sticky at the top, shrinks its padding after a
+ * small scroll threshold. The brand mark is a neon gradient chip + wordmark;
+ * primary CTA on the right takes any visitor directly into `/play`.
+ */
+export function MarketingNav() {
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 12);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  return (
+    <header
+      className={cn(
+        "sticky top-0 z-40 w-full transition-all duration-300",
+        scrolled
+          ? "border-b border-white/10 bg-[color-mix(in_oklab,var(--stage-bg)_82%,transparent)] backdrop-blur-xl"
+          : "border-b border-transparent bg-transparent"
+      )}
+    >
+      <div
+        className={cn(
+          "mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-6 transition-all duration-300",
+          scrolled ? "h-14" : "h-16"
+        )}
+      >
+        <Link
+          href="/"
+          className="group inline-flex items-center gap-2 text-white"
+          aria-label="trivia.box home"
+        >
+          <span
+            aria-hidden
+            className="inline-flex size-7 items-center justify-center rounded-lg text-[0.9rem] font-black"
+            style={{
+              background:
+                "linear-gradient(135deg, var(--neon-magenta), var(--neon-violet))",
+              color: "var(--neon-lime)",
+              boxShadow:
+                "0 0 0 1px color-mix(in oklab, var(--neon-magenta) 40%, transparent), 0 6px 20px -8px color-mix(in oklab, var(--neon-magenta) 65%, transparent)",
+            }}
+          >
+            T
+          </span>
+          <span className="text-sm font-semibold uppercase tracking-[0.28em] text-white/90 transition-colors group-hover:text-white">
+            trivia.box
+          </span>
+        </Link>
+
+        <nav className="hidden items-center gap-1 md:flex">
+          {NAV_LINKS.map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-white/70 transition-colors hover:bg-white/5 hover:text-white"
+            >
+              {l.label}
+            </Link>
+          ))}
+        </nav>
+
+        <div className="flex items-center gap-2">
+          <Link
+            href="/sign-in"
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "sm" }),
+              "hidden text-white/80 hover:bg-white/10 hover:text-white sm:inline-flex"
+            )}
+          >
+            Sign in
+          </Link>
+          <Link
+            href="/play"
+            className={cn(
+              buttonVariants({ size: "sm" }),
+              "h-8 px-3 text-[0.8rem] font-bold uppercase tracking-[0.14em] text-[color:var(--primary-foreground)]"
+            )}
+            style={{
+              background:
+                "linear-gradient(135deg, var(--neon-magenta), var(--neon-violet))",
+              boxShadow:
+                "0 0 0 1px color-mix(in oklab, var(--neon-magenta) 45%, transparent), 0 8px 24px -8px color-mix(in oklab, var(--neon-magenta) 70%, transparent)",
+            }}
+          >
+            Play now
+          </Link>
+        </div>
+      </div>
+    </header>
+  );
+}

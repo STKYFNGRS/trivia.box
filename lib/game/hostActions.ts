@@ -6,6 +6,8 @@ import { questions, rounds, sessionQuestions, sessions } from "@/lib/db/schema";
 import { tryGrantAchievementsAfterSession } from "@/lib/game/achievements";
 import { getLeaderboardTop } from "@/lib/game/scoring";
 import { buildChoiceList } from "@/lib/game/shuffleChoices";
+import { awardSessionEndXp } from "@/lib/xp";
+import { materializePrizeClaims } from "@/lib/prizes";
 import { ApiError } from "@/lib/apiError";
 
 /**
@@ -124,6 +126,7 @@ export async function startNextQuestion(session: SessionForHost): Promise<
     } catch {
       // non-fatal
     }
+    await runPostCompletionHooks(session.id);
     const board = await getLeaderboardTop(session.id, 50);
     await publishGameEvent(session.joinCode, "game_completed", { leaderboard: board });
     void track("session_completed", {
@@ -164,6 +167,25 @@ export async function startNextQuestion(session: SessionForHost): Promise<
     timerMode: session.timerMode,
   });
   return { kind: "started", sessionQuestionId: next.sqId };
+}
+
+/**
+ * Phase 4.1 + 4.2 post-completion fan-out: podium & creator XP, plus prize
+ * claim materialization. Shared between the two completion sites in
+ * `startNextQuestion` and `advanceOrComplete` so both always stay in sync.
+ * Wrapped so a failure in one step never blocks the rest.
+ */
+async function runPostCompletionHooks(sessionId: string): Promise<void> {
+  try {
+    await awardSessionEndXp(sessionId);
+  } catch (err) {
+    console.error("awardSessionEndXp failed", sessionId, err);
+  }
+  try {
+    await materializePrizeClaims(sessionId);
+  } catch (err) {
+    console.error("materializePrizeClaims failed", sessionId, err);
+  }
 }
 
 /**
@@ -260,6 +282,7 @@ export async function advanceOrComplete(session: SessionForHost): Promise<
     } catch {
       // non-fatal
     }
+    await runPostCompletionHooks(session.id);
     const board = await getLeaderboardTop(session.id, 50);
     await publishGameEvent(session.joinCode, "game_completed", { leaderboard: board });
     void track("session_completed", {

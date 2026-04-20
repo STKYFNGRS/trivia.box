@@ -6,14 +6,21 @@ const pillVariants = cva(
   "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] ring-1",
   {
     variants: {
+      // Every tone references a `--neon-*` CSS variable so pills stay in
+      // lockstep with the arcade-neon palette. `color-mix` keeps backgrounds
+      // translucent without needing a Tailwind opacity variant per tone.
       tone: {
         neutral: "bg-muted/60 text-muted-foreground ring-border",
-        info: "bg-sky-500/15 text-sky-600 ring-sky-500/20 dark:text-sky-300",
-        success: "bg-emerald-500/15 text-emerald-600 ring-emerald-500/20 dark:text-emerald-300",
-        warning: "bg-amber-500/15 text-amber-700 ring-amber-500/25 dark:text-amber-300",
-        danger: "bg-rose-500/15 text-rose-600 ring-rose-500/20 dark:text-rose-300",
+        info:
+          "bg-[color-mix(in_oklab,var(--neon-cyan)_14%,transparent)] text-[var(--neon-cyan)] ring-[color-mix(in_oklab,var(--neon-cyan)_35%,transparent)]",
+        success:
+          "bg-[color-mix(in_oklab,var(--neon-lime)_14%,transparent)] text-[var(--neon-lime)] ring-[color-mix(in_oklab,var(--neon-lime)_35%,transparent)]",
+        warning:
+          "bg-[color-mix(in_oklab,var(--neon-amber)_14%,transparent)] text-[var(--neon-amber)] ring-[color-mix(in_oklab,var(--neon-amber)_35%,transparent)]",
+        danger:
+          "bg-[color-mix(in_oklab,var(--neon-magenta)_14%,transparent)] text-[var(--neon-magenta)] ring-[color-mix(in_oklab,var(--neon-magenta)_35%,transparent)]",
         accent:
-          "bg-[var(--stage-accent)]/15 text-[var(--stage-accent)] ring-[var(--stage-accent)]/25",
+          "bg-[color-mix(in_oklab,var(--neon-magenta)_14%,transparent)] text-[var(--neon-magenta)] ring-[color-mix(in_oklab,var(--neon-magenta)_35%,transparent)]",
       },
     },
     defaultVariants: { tone: "neutral" },
@@ -26,6 +33,8 @@ type StatusPillProps = VariantProps<typeof pillVariants> & {
   dot?: boolean;
   /** Pulse the dot (for "live" indicators). */
   pulse?: boolean;
+  /** Native browser tooltip text. */
+  title?: string;
   className?: string;
 };
 
@@ -34,9 +43,9 @@ type StatusPillProps = VariantProps<typeof pillVariants> & {
  * cover the common cases; pass `dot` for a small colored dot and `pulse`
  * for a live-indicator.
  */
-export function StatusPill({ children, tone, dot, pulse, className }: StatusPillProps) {
+export function StatusPill({ children, tone, dot, pulse, title, className }: StatusPillProps) {
   return (
-    <span className={cn(pillVariants({ tone }), className)}>
+    <span className={cn(pillVariants({ tone }), className)} title={title}>
       {dot ? (
         <span
           aria-hidden

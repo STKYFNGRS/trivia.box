@@ -25,8 +25,8 @@ export const cinematicClerkAppearance: Appearance = {
       "border-white/10 bg-white/[0.04] hover:bg-white/[0.08] text-foreground",
     formFieldLabel: "text-muted-foreground font-medium",
     formButtonPrimary:
-      "bg-[var(--stage-accent)] text-slate-950 hover:bg-[var(--stage-accent)]/90 font-semibold",
-    footerActionLink: "text-[var(--stage-accent)] hover:text-[var(--stage-accent)]/80",
+      "bg-[var(--neon-magenta)] text-[oklch(0.1_0.02_270)] hover:bg-[var(--neon-magenta)]/90 font-bold uppercase tracking-[0.1em]",
+    footerActionLink: "text-[var(--neon-cyan)] hover:text-[var(--neon-cyan)]/80",
     dividerLine: "bg-white/10",
     dividerText: "text-muted-foreground",
   },

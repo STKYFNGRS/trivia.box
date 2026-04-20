@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/question-generation-jobs/run",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/house-games/tick",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

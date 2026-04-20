@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getAccountByClerkUserId } from "@/lib/accounts";
 import { requireSiteAdminResponse } from "@/lib/adminApi";
+import { recomputeCreatorBadges } from "@/lib/creatorPerks";
 import { db } from "@/lib/db/client";
 import { questionDecks, questions } from "@/lib/db/schema";
 import { getDeckById, isValidVisibilityTransition, type DeckVisibility } from "@/lib/decks";
@@ -45,6 +46,14 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     .update(questions)
     .set({ vetted: true })
     .where(and(eq(questions.deckId, deck.id), eq(questions.retired, false)));
+
+  // Phase 3.3: award creator badges + free-tier perks after approval. Wrapped
+  // in try/catch so a perks outage never blocks a valid admin action.
+  try {
+    await recomputeCreatorBadges(deck.ownerAccountId);
+  } catch (err) {
+    console.error("recomputeCreatorBadges failed after approve", err);
+  }
 
   return NextResponse.json({ deck: updated });
 }

@@ -1,14 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { desc, eq } from "drizzle-orm";
-import { Inbox, Trophy } from "lucide-react";
+import { Gift, Inbox, Trophy } from "lucide-react";
 import { getCurrentAccount } from "@/lib/accounts";
 import { BecomeHostCard } from "@/components/billing/BecomeHostCard";
+import { XpLevelBadge } from "@/components/player/XpLevelBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusPill } from "@/components/ui/status-pill";
+import { listPlayerClaims } from "@/lib/prizes";
 import {
   Table,
   TableBody,
@@ -132,10 +134,13 @@ export default async function PlayerDashboardPage() {
     .limit(8);
 
   const totalPoints = Number(rollup?.totalPoints ?? 0);
+  const totalXp = Number(rollup?.totalXp ?? 0);
   const gamesPlayed = rollup?.totalGames ?? stats.gamesPlayed;
   const longestStreak = rollup?.longestStreak ?? 0;
   const bestFinish = formatRank(rollup?.bestRank);
   const fastest = formatMs(rollup?.fastestCorrectMs);
+
+  const claims = await listPlayerClaims(player.id, { status: "all" });
 
   return (
     <div className="flex flex-col gap-8">
@@ -157,6 +162,9 @@ export default async function PlayerDashboardPage() {
               <p className="text-muted-foreground mt-2 max-w-md text-sm">
                 Track your play, trophies, and venues. Join live games with a six-letter code.
               </p>
+              <div className="mt-4">
+                <XpLevelBadge xp={totalXp} />
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               <Link href="/join" className={cn(buttonVariants())}>
@@ -382,6 +390,75 @@ export default async function PlayerDashboardPage() {
               </TableBody>
             </Table>
           </div>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-4">
+        <SectionHeader
+          title="Prize claims"
+          description="Wins you can redeem at the venue. Show the host your claim code on the day."
+        />
+        {claims.length === 0 ? (
+          <EmptyState
+            icon={<Gift className="size-6" aria-hidden />}
+            title="No claims yet"
+            description="Finish top-3 at a venue with a prize and your claim code shows up here."
+          />
+        ) : (
+          <Card className="shadow-[var(--shadow-card)]">
+            <CardContent className="pt-6">
+              <ul className="divide-y divide-border/70">
+                {claims.map((c) => {
+                  const rankLabel =
+                    c.finalRank === 1
+                      ? "1st"
+                      : c.finalRank === 2
+                        ? "2nd"
+                        : c.finalRank === 3
+                          ? "3rd"
+                          : `${c.finalRank}th`;
+                  const tone =
+                    c.status === "redeemed"
+                      ? "success"
+                      : c.status === "expired" || c.status === "void"
+                        ? "neutral"
+                        : "accent";
+                  return (
+                    <li
+                      key={c.id}
+                      className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-foreground font-medium">
+                            {c.prizeLabel}
+                          </span>
+                          <StatusPill tone={tone}>{c.status}</StatusPill>
+                        </div>
+                        <div className="text-muted-foreground mt-1 text-xs">
+                          {rankLabel} at {c.venueName}
+                          {c.expiresAt
+                            ? ` · expires ${new Date(c.expiresAt).toLocaleDateString()}`
+                            : ""}
+                        </div>
+                        {c.prizeDetails ? (
+                          <p className="text-muted-foreground mt-1 text-xs">
+                            {c.prizeDetails}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div
+                        className="rounded-md border border-dashed border-[color-mix(in_oklab,var(--neon-magenta)_40%,transparent)] bg-[color-mix(in_oklab,var(--neon-magenta)_10%,transparent)] px-3 py-2 text-center font-mono text-sm font-semibold tracking-[0.3em] text-[var(--neon-magenta)] sm:text-base"
+                        title="Show this code to the host on the day"
+                      >
+                        {c.claimCode}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </CardContent>
+          </Card>
         )}
       </section>
 

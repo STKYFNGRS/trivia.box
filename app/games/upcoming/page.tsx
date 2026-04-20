@@ -1,6 +1,7 @@
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import { CalendarClock, Sparkles } from "lucide-react";
 import Link from "next/link";
+import { MarketingShell } from "@/components/marketing/MarketingShell";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -69,7 +70,7 @@ export default async function UpcomingGamesPage() {
     .limit(100);
 
   return (
-    <div className="min-h-screen bg-[var(--stage-bg)] text-white">
+    <MarketingShell wide>
       <div className="relative mx-auto max-w-5xl px-6 py-12">
         <SectionHeader
           as="h1"
@@ -179,6 +180,6 @@ export default async function UpcomingGamesPage() {
           )}
         </div>
       </div>
-    </div>
+    </MarketingShell>
   );
 }

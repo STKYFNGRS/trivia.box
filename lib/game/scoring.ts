@@ -12,6 +12,7 @@ import {
   sessions,
 } from "@/lib/db/schema";
 import { tryGrantAchievementsAfterAnswer } from "@/lib/game/achievements";
+import { awardCorrectAnswerXp } from "@/lib/xp";
 
 /** Base points for a correct answer at t=0. */
 export const BASE_POINTS = 1000;
@@ -226,7 +227,18 @@ export async function recordAnswer(input: {
   playerId: string;
   sessionQuestionId: string;
   answerGiven: string;
+  /** Client-reported elapsed (telemetry only when server elapsed is available). */
   timeToAnswerMs: number;
+  /**
+   * Server-derived elapsed from `timerStartedAtMs`. When provided, takes
+   * precedence over `timeToAnswerMs` for scoring. Populated by the hosted
+   * public-answer route; solo answer route leaves this unset.
+   */
+  serverElapsedMs?: number | null;
+  /** Cheat-prevention fingerprints. All three are already hashed. */
+  ipHash?: string | null;
+  uaHash?: string | null;
+  deviceId?: string | null;
 }) {
   const sqRows = await db
     .select({
@@ -255,9 +267,16 @@ export async function recordAnswer(input: {
 
   const previousStreak = await getCurrentStreak(input.playerId, sq.sessionId);
 
+  // Phase 4.3: score from server-derived elapsed when available. Client
+  // `timeToAnswerMs` is still stored for telemetry / dispute resolution.
+  const scoringElapsed =
+    typeof input.serverElapsedMs === "number" && input.serverElapsedMs >= 0
+      ? input.serverElapsedMs
+      : input.timeToAnswerMs;
+
   const breakdown = computeAnswerPoints({
     isCorrect,
-    timeToAnswerMs: input.timeToAnswerMs,
+    timeToAnswerMs: scoringElapsed,
     timerSeconds: sq.timerSeconds,
     previousStreak,
   });
@@ -273,8 +292,13 @@ export async function recordAnswer(input: {
       answerGiven: input.answerGiven,
       isCorrect,
       timeToAnswerMs: input.timeToAnswerMs,
+      serverElapsedMs:
+        typeof input.serverElapsedMs === "number" ? input.serverElapsedMs : null,
       pointsAwarded: breakdown.points,
       streakAtAnswer: breakdown.newStreak,
+      ipHash: input.ipHash ?? null,
+      uaHash: input.uaHash ?? null,
+      deviceId: input.deviceId ?? null,
     })
     .onConflictDoNothing({ target: [answers.playerId, answers.sessionQuestionId] })
     .returning({ id: answers.id });
@@ -351,6 +375,19 @@ export async function recordAnswer(input: {
     streak: breakdown.newStreak,
     pointsAwarded: breakdown.points,
   }).catch(() => {});
+
+  // Phase 4.1: +1 XP per correct answer in hosted games. The `answers`
+  // unique constraint on (player, sessionQuestion) makes the surrounding
+  // insert idempotent, so we only fire XP on the initial successful write.
+  if (isCorrect) {
+    void awardCorrectAnswerXp({
+      playerId: input.playerId,
+      sessionId: sq.sessionId,
+      questionId: sq.questionId,
+    }).catch((err) => {
+      console.error("awardCorrectAnswerXp failed", err);
+    });
+  }
 
   // 10% sample — per-answer events would be expensive and noisy. We still
   // get a statistically useful accuracy/latency distribution and rely on

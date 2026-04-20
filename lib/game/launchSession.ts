@@ -8,6 +8,7 @@ import {
 } from "@/lib/db/schema";
 import { publishGameEvent } from "@/lib/ably/server";
 import { track } from "@/lib/analytics/server";
+import { bumpDeckStatsForSessionLaunch } from "@/lib/deckMarketplace";
 import { generateUniqueJoinCode } from "@/lib/game/joinCode";
 import { startNextQuestion, type SessionForHost } from "@/lib/game/hostActions";
 
@@ -90,13 +91,16 @@ export async function launchSession(input: {
 
   const joinCode = await generateUniqueJoinCode();
 
+  const deckIdsUsed = new Set<string>();
+
   try {
     await db.transaction(async (tx) => {
       const qRows = await tx
-        .select({ questionId: sessionQuestions.questionId })
+        .select({ questionId: sessionQuestions.questionId, deckId: questions.deckId })
         .from(sessionQuestions)
+        .innerJoin(questions, eq(sessionQuestions.questionId, questions.id))
         .where(eq(sessionQuestions.sessionId, session.id))
-        .groupBy(sessionQuestions.questionId);
+        .groupBy(sessionQuestions.questionId, questions.deckId);
 
       for (const row of qRows) {
         await tx.insert(questionVenueHistory).values({
@@ -107,6 +111,7 @@ export async function launchSession(input: {
           .update(questions)
           .set({ timesUsed: sql`${questions.timesUsed} + 1` })
           .where(eq(questions.id, row.questionId));
+        if (row.deckId) deckIdsUsed.add(row.deckId);
       }
 
       await tx
@@ -119,6 +124,14 @@ export async function launchSession(input: {
       throw new LaunchBlockedError("venue_busy", session.eventStartsAt);
     }
     throw err;
+  }
+
+  if (deckIdsUsed.size > 0) {
+    try {
+      await bumpDeckStatsForSessionLaunch(Array.from(deckIdsUsed));
+    } catch {
+      // Deck stats are a rollup — don't fail a launch if the bump errors.
+    }
   }
 
   await publishGameEvent(joinCode, "game_launched", {

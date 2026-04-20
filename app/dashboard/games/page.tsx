@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusPill } from "@/components/ui/status-pill";
+import { HostClaimsCard } from "@/components/dashboard/HostClaimsCard";
 import { LaunchNowButton } from "@/components/dashboard/LaunchNowButton";
 import { db } from "@/lib/db/client";
 import { sessions } from "@/lib/db/schema";
@@ -89,7 +90,11 @@ export default async function GamesPage() {
             </Link>
           }
         />
-      ) : (
+      ) : null}
+
+      <HostClaimsCard />
+
+      {rows.length > 0 && (
         <div className="grid gap-3">
           {rows.map((s) => {
             const isPending = s.status === "pending";

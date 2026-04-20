@@ -2,6 +2,7 @@ import { and, asc, eq, gt, inArray } from "drizzle-orm";
 import { CalendarClock, MapPin, Sparkles } from "lucide-react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { MarketingShell } from "@/components/marketing/MarketingShell";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -10,6 +11,7 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { VenueJoinForm } from "@/components/venue/VenueJoinForm";
 import { db } from "@/lib/db/client";
 import { sessions } from "@/lib/db/schema";
+import { getVenueStats } from "@/lib/stats/aggregate";
 import { cn } from "@/lib/utils";
 import { getActiveSessionForVenue, getVenueProfileBySlug } from "@/lib/venue";
 
@@ -44,6 +46,17 @@ function formatEventDateParts(
   } catch {
     return { weekday: "", day: "—", month: "—", time: starts.toISOString() };
   }
+}
+
+function VenueStatCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/60">
+        {label}
+      </div>
+      <div className="mt-1 text-2xl font-black tabular-nums tracking-tight">{value}</div>
+    </div>
+  );
 }
 
 export async function generateMetadata({
@@ -95,9 +108,11 @@ export default async function VenueLobbyPage({
 
   const bust = venue.imageUpdatedAt ? new Date(venue.imageUpdatedAt).getTime() : 0;
   const imageUrl = venue.imageBytes ? `/api/venues/${venue.slug}/image?v=${bust}` : null;
+  const venueStats = await getVenueStats(venue.accountId);
+  const fmtNum = (n: number) => new Intl.NumberFormat().format(n);
 
   return (
-    <div className="min-h-screen bg-[var(--stage-bg)] text-white">
+    <MarketingShell wide>
       <section className="relative h-[42vh] min-h-[300px] w-full overflow-hidden">
         {imageUrl ? (
           <div
@@ -248,8 +263,50 @@ export default async function VenueLobbyPage({
           </section>
         ) : null}
 
+        {venueStats && venueStats.totals.completedGames > 0 ? (
+          <section className="flex flex-col gap-4">
+            <SectionHeader
+              eyebrow="Stats"
+              title="House trivia by the numbers"
+              description={`Across ${venueStats.totals.completedGames} completed game${
+                venueStats.totals.completedGames === 1 ? "" : "s"
+              } at ${venue.displayName}.`}
+              className="text-white [&_*]:text-white [&_p]:text-white/70"
+            />
+            <div className="grid gap-3 sm:grid-cols-4">
+              <VenueStatCell label="Completed" value={fmtNum(venueStats.totals.completedGames)} />
+              <VenueStatCell label="Unique players" value={fmtNum(venueStats.totals.uniquePlayers)} />
+              <VenueStatCell label="Answers" value={fmtNum(venueStats.totals.totalAnswers)} />
+              <VenueStatCell label="Avg. score" value={fmtNum(venueStats.totals.averageScore)} />
+            </div>
+            {venueStats.topPlayers.length > 0 ? (
+              <Card className="border-white/10 bg-white/[0.04] text-white shadow-[var(--shadow-card)] backdrop-blur">
+                <CardContent className="p-5">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/60">
+                    House leaderboard
+                  </div>
+                  <div className="mt-3 flex flex-col gap-1">
+                    {venueStats.topPlayers.slice(0, 10).map((p, idx) => (
+                      <div
+                        key={p.username}
+                        className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 border-b border-white/5 py-1.5 text-sm last:border-b-0"
+                      >
+                        <div className="tabular-nums text-white/60">{idx + 1}</div>
+                        <div className="truncate font-medium">{p.username}</div>
+                        <div className="text-right tabular-nums font-semibold">
+                          {fmtNum(p.totalScore)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+          </section>
+        ) : null}
+
         <p className="text-center text-xs text-white/40">Powered by Trivia.Box</p>
       </main>
-    </div>
+    </MarketingShell>
   );
 }

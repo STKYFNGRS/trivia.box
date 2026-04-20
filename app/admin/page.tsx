@@ -6,6 +6,7 @@ import {
   Inbox,
   Library,
   ListChecks,
+  ShieldAlert,
   Sparkles,
   Users2,
 } from "lucide-react";
@@ -73,6 +74,13 @@ const TILES: SectionTile[] = [
     title: "Category stats",
     description: "Vetted question counts by category.",
     icon: BarChart3,
+  },
+  {
+    href: "/admin/anti-cheat",
+    title: "Anti-cheat",
+    description: "Review clustered fingerprints and disqualify suspicious answers.",
+    icon: ShieldAlert,
+    operatorOnly: true,
   },
 ];
 
