@@ -58,25 +58,23 @@ function getRedis(): Redis | null {
 }
 
 /**
- * Phase 4.4 fail-closed boot check. Called from `instrumentation.ts` at
- * process start: refuses to boot in production without Upstash configured,
- * so we can never accidentally ship a release that silently disables
- * rate-limiting. `RATE_LIMIT_ALLOW_UNCONFIGURED=1` is an explicit escape
- * hatch for emergency deploys.
+ * Boot-time rate-limit configuration warning. Called from
+ * `instrumentation.ts` at process start. In production without Upstash, logs
+ * a loud warning but never throws — rate-limiting is an optional defense and
+ * a missing Upstash client should not take the site down. Individual
+ * `checkRateLimit` calls already fail open gracefully.
+ *
+ * Set `RATE_LIMIT_ALLOW_UNCONFIGURED=1` to suppress this boot warning.
  */
 export function assertRateLimitConfigured(): void {
   if (process.env.NODE_ENV !== "production") return;
-  if (process.env.RATE_LIMIT_ALLOW_UNCONFIGURED === "1") {
-    console.warn(
-      "[rateLimit] Running without Upstash in production — RATE_LIMIT_ALLOW_UNCONFIGURED=1 is set."
-    );
-    return;
-  }
+  if (process.env.RATE_LIMIT_ALLOW_UNCONFIGURED === "1") return;
   if (!redis) {
-    throw new Error(
-      "Rate limiting is not configured. Set UPSTASH_REDIS_REST_URL and " +
-        "UPSTASH_REDIS_REST_TOKEN, or RATE_LIMIT_ALLOW_UNCONFIGURED=1 to " +
-        "temporarily fail-open."
+    console.warn(
+      "[rateLimit] Upstash not configured in production — rate-limiting " +
+        "will fail open on every request. Set UPSTASH_REDIS_REST_URL + " +
+        "UPSTASH_REDIS_REST_TOKEN to enforce limits, or set " +
+        "RATE_LIMIT_ALLOW_UNCONFIGURED=1 to silence this warning."
     );
   }
 }
