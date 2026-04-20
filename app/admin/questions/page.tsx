@@ -1,10 +1,12 @@
-import { QuestionManager } from "@/components/admin/QuestionManager";
+import { Suspense } from "react";
+import { isSiteAdminOperator } from "@/lib/siteAdmin";
+import { QuestionStudio } from "@/components/admin/QuestionStudio";
 
-export default function AdminQuestionsPage() {
+export default async function AdminQuestionsPage() {
+  const siteOperator = await isSiteAdminOperator();
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold tracking-tight">Question manager</h1>
-      <QuestionManager />
-    </div>
+    <Suspense fallback={<p className="text-muted-foreground text-sm">Loading question studio…</p>}>
+      <QuestionStudio isSiteOperator={siteOperator} />
+    </Suspense>
   );
 }

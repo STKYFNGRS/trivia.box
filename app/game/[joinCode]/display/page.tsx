@@ -1,77 +1,403 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Crown, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import { Countdown } from "@/components/game/Countdown";
+import { GameShell, buildVenueImageUrl } from "@/components/game/GameShell";
 import { useGameChannel } from "@/lib/ably/useGameChannel";
+
+type BootstrapQuestion = {
+  sessionQuestionId: string;
+  body: string;
+  choices: string[];
+  timerSeconds: number | null;
+  timerStartedAtMs: number | null;
+  status: "active" | "locked" | "revealed";
+  correctAnswer: string | null;
+};
+
+type LeaderboardEntry = { playerId: string; username: string; score: number };
+
+type BootstrapResponse = {
+  status?: string;
+  pausedAt?: string | null;
+  currentQuestion?: BootstrapQuestion | null;
+  venueSlug?: string | null;
+  venueImageUpdatedAt?: string | null;
+  venueDisplayName?: string | null;
+  venueHasImage?: boolean;
+  leaderboard?: LeaderboardEntry[];
+  totalQuestions?: number;
+  completedCount?: number;
+  error?: string;
+};
+
+type AnswerShape = "triangle" | "diamond" | "circle" | "square";
+
+// Kahoot-style answer tile identity — kept aligned with the play page so the
+// same index always means the same color + shape on every screen.
+const ANSWER_STYLES: ReadonlyArray<{ bg: string; shape: AnswerShape }> = [
+  { bg: "bg-[var(--answer-rose)]", shape: "triangle" },
+  { bg: "bg-[var(--answer-sky)]", shape: "diamond" },
+  { bg: "bg-[var(--answer-amber)]", shape: "circle" },
+  { bg: "bg-[var(--answer-emerald)]", shape: "square" },
+];
+
+function ChoiceShape({ shape }: { shape: AnswerShape }) {
+  const common = "h-16 w-16 shrink-0 text-white drop-shadow-[0_2px_6px_rgb(0_0_0_/_0.35)]";
+  if (shape === "triangle") {
+    return (
+      <svg viewBox="0 0 24 24" className={common} aria-hidden>
+        <polygon points="12,3 22,21 2,21" fill="currentColor" />
+      </svg>
+    );
+  }
+  if (shape === "diamond") {
+    return (
+      <svg viewBox="0 0 24 24" className={common} aria-hidden>
+        <polygon points="12,2 22,12 12,22 2,12" fill="currentColor" />
+      </svg>
+    );
+  }
+  if (shape === "circle") {
+    return (
+      <svg viewBox="0 0 24 24" className={common} aria-hidden>
+        <circle cx="12" cy="12" r="10" fill="currentColor" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" className={common} aria-hidden>
+      <rect x="3" y="3" width="18" height="18" rx="3" fill="currentColor" />
+    </svg>
+  );
+}
+
+const INVALIDATING_EVENTS = new Set([
+  "question_started",
+  "answers_locked",
+  "answer_revealed",
+  "leaderboard_updated",
+  "game_paused",
+  "game_resumed",
+  "game_completed",
+  "game_launched",
+]);
+
+const MEDAL_RING = [
+  "ring-2 ring-amber-300/80 shadow-[0_0_40px_-10px_rgb(252_211_77_/_0.6)]",
+  "ring-2 ring-slate-200/70 shadow-[0_0_40px_-12px_rgb(226_232_240_/_0.55)]",
+  "ring-2 ring-orange-400/70 shadow-[0_0_40px_-12px_rgb(251_146_60_/_0.55)]",
+];
 
 export default function DisplayPage() {
   const routeParams = useParams<{ joinCode: string }>();
   const joinCode = String(routeParams.joinCode ?? "").toUpperCase();
   const { messages } = useGameChannel(joinCode);
 
-  const latest = useMemo(() => {
-    const reversed = [...messages].reverse();
-    return {
-      questionStarted: reversed.find((m) => m.name === "question_started"),
-      answerRevealed: reversed.find((m) => m.name === "answer_revealed"),
-      leaderboard: reversed.find((m) => m.name === "leaderboard_updated"),
-    };
-  }, [messages]);
+  const [boot, setBoot] = useState<BootstrapResponse | null>(null);
+  const inFlightRef = useRef<Promise<void> | null>(null);
 
-  const active = latest.questionStarted?.data as
-    | { question?: string; choices?: string[]; timerSeconds?: number | null }
-    | undefined;
-
-  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const refreshBootstrap = useCallback(async () => {
+    if (joinCode.length !== 6) return;
+    if (inFlightRef.current) return inFlightRef.current;
+    const p = (async () => {
+      try {
+        const res = await fetch(
+          `/api/game/public/session?code=${encodeURIComponent(joinCode)}`,
+          { cache: "no-store" }
+        );
+        if (!res.ok) return;
+        const data = (await res.json()) as BootstrapResponse;
+        setBoot(data);
+      } catch {
+        /* ignore */
+      } finally {
+        inFlightRef.current = null;
+      }
+    })();
+    inFlightRef.current = p;
+    return p;
+  }, [joinCode]);
 
   useEffect(() => {
-    if (!active?.timerSeconds) {
-      setSecondsLeft(null);
-      return;
-    }
-    setSecondsLeft(active.timerSeconds);
-    const t = window.setInterval(() => {
-      setSecondsLeft((s) => {
-        if (s === null) return s;
-        return s > 0 ? s - 1 : 0;
-      });
-    }, 1000);
-    return () => window.clearInterval(t);
-  }, [active?.timerSeconds, latest.questionStarted?.id]);
+    void refreshBootstrap();
+  }, [refreshBootstrap]);
 
-  return (
-    <div className="bg-black text-white min-h-screen p-10">
-      <div className="flex items-start justify-between gap-10">
-        <div className="text-3xl font-semibold tracking-tight">trivia.box</div>
-        {secondsLeft !== null ? (
-          <div className="text-6xl font-black tabular-nums">{secondsLeft}</div>
-        ) : null}
+  const lastProcessedRef = useRef(0);
+  useEffect(() => {
+    if (messages.length <= lastProcessedRef.current) return;
+    const fresh = messages.slice(lastProcessedRef.current);
+    lastProcessedRef.current = messages.length;
+    if (!fresh.some((m) => INVALIDATING_EVENTS.has(m.name))) return;
+    const h = setTimeout(() => {
+      void refreshBootstrap();
+    }, 80);
+    return () => clearTimeout(h);
+  }, [messages, refreshBootstrap]);
+
+  const current = boot?.currentQuestion ?? null;
+  const activeQid = current?.sessionQuestionId ?? null;
+  const lockedForActive = current?.status === "locked" || current?.status === "revealed";
+  const revealedForActive = current?.status === "revealed";
+  const leaderboard = boot?.leaderboard ?? [];
+  const paused = !!boot?.pausedAt;
+
+  // Between questions — no current question or answer just revealed — show
+  // the scoreboard in big format so the room gets the payoff moment.
+  const showLeaderboard = !current?.body || revealedForActive;
+
+  const venueImageUrl = buildVenueImageUrl({
+    venueSlug: boot?.venueSlug,
+    venueHasImage: boot?.venueHasImage,
+    venueImageUpdatedAt: boot?.venueImageUpdatedAt,
+  });
+
+  const completedCount = boot?.completedCount ?? 0;
+  const totalQuestions = boot?.totalQuestions ?? 0;
+
+  const topBar = (
+    <>
+      <div className="flex flex-col gap-1">
+        <div className="text-xs font-semibold uppercase tracking-[0.4em] text-white/70">
+          Trivia.Box
+        </div>
+        <div className="flex items-baseline gap-6">
+          {boot?.venueDisplayName ? (
+            <div className="text-2xl font-bold leading-none">{boot.venueDisplayName}</div>
+          ) : null}
+          <div className="flex items-baseline gap-3">
+            <span className="text-sm uppercase tracking-[0.3em] text-white/60">Join code</span>
+            <span className="text-3xl font-mono font-black tracking-widest text-white">
+              {joinCode}
+            </span>
+          </div>
+        </div>
       </div>
 
-      <div className="mt-16 max-w-6xl">
-        {active?.question ? (
-          <div className="text-6xl font-bold leading-tight">{active.question}</div>
-        ) : (
-          <div className="text-4xl text-white/70">Waiting…</div>
-        )}
-
-        {active?.choices?.length ? (
-          <div className="mt-12 grid grid-cols-2 gap-8">
-            {active.choices.map((c, idx) => (
-              <div
-                key={`${c}-${idx}`}
-                className="rounded-2xl border border-white/20 bg-white/5 p-8 text-4xl font-semibold"
-              >
-                {c}
-              </div>
-            ))}
+      <div className="flex items-center">
+        {current?.body && !showLeaderboard ? (
+          <Countdown
+            timerSeconds={current.timerSeconds}
+            timerStartedAtMs={current.timerStartedAtMs}
+            locked={lockedForActive}
+            size="xl"
+          />
+        ) : totalQuestions > 0 ? (
+          <div className="flex items-center gap-3 rounded-full bg-[var(--stage-glass)] px-6 py-3 ring-1 ring-white/15 backdrop-blur-xl">
+            <span className="text-xs font-semibold uppercase tracking-[0.3em] text-white/60">
+              Question
+            </span>
+            <span className="font-mono text-2xl font-black tabular-nums text-white">
+              {Math.min(completedCount, totalQuestions)}
+              <span className="text-white/40"> / </span>
+              {totalQuestions}
+            </span>
           </div>
         ) : null}
       </div>
+    </>
+  );
 
-      {latest.leaderboard?.data ? (
-        <div className="mt-16 text-3xl font-semibold">Leaderboard update</div>
-      ) : null}
-    </div>
+  return (
+    <GameShell
+      venueImageUrl={venueImageUrl}
+      topBar={topBar}
+      className="max-w-7xl px-10 py-10"
+      topBarClassName="px-10 py-6"
+    >
+      <div className="flex min-h-full flex-col">
+        <AnimatePresence mode="wait">
+          {paused ? (
+            <motion.div
+              key="paused"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.45, ease: "easeOut" }}
+              className="m-auto flex flex-col items-center gap-6 rounded-[2rem] bg-[var(--stage-glass)] px-20 py-16 text-center shadow-[var(--shadow-hero)] ring-1 ring-white/15 backdrop-blur-2xl"
+            >
+              <motion.div
+                animate={{ opacity: [0.55, 1, 0.55], scale: [0.95, 1.05, 0.95] }}
+                transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+                className="flex h-20 w-20 items-center justify-center rounded-full bg-white/10 text-[var(--stage-accent)] ring-1 ring-white/15"
+              >
+                <Sparkles className="h-10 w-10" />
+              </motion.div>
+              <div className="text-sm font-semibold uppercase tracking-[0.4em] text-[var(--stage-accent)]">
+                Paused
+              </div>
+              <div className="text-6xl font-black leading-none tracking-tight text-white drop-shadow-xl">
+                Game Paused
+              </div>
+              <div className="text-lg uppercase tracking-[0.3em] text-white/60">
+                Waiting for the host to resume
+              </div>
+            </motion.div>
+          ) : showLeaderboard && leaderboard.length > 0 ? (
+            <motion.div
+              key="leaderboard"
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -24 }}
+              transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+              className="mx-auto w-full max-w-5xl"
+            >
+              <div className="mb-8 flex items-baseline justify-between">
+                <div>
+                  <div className="text-sm font-semibold uppercase tracking-[0.4em] text-white/60">
+                    Live Results
+                  </div>
+                  <div className="mt-2 text-6xl font-black tracking-tight text-white drop-shadow-xl">
+                    Standings
+                  </div>
+                </div>
+                <div className="text-sm uppercase tracking-[0.3em] text-white/40">
+                  Top {Math.min(10, leaderboard.length)}
+                </div>
+              </div>
+
+              <ol className="space-y-3">
+                {leaderboard.slice(0, 10).map((row, idx) => {
+                  const medalRing = idx < 3 ? MEDAL_RING[idx] : "ring-1 ring-white/15";
+                  return (
+                    <motion.li
+                      key={row.playerId}
+                      layout
+                      initial={{ opacity: 0, x: -24 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{
+                        layout: { duration: 0.9, ease: [0.22, 1, 0.36, 1] },
+                        opacity: { duration: 0.4, delay: idx * 0.06 },
+                        x: { duration: 0.5, delay: idx * 0.06, ease: "easeOut" },
+                      }}
+                      className={`flex items-center justify-between rounded-2xl bg-[var(--stage-glass)] px-6 py-5 shadow-[var(--shadow-card)] backdrop-blur-xl ${medalRing}`}
+                    >
+                      <div className="flex items-center gap-6">
+                        <div className="flex w-16 items-center justify-center">
+                          {idx === 0 ? (
+                            <Crown
+                              className="h-10 w-10 text-amber-300 drop-shadow-[0_0_12px_rgb(252_211_77_/_0.65)]"
+                              aria-hidden
+                            />
+                          ) : (
+                            <span
+                              className={`font-mono text-4xl font-black tabular-nums ${
+                                idx === 1
+                                  ? "text-slate-200"
+                                  : idx === 2
+                                    ? "text-orange-300"
+                                    : "text-white/40"
+                              }`}
+                            >
+                              {idx + 1}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-3xl font-bold tracking-tight text-white">
+                          {row.username}
+                        </span>
+                      </div>
+                      <span className="font-mono text-4xl font-black tabular-nums text-[var(--stage-accent)]">
+                        {row.score}
+                      </span>
+                    </motion.li>
+                  );
+                })}
+              </ol>
+            </motion.div>
+          ) : current?.body ? (
+            <motion.div
+              key={`q-${activeQid}`}
+              initial={{ opacity: 0, y: 32 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -32 }}
+              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+              className="flex flex-1 flex-col gap-12"
+            >
+              <div className="text-sm font-semibold uppercase tracking-[0.4em] text-white/60">
+                Question
+                {totalQuestions > 0
+                  ? ` ${Math.min(completedCount + 1, totalQuestions)} of ${totalQuestions}`
+                  : ""}
+              </div>
+
+              <div className="text-5xl font-black leading-[1.05] tracking-tight text-white drop-shadow-xl md:text-7xl">
+                {current.body}
+              </div>
+
+              {current.choices?.length ? (
+                <div className="grid grid-cols-2 gap-6">
+                  {current.choices.map((c, idx) => {
+                    const style = ANSWER_STYLES[idx % ANSWER_STYLES.length]!;
+                    const isCorrect = revealedForActive && current.correctAnswer === c;
+                    const isWrongRevealed = revealedForActive && !isCorrect;
+                    return (
+                      <div key={`${c}-${idx}`} className="relative">
+                        {isCorrect ? (
+                          <motion.div
+                            aria-hidden
+                            initial={{ opacity: 0 }}
+                            animate={{
+                              opacity: [0, 1, 0.6, 1, 0.7],
+                              boxShadow: [
+                                "0 0 0px 0px rgb(255 255 255 / 0)",
+                                "0 0 60px 12px rgb(255 255 255 / 0.85)",
+                                "0 0 40px 6px rgb(255 255 255 / 0.5)",
+                                "0 0 70px 14px rgb(255 255 255 / 0.8)",
+                                "0 0 50px 10px rgb(255 255 255 / 0.6)",
+                              ],
+                            }}
+                            transition={{ duration: 1.1, ease: "easeOut" }}
+                            className="pointer-events-none absolute inset-0 rounded-3xl"
+                          />
+                        ) : null}
+                        <div
+                          className={`relative flex items-center gap-8 overflow-hidden rounded-3xl px-10 py-10 shadow-[var(--shadow-hero)] ring-1 ring-white/20 transition-[filter,opacity] duration-500 md:py-12 ${style.bg} ${
+                            isCorrect ? "ring-4 ring-white" : ""
+                          } ${isWrongRevealed ? "opacity-40 saturate-50" : ""}`}
+                        >
+                          <ChoiceShape shape={style.shape} />
+                          <span className="flex-1 text-4xl font-bold leading-tight text-white drop-shadow">
+                            {c}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="idle"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="m-auto flex flex-col items-center gap-8 text-center"
+            >
+              <motion.span
+                aria-hidden
+                animate={{ opacity: [0.3, 1, 0.3], scale: [0.9, 1.15, 0.9] }}
+                transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+                className="inline-block h-4 w-4 rounded-full bg-[var(--stage-accent)] shadow-[0_0_24px_rgb(56_189_248_/_0.7)]"
+              />
+              <div className="text-6xl font-black tracking-tight text-white drop-shadow-xl">
+                {boot?.status === "completed"
+                  ? "Game complete"
+                  : "Waiting for the host…"}
+              </div>
+              <div className="text-sm uppercase tracking-[0.4em] text-white/60">
+                {boot?.status === "completed"
+                  ? "Thanks for playing"
+                  : "The show is about to begin"}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </GameShell>
   );
 }

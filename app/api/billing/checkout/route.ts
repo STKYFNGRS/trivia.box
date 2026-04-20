@@ -11,6 +11,12 @@ const bodySchema = z.object({
   returnPath: z.string().optional(),
 });
 
+/**
+ * Starts a Stripe Checkout session for the signed-in account. Works for any
+ * account type — players are the default and use this route to upgrade to a
+ * host subscription. The webhook at `/api/webhooks/stripe` is responsible for
+ * flipping `accounts.account_type` to `host` once the subscription is active.
+ */
 export async function POST(req: Request) {
   const { userId } = await auth();
   if (!userId) {
@@ -34,7 +40,9 @@ export async function POST(req: Request) {
   }
 
   const base = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
-  const returnPath = parsed.data.returnPath?.startsWith("/") ? parsed.data.returnPath : "/dashboard";
+  // Players land back on the upgrade confirmation page, hosts on the organizer dashboard.
+  const defaultReturn = account.accountType === "player" ? "/dashboard/player/upgrade" : "/dashboard";
+  const returnPath = parsed.data.returnPath?.startsWith("/") ? parsed.data.returnPath : defaultReturn;
 
   const stripe = getStripe();
 
@@ -57,9 +65,15 @@ export async function POST(req: Request) {
     line_items: [{ price: priceId, quantity: 1 }],
     success_url: `${base}${returnPath}?checkout=success`,
     cancel_url: `${base}${returnPath}?checkout=cancel`,
-    metadata: { accountId: account.id },
+    metadata: {
+      accountId: account.id,
+      intent: account.accountType === "player" ? "upgrade_to_host" : "renew_host",
+    },
     subscription_data: {
-      metadata: { accountId: account.id },
+      metadata: {
+        accountId: account.id,
+        intent: account.accountType === "player" ? "upgrade_to_host" : "renew_host",
+      },
     },
   });
 

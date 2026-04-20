@@ -1,9 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { RefreshCw, Users2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SectionHeader } from "@/components/ui/section-header";
+import { SkeletonList } from "@/components/ui/skeleton-list";
+import { StatusPill } from "@/components/ui/status-pill";
 
 type Account = {
   id: string;
@@ -16,15 +21,21 @@ type Account = {
 
 export default function AdminAccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [loading, setLoading] = useState(true);
 
   async function refresh() {
-    const res = await fetch("/api/admin/accounts");
-    const data = (await res.json()) as { accounts?: Account[] };
-    if (!res.ok) {
-      toast.error("Failed to load accounts");
-      return;
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/accounts");
+      const data = (await res.json()) as { accounts?: Account[] };
+      if (!res.ok) {
+        toast.error("Failed to load accounts");
+        return;
+      }
+      setAccounts(data.accounts ?? []);
+    } finally {
+      setLoading(false);
     }
-    setAccounts(data.accounts ?? []);
   }
 
   useEffect(() => {
@@ -32,30 +43,50 @@ export default function AdminAccountsPage() {
   }, []);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Accounts</h1>
-        <Button type="button" variant="secondary" onClick={() => void refresh()}>
-          Refresh
-        </Button>
-      </div>
+    <div className="flex flex-col gap-8">
+      <SectionHeader
+        as="h1"
+        eyebrow="Admin"
+        title="Accounts"
+        description="Subscription status across hosts, venues, and players."
+        actions={
+          <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => void refresh()}>
+            <RefreshCw className="size-4" />
+            Refresh
+          </Button>
+        }
+      />
 
-      <div className="grid gap-3">
-        {accounts.map((a) => (
-          <Card key={a.id}>
-            <CardHeader className="space-y-1">
-              <CardTitle className="text-base">{a.name}</CardTitle>
-              <div className="text-muted-foreground text-xs">
-                {a.accountType} · {a.city} · {a.email}
-              </div>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Subscription:{" "}
-              <span className="text-foreground font-medium">{a.subscriptionActive ? "active" : "inactive"}</span>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {loading ? (
+        <SkeletonList rows={5} rowHeight="h-14" />
+      ) : accounts.length === 0 ? (
+        <EmptyState
+          icon={<Users2 className="size-6" />}
+          title="No accounts"
+          description="Signed-up accounts will appear here."
+        />
+      ) : (
+        <div className="grid gap-3">
+          {accounts.map((a) => (
+            <Card key={a.id} className="ring-1 ring-border shadow-[var(--shadow-card)]">
+              <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+                <div className="min-w-0">
+                  <CardTitle className="text-base font-semibold tracking-tight">{a.name}</CardTitle>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    {a.accountType} · {a.city} · {a.email}
+                  </div>
+                </div>
+                <StatusPill tone={a.subscriptionActive ? "success" : "neutral"} dot>
+                  {a.subscriptionActive ? "Active" : "Inactive"}
+                </StatusPill>
+              </CardHeader>
+              <CardContent className="text-sm text-muted-foreground">
+                Subscription status reflects the latest Stripe sync.
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

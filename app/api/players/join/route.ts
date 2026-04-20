@@ -1,19 +1,38 @@
+import { auth } from "@clerk/nextjs/server";
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { getAccountByClerkUserId } from "@/lib/accounts";
+import { track } from "@/lib/analytics/server";
+import { apiErrorResponse } from "@/lib/apiError";
 import { db } from "@/lib/db/client";
-import { accounts, playerSessions, players, playerVenues, sessions } from "@/lib/db/schema";
+import { accounts, playerSessions, playerVenues, sessions } from "@/lib/db/schema";
+import { getPlayerByAccountId } from "@/lib/players";
+import { clientIpFromRequest, enforceRateLimit } from "@/lib/rateLimit";
 
 const schema = z.object({
   joinCode: z.string().length(6),
-  username: z
-    .string()
-    .min(2)
-    .max(24)
-    .regex(/^[a-zA-Z0-9_-]+$/),
 });
 
 export async function POST(req: Request) {
+  try {
+    await enforceRateLimit("publicJoin", `ip:${clientIpFromRequest(req)}`);
+  } catch (e) {
+    return apiErrorResponse(e);
+  }
+
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "Sign in required to join a game" }, { status: 401 });
+  }
+
+  const account = await getAccountByClerkUserId(userId);
+  if (!account) {
+    return NextResponse.json({ error: "Account not found" }, { status: 400 });
+  }
+  // Every account (player, host, site_admin) has a linked players row, so anyone signed in
+  // can join. Hosts started as players and keep their username / stats when they upgrade.
+
   const json = await req.json().catch(() => null);
   const parsed = schema.safeParse(json);
   if (!parsed.success) {
@@ -21,7 +40,6 @@ export async function POST(req: Request) {
   }
 
   const code = parsed.data.joinCode.toUpperCase();
-  const username = parsed.data.username.trim();
 
   const sessionRows = await db
     .select({
@@ -37,27 +55,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Session not available" }, { status: 400 });
   }
 
-  const existingPlayer = await db
-    .select({ id: players.id })
-    .from(players)
-    .where(eq(players.username, username))
-    .limit(1);
-
-  let playerId = existingPlayer[0]?.id;
-  if (!playerId) {
-    const inserted = await db.insert(players).values({ username }).returning({ id: players.id });
-    playerId = inserted[0]?.id;
+  const playerRow = await getPlayerByAccountId(account.id);
+  if (!playerRow) {
+    return NextResponse.json({ error: "Player profile missing — try signing out and back in." }, { status: 400 });
   }
-  if (!playerId) {
-    return NextResponse.json({ error: "Could not create player" }, { status: 500 });
-  }
+  const playerId = playerRow.id;
+  const username = playerRow.username;
 
   const existingJoin = await db
     .select({ id: playerSessions.id })
     .from(playerSessions)
-    .where(
-      and(eq(playerSessions.sessionId, session.id), eq(playerSessions.playerId, playerId))
-    )
+    .where(and(eq(playerSessions.sessionId, session.id), eq(playerSessions.playerId, playerId)))
     .limit(1);
 
   if (existingJoin.length === 0) {
@@ -107,6 +115,17 @@ export async function POST(req: Request) {
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
+  });
+
+  void track("player_joined", {
+    distinctId: userId,
+    properties: {
+      playerId,
+      sessionId: session.id,
+      venueAccountId: session.venueAccountId,
+      username,
+      returningToVenue: Boolean(pv),
+    },
   });
 
   return res;

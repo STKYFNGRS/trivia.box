@@ -43,7 +43,13 @@ export function useGameChannel(joinCode: string | null) {
       setConnectionState(stateChange.current);
     });
 
-    const channel = realtime.channels.get(`game:${code}`);
+    // `rewind` asks Ably to replay the last ~2 minutes of messages to a newly
+    // attaching client, so a player or display that refreshes mid-round
+    // still gets the current `question_started`, `answers_locked`, and
+    // `answer_revealed` events without waiting for the host to publish again.
+    const channel = realtime.channels.get(`game:${code}`, {
+      params: { rewind: "2m" },
+    });
     const handler = (msg: Ably.Message) => {
       counter.current += 1;
       const name = msg.name ?? "message";

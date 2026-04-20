@@ -1,6 +1,8 @@
 import { relations } from "drizzle-orm";
 import {
+  bigint,
   boolean,
+  customType,
   index,
   integer,
   pgTable,
@@ -10,15 +12,29 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+/** Postgres `bytea` column. Drizzle doesn't ship this natively, so we use
+ *  customType — values go in/out as Buffer-compatible Uint8Arrays. */
+const bytea = customType<{ data: Uint8Array; default: false }>({
+  dataType() {
+    return "bytea";
+  },
+});
+
 export const accounts = pgTable(
   "accounts",
   {
     id: uuid("id").defaultRandom().primaryKey(),
     clerkUserId: text("clerk_user_id").notNull().unique(),
-    accountType: text("account_type").notNull(), // 'host' | 'venue'
+    accountType: text("account_type").notNull(), // 'player' | 'host' | 'site_admin' (legacy 'venue' migrated via 0005)
     name: text("name").notNull(),
     email: text("email").notNull(),
     city: text("city").notNull(),
+    /**
+     * @deprecated Unused in application code. Venue images now live in
+     * `venue_profiles.image_bytes`. Kept in the schema so legacy rows aren't
+     * dropped silently; a future `drizzle/0010_drop_accounts_logo_url.sql`
+     * can remove the column once we're sure no prod data depends on it.
+     */
     logoUrl: text("logo_url"),
     stripeCustomerId: text("stripe_customer_id"),
     stripeSubscriptionId: text("stripe_subscription_id"),
@@ -41,6 +57,36 @@ export const venues = pgTable(
   (t) => [index("venues_account_id_idx").on(t.accountId)]
 );
 
+/**
+ * First-class venue profile. One row per host/site_admin account. The slug is
+ * globally unique and powers the public lobby URL `/v/[slug]`; `display_name`
+ * is guaranteed non-empty (migration 0008 backfills it) so the host's location
+ * dropdown never renders a UUID. Image is stored directly in Neon as `bytea`
+ * so we don't take an external CDN dependency at this stage.
+ */
+export const venueProfiles = pgTable(
+  "venue_profiles",
+  {
+    accountId: uuid("account_id")
+      .primaryKey()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),
+    displayName: text("display_name").notNull(),
+    tagline: text("tagline"),
+    description: text("description"),
+    timezone: text("timezone"),
+    imageMime: text("image_mime"),
+    imageBytes: bytea("image_bytes"),
+    imageUpdatedAt: timestamp("image_updated_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("venue_profiles_slug_unique").on(t.slug),
+    index("venue_profiles_slug_idx").on(t.slug),
+  ]
+);
+
 export const hostVenueRelationships = pgTable(
   "host_venue_relationships",
   {
@@ -60,6 +106,41 @@ export const hostVenueRelationships = pgTable(
   ]
 );
 
+/**
+ * Host-authored question decks. Visibility transitions:
+ *   private -> submitted -> public | rejected
+ * `game_scoped` is a synthetic visibility used for the per-game hidden deck
+ * created by the "Write custom questions for this game" flow.
+ */
+export const questionDecks = pgTable(
+  "question_decks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ownerAccountId: uuid("owner_account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    description: text("description"),
+    defaultCategory: text("default_category"),
+    defaultSubcategory: text("default_subcategory"),
+    visibility: text("visibility").notNull().default("private"),
+    reviewedByAccountId: uuid("reviewed_by_account_id").references(() => accounts.id, {
+      onDelete: "set null",
+    }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewNote: text("review_note"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("question_decks_owner_slug_unique").on(t.ownerAccountId, t.slug),
+    index("question_decks_visibility_idx").on(t.visibility),
+    index("question_decks_owner_idx").on(t.ownerAccountId),
+  ]
+);
+
 export const questions = pgTable(
   "questions",
   {
@@ -74,11 +155,53 @@ export const questions = pgTable(
     vetted: boolean("vetted").notNull().default(false),
     timesUsed: integer("times_used").notNull().default(0),
     retired: boolean("retired").notNull().default(false),
+    /** Nullable for the canonical AI / site-admin-authored pool; set for deck-authored questions. */
+    deckId: uuid("deck_id").references(() => questionDecks.id, { onDelete: "set null" }),
+    /** Clerk-owned account that authored the question (null for legacy rows and AI drafts). */
+    authorAccountId: uuid("author_account_id").references(() => accounts.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("questions_category_idx").on(t.category),
     index("questions_vetted_retired_idx").on(t.vetted, t.retired),
+    index("questions_deck_idx").on(t.deckId),
+  ]
+);
+
+/** Canonical taxonomy for AI generation and categorization (labels match `questions.category` / `subcategory`). */
+export const questionCategories = pgTable(
+  "question_categories",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    slug: text("slug").notNull(),
+    label: text("label").notNull(),
+    description: text("description"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("question_categories_slug_unique").on(t.slug)]
+);
+
+export const questionSubcategories = pgTable(
+  "question_subcategories",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    categoryId: uuid("category_id")
+      .notNull()
+      .references(() => questionCategories.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),
+    label: text("label").notNull(),
+    notesForGeneration: text("notes_for_generation"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    active: boolean("active").notNull().default(true),
+    /** Planning target for coverage heuristics (nullable). */
+    targetCount: integer("target_count"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("question_subcategories_category_idx").on(t.categoryId),
+    uniqueIndex("question_subcategories_category_slug_unique").on(t.categoryId, t.slug),
   ]
 );
 
@@ -94,8 +217,16 @@ export const sessions = pgTable(
       .references(() => accounts.id, { onDelete: "cascade" }),
     status: text("status").notNull().default("pending"), // pending | active | completed
     timerMode: text("timer_mode").notNull().default("auto"), // auto | manual | hybrid
+    runMode: text("run_mode").notNull().default("autopilot"), // hosted | autopilot
     secondsPerQuestion: integer("seconds_per_question"),
     joinCode: text("join_code").notNull(),
+    eventStartsAt: timestamp("event_starts_at", { withTimezone: true }).notNull(),
+    /** When non-null, session is paused: autopilot cron skips, clients show overlay. `start` clears this. */
+    pausedAt: timestamp("paused_at", { withTimezone: true }),
+    eventTimezone: text("event_timezone").notNull(),
+    hasPrize: boolean("has_prize").notNull().default(false),
+    prizeDescription: text("prize_description"),
+    listedPublic: boolean("listed_public").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("sessions_join_code_unique").on(t.joinCode)]
@@ -110,6 +241,8 @@ export const rounds = pgTable(
       .references(() => sessions.id, { onDelete: "cascade" }),
     roundNumber: integer("round_number").notNull(),
     category: text("category").notNull(),
+    /** Per-round timer override (5..60 in steps of 5). NULL falls back to `sessions.secondsPerQuestion`. */
+    secondsPerQuestion: integer("seconds_per_question"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("rounds_session_idx").on(t.sessionId)]
@@ -129,9 +262,16 @@ export const sessionQuestions = pgTable(
       .notNull()
       .references(() => questions.id, { onDelete: "restrict" }),
     questionOrder: integer("question_order").notNull(),
-    status: text("status").notNull().default("pending"), // pending | active | revealed | complete
+    status: text("status").notNull().default("pending"), // pending | active | locked | revealed | complete
     timeStarted: timestamp("time_started", { withTimezone: true }),
     timeLocked: timestamp("time_locked", { withTimezone: true }),
+    /** Resolved timer (seconds) captured at the moment the question was started,
+     *  so we can recompute points consistently even if the session timer was
+     *  later changed. */
+    timerSeconds: integer("timer_seconds"),
+    /** Server wall-clock (Date.now()) when the host `start` action fired.
+     *  Clients derive remaining = timerSeconds*1000 - (Date.now() - timerStartedAtMs). */
+    timerStartedAtMs: bigint("timer_started_at_ms", { mode: "number" }),
   },
   (t) => [
     index("session_questions_session_idx").on(t.sessionId),
@@ -146,9 +286,13 @@ export const players = pgTable(
     username: text("username").notNull(),
     email: text("email"),
     phone: text("phone"),
+    accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("players_username_unique").on(t.username)]
+  (t) => [
+    uniqueIndex("players_username_unique").on(t.username),
+    uniqueIndex("players_account_id_unique").on(t.accountId),
+  ]
 );
 
 export const playerSessions = pgTable(
@@ -187,13 +331,41 @@ export const answers = pgTable(
     answerGiven: text("answer_given").notNull(),
     isCorrect: boolean("is_correct").notNull(),
     timeToAnswerMs: integer("time_to_answer_ms").notNull(),
+    /** Kahoot-style points scaled by `timeToAnswerMs`. Includes any streak bonus. */
+    pointsAwarded: integer("points_awarded").notNull().default(0),
+    /** Streak count after this answer (0 on wrong, prev+1 on correct). */
+    streakAtAnswer: integer("streak_at_answer").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("answers_player_idx").on(t.playerId),
     index("answers_sq_idx").on(t.sessionQuestionId),
+    // One answer per player per question: enforced at the DB level so that
+    // concurrent answer submissions can never double-score.
+    uniqueIndex("answers_player_session_question_uidx").on(t.playerId, t.sessionQuestionId),
   ]
 );
+
+/**
+ * Denormalized rollup of lifetime player stats. Kept in sync by
+ * `recordAnswer` (per-answer) and the session-completed hook (ranks / games).
+ * Cheap source of truth for the player dashboard and leaderboards that don't
+ * need query-time aggregation.
+ */
+export const playerStats = pgTable("player_stats", {
+  playerId: uuid("player_id")
+    .primaryKey()
+    .references(() => players.id, { onDelete: "cascade" }),
+  totalAnswered: integer("total_answered").notNull().default(0),
+  totalCorrect: integer("total_correct").notNull().default(0),
+  totalPoints: bigint("total_points", { mode: "number" }).notNull().default(0),
+  totalGames: integer("total_games").notNull().default(0),
+  bestRank: integer("best_rank"),
+  longestStreak: integer("longest_streak").notNull().default(0),
+  fastestCorrectMs: integer("fastest_correct_ms"),
+  lastPlayedAt: timestamp("last_played_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const playerVenues = pgTable(
   "player_venues",
@@ -231,6 +403,12 @@ export const questionVenueHistory = pgTable(
   ]
 );
 
+/**
+ * @deprecated No runtime reads or writes — the legacy Resend venue→host invite
+ * flow was retired when signup collapsed to a single player-default form.
+ * Schema is retained only so existing rows in prod don't orphan; future
+ * `drizzle/0010_drop_host_invites.sql` can remove the table outright.
+ */
 export const hostInvites = pgTable(
   "host_invites",
   {
@@ -267,11 +445,151 @@ export const questionFlags = pgTable(
   (t) => [index("question_flags_resolved_idx").on(t.resolvedAt)]
 );
 
+export const questionDrafts = pgTable(
+  "question_drafts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    body: text("body").notNull(),
+    correctAnswer: text("correct_answer").notNull(),
+    wrongAnswers: text("wrong_answers").array().notNull(),
+    category: text("category").notNull(),
+    subcategory: text("subcategory").notNull(),
+    difficulty: integer("difficulty").notNull().default(2),
+    timeHint: integer("time_hint").notNull().default(20),
+    status: text("status").notNull().default("pending_review"),
+    pipelineLog: text("pipeline_log"),
+    duplicateScore: integer("duplicate_score"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewNote: text("review_note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("question_drafts_status_idx").on(t.status)]
+);
+
+export const questionGenerationJobs = pgTable(
+  "question_generation_jobs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    status: text("status").notNull().default("queued"),
+    step: text("step").notNull().default("init"),
+    category: text("category").notNull(),
+    topicHint: text("topic_hint"),
+    /** When null, runner picks subcategory by coverage gap for `category`. */
+    subcategoryId: uuid("subcategory_id").references(() => questionSubcategories.id, { onDelete: "set null" }),
+    draftId: uuid("draft_id").references(() => questionDrafts.id, { onDelete: "set null" }),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("question_generation_jobs_status_idx").on(t.status),
+    index("question_generation_jobs_subcategory_idx").on(t.subcategoryId),
+  ]
+);
+
+export const achievementDefinitions = pgTable(
+  "achievement_definitions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    icon: text("icon"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("achievement_definitions_slug_unique").on(t.slug)]
+);
+
+export const playerAchievementGrants = pgTable(
+  "player_achievement_grants",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    playerId: uuid("player_id")
+      .notNull()
+      .references(() => players.id, { onDelete: "cascade" }),
+    achievementId: uuid("achievement_id")
+      .notNull()
+      .references(() => achievementDefinitions.id, { onDelete: "cascade" }),
+    earnedAt: timestamp("earned_at", { withTimezone: true }).notNull().defaultNow(),
+    metadata: text("metadata"),
+  },
+  (t) => [
+    uniqueIndex("player_achievement_unique").on(t.playerId, t.achievementId),
+    index("player_achievement_player_idx").on(t.playerId),
+  ]
+);
+
+export const questionPackages = pgTable(
+  "question_packages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("question_packages_slug_unique").on(t.slug)]
+);
+
+export const questionPackageItems = pgTable(
+  "question_package_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    packageId: uuid("package_id")
+      .notNull()
+      .references(() => questionPackages.id, { onDelete: "cascade" }),
+    questionId: uuid("question_id")
+      .notNull()
+      .references(() => questions.id, { onDelete: "cascade" }),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [
+    index("question_package_items_package_idx").on(t.packageId),
+    uniqueIndex("question_package_items_unique").on(t.packageId, t.questionId),
+  ]
+);
+
 /* Relations (optional, for relational queries) */
-export const accountsRelations = relations(accounts, ({ many }) => ({
+export const accountsRelations = relations(accounts, ({ many, one }) => ({
   venues: many(venues),
+  venueProfile: one(venueProfiles, {
+    fields: [accounts.id],
+    references: [venueProfiles.accountId],
+  }),
 }));
 
 export const venuesRelations = relations(venues, ({ one }) => ({
   account: one(accounts, { fields: [venues.accountId], references: [accounts.id] }),
+}));
+
+export const venueProfilesRelations = relations(venueProfiles, ({ one }) => ({
+  account: one(accounts, {
+    fields: [venueProfiles.accountId],
+    references: [accounts.id],
+  }),
+}));
+
+export const questionCategoriesRelations = relations(questionCategories, ({ many }) => ({
+  subcategories: many(questionSubcategories),
+}));
+
+export const questionSubcategoriesRelations = relations(questionSubcategories, ({ one }) => ({
+  category: one(questionCategories, {
+    fields: [questionSubcategories.categoryId],
+    references: [questionCategories.id],
+  }),
+}));
+
+export const questionDecksRelations = relations(questionDecks, ({ one, many }) => ({
+  owner: one(accounts, { fields: [questionDecks.ownerAccountId], references: [accounts.id] }),
+  reviewer: one(accounts, {
+    fields: [questionDecks.reviewedByAccountId],
+    references: [accounts.id],
+  }),
+  questions: many(questions),
+}));
+
+export const questionsRelations = relations(questions, ({ one }) => ({
+  deck: one(questionDecks, { fields: [questions.deckId], references: [questionDecks.id] }),
+  author: one(accounts, { fields: [questions.authorAccountId], references: [accounts.id] }),
 }));

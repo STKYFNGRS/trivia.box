@@ -1,8 +1,41 @@
-import { and, eq, gte, notInArray } from "drizzle-orm";
+import { and, count, eq, gte, inArray, notInArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { questionVenueHistory, questions } from "@/lib/db/schema";
 
 export type PulledQuestion = typeof questions.$inferSelect;
+
+/** Load vetted questions by explicit IDs (order preserved). Throws if any ID missing or not vetted. */
+export async function getVettedQuestionsByOrderedIds(
+  ids: string[],
+  opts?: { expectedCategory?: string }
+): Promise<PulledQuestion[]> {
+  if (ids.length === 0) return [];
+  const rows = await db
+    .select()
+    .from(questions)
+    .where(
+      and(
+        inArray(questions.id, ids),
+        eq(questions.vetted, true),
+        eq(questions.retired, false)
+      )
+    );
+  const map = new Map(rows.map((r) => [r.id, r]));
+  const ordered: PulledQuestion[] = [];
+  for (const id of ids) {
+    const q = map.get(id);
+    if (!q) {
+      throw new Error(`Question not found or not vetted: ${id}`);
+    }
+    if (opts?.expectedCategory && q.category !== opts.expectedCategory) {
+      throw new Error(
+        `Question ${id} is category "${q.category}" but this round expects "${opts.expectedCategory}"`
+      );
+    }
+    ordered.push(q);
+  }
+  return ordered;
+}
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -15,6 +48,43 @@ function shuffle<T>(arr: T[]): T[] {
 
 function roundBoost(roundNumber: number): number {
   return 1 + Math.min(3, Math.max(0, roundNumber - 1)) * 0.15;
+}
+
+/** Count of vetted questions in `category` eligible for smart pull (same filters as `smartPullQuestions` base set). */
+export async function countSmartPullEligible(input: {
+  venueAccountId: string;
+  category: string;
+  excludeQuestionIds: string[];
+}): Promise<number> {
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+
+  const recentRows = await db
+    .select({ questionId: questionVenueHistory.questionId })
+    .from(questionVenueHistory)
+    .where(
+      and(
+        eq(questionVenueHistory.venueAccountId, input.venueAccountId),
+        gte(questionVenueHistory.usedAt, since)
+      )
+    );
+
+  const recentSet = new Set(recentRows.map((r) => r.questionId));
+  const exclude = new Set([...input.excludeQuestionIds, ...recentSet]);
+  const excludeList = [...exclude];
+
+  const [row] = await db
+    .select({ n: count() })
+    .from(questions)
+    .where(
+      and(
+        eq(questions.vetted, true),
+        eq(questions.retired, false),
+        eq(questions.category, input.category),
+        excludeList.length ? notInArray(questions.id, excludeList) : undefined
+      )
+    );
+
+  return row?.n ?? 0;
 }
 
 /**

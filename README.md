@@ -1,6 +1,10 @@
 # trivia.box
 
-Bar trivia platform for **hosts** and **venues** ($50/month, Stripe). Stack: **Next.js 15**, **Neon + Drizzle**, **Clerk**, **Ably**, **Resend**.
+[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+
+Bar trivia platform for **hosts** and **venues** ($50/month, Stripe). Stack: **Next.js 15**, **Neon + Drizzle**, **Clerk**, **Ably**, **Sentry**, **PostHog**, **Upstash Ratelimit**.
+
+> The CI badge above points at `OWNER/REPO` — swap for the real `github.com/<org>/<repo>` slug once the repo is pushed. Enable branch protection on `main` requiring the `verify` check.
 
 ## Quick start
 

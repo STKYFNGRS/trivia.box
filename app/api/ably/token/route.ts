@@ -3,14 +3,22 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { nanoid } from "nanoid";
+import { apiErrorResponse } from "@/lib/apiError";
 import { db } from "@/lib/db/client";
 import { sessions } from "@/lib/db/schema";
+import { clientIpFromRequest, enforceRateLimit } from "@/lib/rateLimit";
 
 const schema = z.object({
   joinCode: z.string().length(6),
 });
 
 export async function POST(req: Request) {
+  try {
+    await enforceRateLimit("anonymous", `ip:${clientIpFromRequest(req)}`);
+  } catch (e) {
+    return apiErrorResponse(e);
+  }
+
   const json = await req.json().catch(() => null);
   const parsed = schema.safeParse(json);
   if (!parsed.success) {

@@ -1,5 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAccountByClerkUserId } from "@/lib/accounts";
@@ -36,10 +36,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ sessionId: str
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Scope the lookup to the session id from the URL so a host can't flag a
+  // question from someone else's session by guessing a sessionQuestionId.
   const sqRows = await db
     .select({ questionId: sessionQuestions.questionId })
     .from(sessionQuestions)
-    .where(eq(sessionQuestions.id, parsed.data.sessionQuestionId))
+    .where(
+      and(
+        eq(sessionQuestions.id, parsed.data.sessionQuestionId),
+        eq(sessionQuestions.sessionId, sessionId)
+      )
+    )
     .limit(1);
   const sq = sqRows[0];
   if (!sq) {

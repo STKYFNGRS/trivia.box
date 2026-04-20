@@ -1,22 +1,225 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, sql } from "drizzle-orm";
+import { publishGameEvent } from "@/lib/ably/server";
+import { track } from "@/lib/analytics/server";
 import { db } from "@/lib/db/client";
-import { answers, playerSessions, players, questions, sessionQuestions } from "@/lib/db/schema";
+import {
+  answers,
+  playerSessions,
+  playerStats,
+  players,
+  questions,
+  sessionQuestions,
+  sessions,
+} from "@/lib/db/schema";
+import { tryGrantAchievementsAfterAnswer } from "@/lib/game/achievements";
 
+/** Base points for a correct answer at t=0. */
+export const BASE_POINTS = 1000;
+
+/** Streak bonus thresholds. If a correct answer brings the player to one of
+ *  these streak counts, add the value on top of the time-weighted base. */
+export const STREAK_BONUSES: Record<number, number> = {
+  3: 100,
+  5: 200,
+  7: 300,
+  10: 500,
+};
+
+export type PointsBreakdown = {
+  points: number;
+  basePoints: number;
+  streakBonus: number;
+  newStreak: number;
+  fraction: number;
+};
+
+/**
+ * Kahoot-style scoring.
+ *
+ * - Wrong answer → 0 points, streak resets to 0.
+ * - Correct answer → `BASE_POINTS * (0.5 + 0.5 * fraction)` rounded to the
+ *   nearest integer, where `fraction = max(0, 1 - elapsed/timerMs)`. Answering
+ *   instantly gives full points; right at the buzzer still gives half.
+ * - When the new streak matches a threshold in `STREAK_BONUSES`, that bonus is
+ *   added on top.
+ *
+ * `timerSeconds` may be null/0 in degenerate cases (e.g. manual-timer sessions
+ * with no round override). We treat those as a flat 750 points to avoid
+ * divide-by-zero while still rewarding correctness.
+ */
+export function computeAnswerPoints(input: {
+  isCorrect: boolean;
+  timeToAnswerMs: number;
+  timerSeconds: number | null | undefined;
+  previousStreak: number;
+}): PointsBreakdown {
+  const previousStreak = Math.max(0, input.previousStreak | 0);
+  if (!input.isCorrect) {
+    return {
+      points: 0,
+      basePoints: 0,
+      streakBonus: 0,
+      newStreak: 0,
+      fraction: 0,
+    };
+  }
+
+  const timerMs =
+    typeof input.timerSeconds === "number" && input.timerSeconds > 0
+      ? input.timerSeconds * 1000
+      : 0;
+
+  let fraction = 1;
+  if (timerMs > 0) {
+    const elapsed = Math.max(0, Math.min(input.timeToAnswerMs, timerMs));
+    fraction = 1 - elapsed / timerMs;
+  } else {
+    fraction = 0.5; // flat 750 when we have no timer signal.
+  }
+  const basePoints = Math.round(BASE_POINTS * (0.5 + 0.5 * fraction));
+
+  const newStreak = previousStreak + 1;
+  const streakBonus = STREAK_BONUSES[newStreak] ?? 0;
+
+  return {
+    points: basePoints + streakBonus,
+    basePoints,
+    streakBonus,
+    newStreak,
+    fraction,
+  };
+}
+
+/**
+ * Recomputes per-player ranks for a session.
+ *
+ * Tie-break order:
+ *   1. higher score
+ *   2. lower total-time on correct answers
+ *   3. stable by playerId
+ */
 export async function recomputeSessionRanks(sessionId: string) {
+  const totalTimeSq = db
+    .select({
+      playerId: answers.playerId,
+      totalMs: sql<number>`COALESCE(SUM(${answers.timeToAnswerMs}) FILTER (WHERE ${answers.isCorrect}), 0)`.as(
+        "total_ms"
+      ),
+    })
+    .from(answers)
+    .innerJoin(sessionQuestions, eq(sessionQuestions.id, answers.sessionQuestionId))
+    .where(eq(sessionQuestions.sessionId, sessionId))
+    .groupBy(answers.playerId)
+    .as("tt");
+
   const rows = await db
     .select({
       id: playerSessions.id,
+      playerId: playerSessions.playerId,
       score: playerSessions.score,
+      totalMs: sql<number>`COALESCE(${totalTimeSq.totalMs}, 0)`,
     })
     .from(playerSessions)
+    .leftJoin(totalTimeSq, eq(totalTimeSq.playerId, playerSessions.playerId))
     .where(eq(playerSessions.sessionId, sessionId))
-    .orderBy(desc(playerSessions.score));
+    .orderBy(
+      desc(playerSessions.score),
+      asc(sql`COALESCE(${totalTimeSq.totalMs}, 0)`),
+      asc(playerSessions.playerId)
+    );
 
   let rank = 1;
   for (const row of rows) {
     await db.update(playerSessions).set({ rank }).where(eq(playerSessions.id, row.id));
     rank += 1;
   }
+}
+
+/**
+ * Look up the player's current streak for a session (highest streak_at_answer
+ * on any previous answer, reset to 0 if the most recent answer was wrong).
+ */
+async function getCurrentStreak(
+  playerId: string,
+  sessionId: string
+): Promise<number> {
+  const rows = await db
+    .select({
+      isCorrect: answers.isCorrect,
+      streakAtAnswer: answers.streakAtAnswer,
+      createdAt: answers.createdAt,
+    })
+    .from(answers)
+    .innerJoin(sessionQuestions, eq(sessionQuestions.id, answers.sessionQuestionId))
+    .where(
+      and(eq(answers.playerId, playerId), eq(sessionQuestions.sessionId, sessionId))
+    )
+    .orderBy(desc(answers.createdAt))
+    .limit(1);
+
+  const latest = rows[0];
+  if (!latest) return 0;
+  if (!latest.isCorrect) return 0;
+  return latest.streakAtAnswer ?? 0;
+}
+
+async function upsertPlayerStats(
+  playerId: string,
+  delta: {
+    answeredDelta: number;
+    correctDelta: number;
+    pointsDelta: number;
+    streakCandidate: number;
+    fastestCorrectMs: number | null;
+  }
+) {
+  const existingRows = await db
+    .select({
+      playerId: playerStats.playerId,
+      longestStreak: playerStats.longestStreak,
+      fastestCorrectMs: playerStats.fastestCorrectMs,
+    })
+    .from(playerStats)
+    .where(eq(playerStats.playerId, playerId))
+    .limit(1);
+  const existing = existingRows[0];
+
+  const nextLongest = Math.max(existing?.longestStreak ?? 0, delta.streakCandidate);
+  const nextFastest =
+    delta.fastestCorrectMs != null
+      ? existing?.fastestCorrectMs == null
+        ? delta.fastestCorrectMs
+        : Math.min(existing.fastestCorrectMs, delta.fastestCorrectMs)
+      : (existing?.fastestCorrectMs ?? null);
+
+  if (!existing) {
+    await db
+      .insert(playerStats)
+      .values({
+        playerId,
+        totalAnswered: delta.answeredDelta,
+        totalCorrect: delta.correctDelta,
+        totalPoints: delta.pointsDelta,
+        longestStreak: nextLongest,
+        fastestCorrectMs: nextFastest,
+        lastPlayedAt: new Date(),
+      })
+      .onConflictDoNothing({ target: playerStats.playerId });
+    return;
+  }
+
+  await db
+    .update(playerStats)
+    .set({
+      totalAnswered: sql`${playerStats.totalAnswered} + ${delta.answeredDelta}`,
+      totalCorrect: sql`${playerStats.totalCorrect} + ${delta.correctDelta}`,
+      totalPoints: sql`${playerStats.totalPoints} + ${delta.pointsDelta}`,
+      longestStreak: nextLongest,
+      fastestCorrectMs: nextFastest,
+      lastPlayedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(playerStats.playerId, playerId));
 }
 
 export async function recordAnswer(input: {
@@ -29,6 +232,7 @@ export async function recordAnswer(input: {
     .select({
       sessionId: sessionQuestions.sessionId,
       questionId: sessionQuestions.questionId,
+      timerSeconds: sessionQuestions.timerSeconds,
     })
     .from(sessionQuestions)
     .where(eq(sessionQuestions.id, input.sessionQuestionId))
@@ -49,31 +253,136 @@ export async function recordAnswer(input: {
   const isCorrect =
     input.answerGiven.trim().toLowerCase() === String(correct).trim().toLowerCase();
 
-  await db.insert(answers).values({
-    playerId: input.playerId,
-    sessionQuestionId: input.sessionQuestionId,
-    answerGiven: input.answerGiven,
+  const previousStreak = await getCurrentStreak(input.playerId, sq.sessionId);
+
+  const breakdown = computeAnswerPoints({
     isCorrect,
     timeToAnswerMs: input.timeToAnswerMs,
+    timerSeconds: sq.timerSeconds,
+    previousStreak,
   });
 
-  if (isCorrect) {
+  // Insert-or-skip on the (player, sessionQuestion) unique index. The DB is
+  // the source of truth for "already answered"; concurrent POSTs can't
+  // double-score.
+  const inserted = await db
+    .insert(answers)
+    .values({
+      playerId: input.playerId,
+      sessionQuestionId: input.sessionQuestionId,
+      answerGiven: input.answerGiven,
+      isCorrect,
+      timeToAnswerMs: input.timeToAnswerMs,
+      pointsAwarded: breakdown.points,
+      streakAtAnswer: breakdown.newStreak,
+    })
+    .onConflictDoNothing({ target: [answers.playerId, answers.sessionQuestionId] })
+    .returning({ id: answers.id });
+
+  if (inserted.length === 0) {
+    return {
+      isCorrect,
+      sessionId: sq.sessionId,
+      alreadyAnswered: true,
+      pointsAwarded: 0,
+      streak: previousStreak,
+    };
+  }
+
+  if (breakdown.points > 0) {
     await db
       .update(playerSessions)
-      .set({ score: sql`${playerSessions.score} + 1` })
+      .set({ score: sql`${playerSessions.score} + ${breakdown.points}` })
       .where(
-        and(eq(playerSessions.sessionId, sq.sessionId), eq(playerSessions.playerId, input.playerId))
+        and(
+          eq(playerSessions.sessionId, sq.sessionId),
+          eq(playerSessions.playerId, input.playerId)
+        )
       );
   }
 
   await recomputeSessionRanks(sq.sessionId);
 
-  return { isCorrect, sessionId: sq.sessionId };
+  await upsertPlayerStats(input.playerId, {
+    answeredDelta: 1,
+    correctDelta: isCorrect ? 1 : 0,
+    pointsDelta: breakdown.points,
+    streakCandidate: breakdown.newStreak,
+    fastestCorrectMs: isCorrect ? input.timeToAnswerMs : null,
+  });
+
+  // Fire-and-forget: broadcast the updated answered-count / total-players so the
+  // host dashboard can show a live tally without each client polling.
+  void (async () => {
+    try {
+      const joinRows = await db
+        .select({ joinCode: sessions.joinCode })
+        .from(sessions)
+        .where(eq(sessions.id, sq.sessionId))
+        .limit(1);
+      const code = joinRows[0]?.joinCode;
+      if (!code) return;
+
+      const answeredRows = await db
+        .select({ value: count() })
+        .from(answers)
+        .where(eq(answers.sessionQuestionId, input.sessionQuestionId));
+      const totalRows = await db
+        .select({ value: count() })
+        .from(playerSessions)
+        .where(eq(playerSessions.sessionId, sq.sessionId));
+
+      await publishGameEvent(code, "answer_received", {
+        sessionQuestionId: input.sessionQuestionId,
+        answeredCount: answeredRows[0]?.value ?? 0,
+        totalPlayers: totalRows[0]?.value ?? 0,
+      });
+    } catch {
+      // swallow: the live tally is a UX nicety, not critical.
+    }
+  })();
+
+  void tryGrantAchievementsAfterAnswer({
+    playerId: input.playerId,
+    sessionId: sq.sessionId,
+    questionId: sq.questionId,
+    isCorrect,
+    timeToAnswerMs: input.timeToAnswerMs,
+    streak: breakdown.newStreak,
+    pointsAwarded: breakdown.points,
+  }).catch(() => {});
+
+  // 10% sample — per-answer events would be expensive and noisy. We still
+  // get a statistically useful accuracy/latency distribution and rely on
+  // session_completed for per-session rollups.
+  if (Math.random() < 0.1) {
+    void track("question_answered", {
+      distinctId: `player:${input.playerId}`,
+      properties: {
+        sessionId: sq.sessionId,
+        sessionQuestionId: input.sessionQuestionId,
+        questionId: sq.questionId,
+        isCorrect,
+        timeToAnswerMs: input.timeToAnswerMs,
+        pointsAwarded: breakdown.points,
+        streak: breakdown.newStreak,
+      },
+    });
+  }
+
+  return {
+    isCorrect,
+    sessionId: sq.sessionId,
+    alreadyAnswered: false,
+    pointsAwarded: breakdown.points,
+    streak: breakdown.newStreak,
+  };
 }
 
 export async function getLeaderboardTop(sessionId: string, limit = 10) {
   return db
     .select({
+      playerId: playerSessions.playerId,
       username: players.username,
       score: playerSessions.score,
       rank: playerSessions.rank,
@@ -81,6 +390,6 @@ export async function getLeaderboardTop(sessionId: string, limit = 10) {
     .from(playerSessions)
     .innerJoin(players, eq(players.id, playerSessions.playerId))
     .where(eq(playerSessions.sessionId, sessionId))
-    .orderBy(desc(playerSessions.score))
+    .orderBy(asc(playerSessions.rank), asc(playerSessions.playerId))
     .limit(limit);
 }

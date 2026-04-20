@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ilike } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdminResponse } from "@/lib/adminApi";
@@ -21,19 +21,32 @@ export async function GET(req: Request) {
   if (gate) return gate;
 
   const { searchParams } = new URL(req.url);
-  const category = searchParams.get("category") ?? undefined;
+  const category = searchParams.get("category")?.trim() || undefined;
+  const subcategory = searchParams.get("subcategory")?.trim() || undefined;
   const vetted = searchParams.get("vetted");
+  const retired = searchParams.get("retired");
   const difficulty = searchParams.get("difficulty");
+  const q = searchParams.get("q")?.trim() || undefined;
 
   const conditions = [];
   if (category) conditions.push(eq(questions.category, category));
+  if (subcategory) conditions.push(eq(questions.subcategory, subcategory));
   if (vetted === "true") conditions.push(eq(questions.vetted, true));
   if (vetted === "false") conditions.push(eq(questions.vetted, false));
+  if (retired === "true") conditions.push(eq(questions.retired, true));
+  if (retired === "false") conditions.push(eq(questions.retired, false));
   if (difficulty) {
     const d = Number(difficulty);
     if (d === 1 || d === 2 || d === 3) {
       conditions.push(eq(questions.difficulty, d));
     }
+  }
+  // Free-text filter on the question body. We use `ilike` with `%q%`; the
+  // pg_trgm index added in migration 0002 keeps this cheap on the existing
+  // column without requiring a schema change.
+  if (q) {
+    const safe = q.replace(/[%_]/g, (m) => `\\${m}`);
+    conditions.push(ilike(questions.body, `%${safe}%`));
   }
 
   const where = conditions.length ? and(...conditions) : undefined;

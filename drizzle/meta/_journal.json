@@ -8,6 +8,69 @@
       "when": 1776196642354,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1776368274258,
+      "tag": "0001_player_ai_packages",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777000000000,
+      "tag": "0002_pg_trgm",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778000000000,
+      "tag": "0003_session_event_schedule",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779000000000,
+      "tag": "0004_question_taxonomy",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1780000000000,
+      "tag": "0005_venue_accounttype_retire",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780500000000,
+      "tag": "0006_answers_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1781000000000,
+      "tag": "0007_decks",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1781500000000,
+      "tag": "0008_venues_first_class",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782000000000,
+      "tag": "0009_sessions_paused_at",
+      "breakpoints": true
     }
   ]
 }

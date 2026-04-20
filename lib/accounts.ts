@@ -1,9 +1,9 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { eq } from "drizzle-orm";
-import { nanoid } from "nanoid";
 import { db } from "@/lib/db/client";
-import { accounts, hostInvites, hostVenueRelationships, venues } from "@/lib/db/schema";
-import { sendHostInviteEmail } from "@/lib/email/hostInvite";
+import { accounts } from "@/lib/db/schema";
+import { ensurePlayerRowForAccount } from "@/lib/players";
+import { isSiteAdminClerkUserId } from "@/lib/siteAdmin";
 
 export type AccountRow = typeof accounts.$inferSelect;
 
@@ -26,18 +26,45 @@ type UnsafeMeta = {
   account_type?: string;
   name?: string;
   city?: string;
-  address?: string;
-  has_host?: boolean;
-  host_email?: string;
-  invite_token?: string;
+  player_username?: string;
 };
+
+/**
+ * Derives the starting account type for a brand-new Clerk user.
+ * Site-admin allowlist beats everything; otherwise we default to `player`.
+ * Organizer (host) accounts are created only by a successful Stripe upgrade,
+ * not at signup time. Exported for unit testing.
+ */
+export function deriveAccountTypeForNewUser(
+  clerkUserId: string,
+  meta: UnsafeMeta
+): "player" | "site_admin" {
+  if (isSiteAdminClerkUserId(clerkUserId)) return "site_admin";
+  // Anything else (including the legacy "host"/"venue" metadata values) becomes a player.
+  // The Stripe webhook promotes to "host" after a successful subscription.
+  void meta;
+  return "player";
+}
 
 export async function ensureAccountFromClerkUser(): Promise<AccountRow | null> {
   const user = await currentUser();
   if (!user) return null;
 
   const existing = await getAccountByClerkUserId(user.id);
-  if (existing) return existing;
+  if (existing) {
+    if (isSiteAdminClerkUserId(user.id) && existing.accountType !== "site_admin") {
+      const [upgraded] = await db
+        .update(accounts)
+        .set({ accountType: "site_admin" })
+        .where(eq(accounts.id, existing.id))
+        .returning();
+      if (upgraded) {
+        await ensurePlayerRowForAccount(upgraded, upgraded.name);
+        return upgraded;
+      }
+    }
+    return existing;
+  }
 
   const email =
     user.primaryEmailAddress?.emailAddress ??
@@ -45,7 +72,8 @@ export async function ensureAccountFromClerkUser(): Promise<AccountRow | null> {
     "";
 
   const meta = (user.unsafeMetadata ?? {}) as UnsafeMeta;
-  const accountType = meta.account_type === "venue" ? "venue" : "host";
+  const accountType = deriveAccountTypeForNewUser(user.id, meta);
+
   const name =
     (typeof meta.name === "string" && meta.name.trim()) ||
     user.firstName ||
@@ -68,57 +96,10 @@ export async function ensureAccountFromClerkUser(): Promise<AccountRow | null> {
     throw new Error("Failed to create account");
   }
 
-  if (accountType === "venue") {
-    const address =
-      (typeof meta.address === "string" && meta.address.trim()) || `${city}`;
-    await db.insert(venues).values({
-      accountId: created.id,
-      address,
-    });
-
-    if (meta.has_host && meta.host_email) {
-      const hostEmail = meta.host_email.trim().toLowerCase();
-      if (hostEmail) {
-        const token = nanoid(32);
-        const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 14);
-        await db.insert(hostInvites).values({
-          venueAccountId: created.id,
-          email: hostEmail,
-          token,
-          expiresAt,
-        });
-        try {
-          await sendHostInviteEmail({
-            to: hostEmail,
-            venueName: name,
-            token,
-          });
-        } catch (err) {
-          console.error("Host invite email failed:", err);
-        }
-      }
-    }
-  }
-
-  if (accountType === "host" && typeof meta.invite_token === "string" && meta.invite_token) {
-    const inviteRows = await db
-      .select()
-      .from(hostInvites)
-      .where(eq(hostInvites.token, meta.invite_token))
-      .limit(1);
-    const invite = inviteRows[0];
-    if (invite && !invite.consumedAt && invite.expiresAt > new Date()) {
-      await db.insert(hostVenueRelationships).values({
-        hostId: created.id,
-        venueId: invite.venueAccountId,
-        status: "active",
-      });
-      await db
-        .update(hostInvites)
-        .set({ consumedAt: new Date() })
-        .where(eq(hostInvites.id, invite.id));
-    }
-  }
+  // Every account gets a `players` row so stats + upgrades-to-host carry over.
+  const preferred =
+    (typeof meta.player_username === "string" && meta.player_username.trim()) || name;
+  await ensurePlayerRowForAccount(created, preferred);
 
   return created;
 }

@@ -1,59 +1,119 @@
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  BarChart3,
+  Flag,
+  FolderTree,
+  Inbox,
+  Library,
+  ListChecks,
+  Sparkles,
+  Users2,
+} from "lucide-react";
+import { isSiteAdminOperator } from "@/lib/siteAdmin";
+import { Card, CardContent } from "@/components/ui/card";
+import { SectionHeader } from "@/components/ui/section-header";
 
-export default function AdminHomePage() {
+type SectionTile = {
+  href: string;
+  title: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  operatorOnly?: boolean;
+};
+
+const TILES: SectionTile[] = [
+  {
+    href: "/admin/questions",
+    title: "Question studio",
+    description: "Filter, edit, retire, or create vetted questions.",
+    icon: Library,
+  },
+  {
+    href: "/admin/questions?view=review",
+    title: "Draft review",
+    description: "Approve or reject AI-generated drafts waiting for you.",
+    icon: ListChecks,
+    operatorOnly: true,
+  },
+  {
+    href: "/admin/questions?view=generate",
+    title: "Generate",
+    description: "Queue up AI generation across coverage gaps.",
+    icon: Sparkles,
+    operatorOnly: true,
+  },
+  {
+    href: "/admin/questions?view=taxonomy",
+    title: "Taxonomy",
+    description: "Manage categories, subcategories, and coverage targets.",
+    icon: FolderTree,
+    operatorOnly: true,
+  },
+  {
+    href: "/admin/deck-submissions",
+    title: "Deck submissions",
+    description: "Approve or reject host-submitted public decks.",
+    icon: Inbox,
+    operatorOnly: true,
+  },
+  {
+    href: "/admin/flags",
+    title: "Flag queue",
+    description: "Review host-reported problem questions.",
+    icon: Flag,
+  },
+  {
+    href: "/admin/accounts",
+    title: "Accounts",
+    description: "Subscription status and venue roster.",
+    icon: Users2,
+  },
+  {
+    href: "/admin/stats",
+    title: "Category stats",
+    description: "Vetted question counts by category.",
+    icon: BarChart3,
+  },
+];
+
+export default async function AdminHomePage() {
+  const siteOperator = await isSiteAdminOperator();
+  const visibleTiles = TILES.filter((t) => !t.operatorOnly || siteOperator);
+
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <Card>
-        <CardHeader>
-          <CardTitle>Questions</CardTitle>
-        </CardHeader>
-        <CardContent className="text-muted-foreground text-sm">
-          <Link className="text-primary font-medium underline" href="/admin/questions">
-            Open question manager
-          </Link>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Flags</CardTitle>
-        </CardHeader>
-        <CardContent className="text-muted-foreground text-sm">
-          <Link className="text-primary font-medium underline" href="/admin/flags">
-            Review host flags
-          </Link>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Accounts</CardTitle>
-        </CardHeader>
-        <CardContent className="text-muted-foreground text-sm">
-          <Link className="text-primary font-medium underline" href="/admin/accounts">
-            Subscription overview
-          </Link>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Importer</CardTitle>
-        </CardHeader>
-        <CardContent className="text-muted-foreground text-sm">
-          <Link className="text-primary font-medium underline" href="/admin/import">
-            Bulk JSON import
-          </Link>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Category stats</CardTitle>
-        </CardHeader>
-        <CardContent className="text-muted-foreground text-sm">
-          <Link className="text-primary font-medium underline" href="/admin/stats">
-            Vetted counts by category
-          </Link>
-        </CardContent>
-      </Card>
+    <div className="flex flex-col gap-8">
+      <SectionHeader
+        as="h1"
+        eyebrow="Admin"
+        title="Control room"
+        description="Everything to keep the question pool, decks, and operator signals healthy."
+      />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {visibleTiles.map((tile) => {
+          const Icon = tile.icon;
+          return (
+            <Link
+              key={tile.href}
+              href={tile.href}
+              className="group rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Card className="h-full ring-1 ring-border shadow-[var(--shadow-card)] transition-all group-hover:ring-border/80 group-hover:-translate-y-0.5">
+                <CardContent className="flex flex-col gap-3 p-5">
+                  <div className="flex size-10 items-center justify-center rounded-lg bg-muted/60 text-foreground ring-1 ring-border">
+                    <Icon className="size-5" />
+                  </div>
+                  <div>
+                    <div className="text-base font-semibold tracking-tight text-foreground">
+                      {tile.title}
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">{tile.description}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }

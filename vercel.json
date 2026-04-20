@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/auto-launch-sessions",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/autopilot-tick",
+      "schedule": "*/1 * * * *"
+    },
+    {
+      "path": "/api/cron/question-generation-jobs/run",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

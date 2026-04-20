@@ -55,13 +55,18 @@ export function BulkImporter() {
   }
 
   return (
-    <Card>
+    <Card className="ring-1 ring-border shadow-[var(--shadow-card)]">
       <CardHeader>
-        <CardTitle>Bulk import</CardTitle>
+        <CardTitle className="text-base font-semibold tracking-tight">Bulk import</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={14} className="font-mono text-xs" />
-        <div className="text-muted-foreground text-sm">
+        <Textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={14}
+          className="font-mono text-xs"
+        />
+        <div className="text-sm text-muted-foreground tabular-nums">
           {preview.ok ? `Ready to import ${preview.count} questions.` : preview.error}
         </div>
         <Button type="button" disabled={busy || !preview.ok} onClick={() => void approve()}>

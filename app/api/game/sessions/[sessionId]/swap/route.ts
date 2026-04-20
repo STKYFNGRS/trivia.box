@@ -7,6 +7,8 @@ import { db } from "@/lib/db/client";
 import { questions, rounds, sessionQuestions } from "@/lib/db/schema";
 import { smartPullQuestions } from "@/lib/game/questionPull";
 import { assertHostControlsSession } from "@/lib/game/sessionPermissions";
+import { hasEffectiveOrganizerSubscription } from "@/lib/subscription";
+import { apiErrorResponse } from "@/lib/apiError";
 
 const bodySchema = z.object({
   sessionQuestionId: z.string().uuid(),
@@ -23,7 +25,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ sessionId: str
   if (!account) {
     return NextResponse.json({ error: "Account not found" }, { status: 400 });
   }
-  if (!account.subscriptionActive) {
+  if (!hasEffectiveOrganizerSubscription(account)) {
     return NextResponse.json({ error: "Subscription required" }, { status: 402 });
   }
 
@@ -87,12 +89,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ sessionId: str
     }
 
     const replacement = await db
-      .select({ id: questions.id })
+      .select({ id: questions.id, category: questions.category })
       .from(questions)
       .where(and(eq(questions.id, newQuestionId), eq(questions.vetted, true), eq(questions.retired, false)))
       .limit(1);
     if (replacement.length === 0) {
       return NextResponse.json({ error: "Invalid replacement" }, { status: 400 });
+    }
+    // A manual swap must keep the round on-theme: the replacement question's
+    // category has to match the round category the host already configured.
+    if (parsed.data.newQuestionId && replacement[0]!.category !== round.category) {
+      return NextResponse.json(
+        {
+          error: `Replacement category (${replacement[0]!.category}) does not match round category (${round.category})`,
+        },
+        { status: 400 }
+      );
     }
 
     const dup = await db
@@ -117,6 +129,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ sessionId: str
 
     return NextResponse.json({ ok: true, questionId: newQuestionId });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "Error" }, { status: 400 });
+    return apiErrorResponse(e);
   }
 }

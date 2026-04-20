@@ -1,15 +1,13 @@
 import { auth } from "@clerk/nextjs/server";
-import { eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getAccountByClerkUserId } from "@/lib/accounts";
-import { db } from "@/lib/db/client";
-import { questionVenueHistory, questions, sessionQuestions, sessions } from "@/lib/db/schema";
-import { publishGameEvent } from "@/lib/ably/server";
-import { generateUniqueJoinCode } from "@/lib/game/joinCode";
+import { LaunchBlockedError, launchSession } from "@/lib/game/launchSession";
 import { assertHostControlsSession } from "@/lib/game/sessionPermissions";
+import { hasEffectiveOrganizerSubscription } from "@/lib/subscription";
+import { apiErrorResponse } from "@/lib/apiError";
 
 export async function POST(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ sessionId: string }> }
 ) {
   const { userId } = await auth();
@@ -21,52 +19,49 @@ export async function POST(
   if (!account) {
     return NextResponse.json({ error: "Account not found" }, { status: 400 });
   }
-  if (!account.subscriptionActive) {
+  if (!hasEffectiveOrganizerSubscription(account)) {
     return NextResponse.json({ error: "Subscription required" }, { status: 402 });
   }
 
   const { sessionId } = await ctx.params;
+  const url = new URL(req.url);
+  const force = url.searchParams.get("force") === "1";
 
   try {
     const session = await assertHostControlsSession(account, sessionId);
-    if (session.status !== "pending") {
-      return NextResponse.json({ error: "Session already launched" }, { status: 400 });
-    }
-
-    const joinCode = await generateUniqueJoinCode();
-
-    await db.transaction(async (tx) => {
-      const qRows = await tx
-        .select({ questionId: sessionQuestions.questionId })
-        .from(sessionQuestions)
-        .where(eq(sessionQuestions.sessionId, sessionId))
-        .groupBy(sessionQuestions.questionId);
-
-      for (const row of qRows) {
-        await tx.insert(questionVenueHistory).values({
-          questionId: row.questionId,
-          venueAccountId: session.venueAccountId,
-        });
-        await tx
-          .update(questions)
-          .set({ timesUsed: sql`${questions.timesUsed} + 1` })
-          .where(eq(questions.id, row.questionId));
-      }
-
-      await tx
-        .update(sessions)
-        .set({ joinCode, status: "active" })
-        .where(eq(sessions.id, sessionId));
-    });
-
-    await publishGameEvent(joinCode, "game_launched", {
-      joinCode,
-      venueAccountId: session.venueAccountId,
-      hostAccountId: session.hostAccountId,
-    });
-
+    const { joinCode } = await launchSession({ session, force });
     return NextResponse.json({ joinCode });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "Error" }, { status: 400 });
+    if (e instanceof LaunchBlockedError) {
+      switch (e.reason) {
+        case "already_launched":
+          return NextResponse.json({ error: "Session already launched" }, { status: 400 });
+        case "too_early":
+          return NextResponse.json(
+            {
+              error: "Too early to launch. Add ?force=1 to launch now.",
+              eventStartsAt: e.eventStartsAt,
+            },
+            { status: 400 }
+          );
+        case "too_late":
+          return NextResponse.json(
+            {
+              error: "This session's scheduled window has passed. Add ?force=1 to launch now.",
+              eventStartsAt: e.eventStartsAt,
+            },
+            { status: 400 }
+          );
+        case "venue_busy":
+          return NextResponse.json(
+            {
+              error: "This venue already has an active game. Finish it before starting a new one.",
+              code: "VENUE_BUSY",
+            },
+            { status: 409 }
+          );
+      }
+    }
+    return apiErrorResponse(e);
   }
 }

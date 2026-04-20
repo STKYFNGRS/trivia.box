@@ -1,14 +1,15 @@
 import { GameSetup } from "@/components/dashboard/GameSetup";
+import { SectionHeader } from "@/components/ui/section-header";
 
 export default function NewGamePage() {
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">New game</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Configure rounds, pull vetted questions, preview swaps, then launch.
-        </p>
-      </div>
+      <SectionHeader
+        as="h1"
+        eyebrow="New game"
+        title="Plan a session"
+        description="Set when the event runs (with time zone) and optional prize info for players browsing upcoming games. Then configure rounds, preview, and launch."
+      />
       <GameSetup />
     </div>
   );
