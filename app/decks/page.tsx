@@ -52,15 +52,26 @@ export default async function DecksMarketplacePage({
           description="Curated collections from trivia hosts, writers, and superfans. Use them in your next game."
           className="text-white [&_*]:text-white [&_p]:text-white/70"
           actions={
-            <Link
-              href="/play"
-              className={cn(
-                buttonVariants({ variant: "outline", size: "sm" }),
-                "border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white"
-              )}
-            >
-              Play now
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/play"
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "sm" }),
+                  "border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white"
+                )}
+              >
+                Play now
+              </Link>
+              <Link
+                href="/dashboard/decks"
+                className={cn(
+                  buttonVariants({ size: "sm" }),
+                  "bg-[var(--stage-accent)] text-slate-950 hover:bg-[var(--stage-accent)]/90"
+                )}
+              >
+                Create a deck
+              </Link>
+            </div>
           }
         />
 
@@ -115,9 +126,20 @@ export default async function DecksMarketplacePage({
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {decks.length === 0 ? (
               <Card className="col-span-full border-white/10 bg-white/[0.04] text-white backdrop-blur">
-                <CardContent className="flex items-center gap-3 p-6 text-sm text-white/70">
-                  <Library className="size-5" />
-                  No decks match those filters yet. Be the first to publish one.
+                <CardContent className="flex flex-col gap-3 p-6 text-sm text-white/70 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <Library className="size-5" />
+                    No decks match those filters yet. Be the first to publish one.
+                  </div>
+                  <Link
+                    href="/dashboard/decks"
+                    className={cn(
+                      buttonVariants({ size: "sm" }),
+                      "w-fit bg-[var(--stage-accent)] text-slate-950 hover:bg-[var(--stage-accent)]/90"
+                    )}
+                  >
+                    Create a deck
+                  </Link>
                 </CardContent>
               </Card>
             ) : (

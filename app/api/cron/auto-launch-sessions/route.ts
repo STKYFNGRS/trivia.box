@@ -16,9 +16,11 @@ const bodySchema = z.object({
  * Vercel cron / worker: finds pending autopilot sessions whose
  * `eventStartsAt` has arrived and launches them. Guarded by `CRON_SECRET`.
  *
- * Recommended schedule: every 1 minute.
+ * Recommended schedule: every 1 minute. Both GET and POST are accepted —
+ * Vercel Cron issues GET by default, and we still expose POST so local /
+ * integration tests can pass `maxSessions` / `nowMs` overrides.
  */
-export async function POST(req: Request) {
+async function run(req: Request) {
   const secret = process.env.CRON_SECRET?.trim();
   if (!secret) {
     return NextResponse.json({ error: "CRON_SECRET is not configured" }, { status: 503 });
@@ -27,8 +29,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const json = await req.json().catch(() => ({}));
-  const parsed = bodySchema.safeParse(json);
+  // POST can carry overrides in the body; GET (Vercel Cron default) gets the
+  // schema defaults. Either way we clamp via zod.
+  let rawBody: unknown = {};
+  if (req.method === "POST") {
+    rawBody = await req.json().catch(() => ({}));
+  }
+  const parsed = bodySchema.safeParse(rawBody);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
@@ -99,3 +106,12 @@ export async function POST(req: Request) {
     results,
   });
 }
+
+export async function GET(req: Request) {
+  return run(req);
+}
+export async function POST(req: Request) {
+  return run(req);
+}
+
+export const dynamic = "force-dynamic";

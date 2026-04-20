@@ -1,3 +1,4 @@
+import { SignedOut } from "@clerk/nextjs";
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import { Dice5, Gamepad2, Library, LogIn, ScanQrCode, Timer } from "lucide-react";
 import Link from "next/link";
@@ -47,6 +48,7 @@ export default async function PlayHubPage() {
       joinCode: sessions.joinCode,
       eventStartsAt: sessions.eventStartsAt,
       eventTimezone: sessions.eventTimezone,
+      theme: sessions.theme,
       venueName: accounts.name,
       venueCity: accounts.city,
       venueSlug: venueProfiles.slug,
@@ -111,7 +113,7 @@ export default async function PlayHubPage() {
             tone="magenta"
             href="/play/solo"
             icon={<Dice5 className="size-5" aria-hidden />}
-            title="Play solo"
+            title="Solo game"
             description="Pick your pace and categories. Server-timed, server-scored. Sign in to earn XP."
             ctaLabel="Start a solo run"
           />
@@ -119,7 +121,7 @@ export default async function PlayHubPage() {
             tone="cyan"
             href="/join"
             icon={<ScanQrCode className="size-5" aria-hidden />}
-            title="Join with a code"
+            title="Join a game"
             description="Your host shared a 6-letter code. Drop it in and you're at the table."
             ctaLabel="Enter code"
           />
@@ -127,7 +129,7 @@ export default async function PlayHubPage() {
             tone="lime"
             href="/games/upcoming"
             icon={<Gamepad2 className="size-5" aria-hidden />}
-            title="Upcoming nights"
+            title="Find an upcoming game"
             description="Browse every public hosted game across the platform. Show up, bring friends."
             ctaLabel="See what's on"
           />
@@ -184,6 +186,9 @@ export default async function PlayHubPage() {
                         ) : (
                           <StatusPill tone="neutral">Scheduled</StatusPill>
                         )}
+                        {g.theme ? (
+                          <StatusPill tone="info">{g.theme}</StatusPill>
+                        ) : null}
                       </div>
                       <div className="mt-0.5 truncate text-xs text-white/60">
                         {g.venueCity ? `${g.venueCity} · ` : ""}
@@ -206,38 +211,40 @@ export default async function PlayHubPage() {
           )}
         </div>
 
-        <div className="mt-12 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
-          <div className="flex items-start gap-3">
-            <LogIn className="mt-0.5 size-5 text-white/60" aria-hidden />
-            <div>
-              <div className="font-semibold tracking-tight">Want XP, streaks, and a leaderboard rank?</div>
-              <p className="mt-1 text-sm text-white/70">
-                Solo runs are playable anonymously, but signing in keeps your best streaks,
-                fastest times, and lifetime points across every game.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Link
-                  href="/sign-in"
-                  className={cn(
-                    buttonVariants({ size: "sm", variant: "outline" }),
-                    "border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white"
-                  )}
-                >
-                  Sign in
-                </Link>
-                <Link
-                  href="/sign-up"
-                  className={cn(
-                    buttonVariants({ size: "sm" }),
-                    "bg-[var(--stage-accent)] text-slate-950 hover:bg-[var(--stage-accent)]/90"
-                  )}
-                >
-                  Create a free account
-                </Link>
+        <SignedOut>
+          <div className="mt-12 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+            <div className="flex items-start gap-3">
+              <LogIn className="mt-0.5 size-5 text-white/60" aria-hidden />
+              <div>
+                <div className="font-semibold tracking-tight">Want XP, streaks, and a leaderboard rank?</div>
+                <p className="mt-1 text-sm text-white/70">
+                  Solo runs are playable anonymously, but signing in keeps your best streaks,
+                  fastest times, and lifetime points across every game.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Link
+                    href="/sign-in"
+                    className={cn(
+                      buttonVariants({ size: "sm", variant: "outline" }),
+                      "border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white"
+                    )}
+                  >
+                    Sign in
+                  </Link>
+                  <Link
+                    href="/sign-up"
+                    className={cn(
+                      buttonVariants({ size: "sm" }),
+                      "bg-[var(--stage-accent)] text-slate-950 hover:bg-[var(--stage-accent)]/90"
+                    )}
+                  >
+                    Create a free account
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </SignedOut>
       </div>
     </MarketingShell>
   );

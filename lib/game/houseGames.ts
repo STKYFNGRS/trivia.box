@@ -1,9 +1,8 @@
-import { and, asc, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, or, sql } from "drizzle-orm";
 import { customAlphabet } from "nanoid";
 import { db } from "@/lib/db/client";
 import {
   accounts,
-  questionCategories,
   questions,
   rounds,
   sessionQuestions,
@@ -14,7 +13,7 @@ import { smartPullQuestions } from "@/lib/game/questionPull";
 /**
  * Always-on "house" games.
  *
- * The platform runs a free-to-play hosted game every 15 minutes so a player
+ * The platform runs a free-to-play hosted game every 30 minutes so a player
  * landing on `/play` always has something waiting for them. House games:
  *
  *  - Use a dedicated platform account as both host and venue so the venue
@@ -23,6 +22,10 @@ import { smartPullQuestions } from "@/lib/game/questionPull";
  *    first `site_admin` account (useful locally). If neither exists the
  *    cron is a no-op and logs.
  *  - Always run in autopilot mode with 3 rounds of 5 questions each.
+ *  - Are *topic themed*: every round pulls from a single vetted subcategory
+ *    ("90s movies", "NBA finals", …) so the whole session feels like a
+ *    mini-trivia night, not a random firehose. The chosen label is stored
+ *    on `sessions.theme` so the UI can render a pill.
  *  - Are created ~10 minutes before `eventStartsAt` so players see them
  *    listed on the Play hub; the existing autopilot launcher cron picks
  *    them up at the scheduled time.
@@ -32,8 +35,9 @@ import { smartPullQuestions } from "@/lib/game/questionPull";
 const HOUSE_ROUND_COUNT = 3;
 const HOUSE_QUESTIONS_PER_ROUND = 5;
 const HOUSE_SECONDS_PER_QUESTION = 15;
-/** Grid the cron schedules house games on. `15` → games at :00, :15, :30, :45. */
-const HOUSE_INTERVAL_MIN = 15;
+/** Grid the cron schedules house games on. `30` → games at :00 and :30. */
+const HOUSE_INTERVAL_MIN = 30;
+const HOUSE_MIN_QUESTIONS_PER_THEME = HOUSE_ROUND_COUNT * HOUSE_QUESTIONS_PER_ROUND;
 
 const placeholder = customAlphabet("abcdefghijklmnopqrstuvwxyz0123456789", 18);
 
@@ -85,44 +89,44 @@ export async function hasUpcomingHouseGame(
   return rows.length > 0;
 }
 
-async function pickHouseCategories(): Promise<string[]> {
-  // Prefer taxonomy ordering so house games cover the "showcase" categories
-  // first, but fall back to raw `questions.category` if taxonomy is empty.
-  const cats = await db
-    .select({ label: questionCategories.label })
-    .from(questionCategories)
-    .where(eq(questionCategories.active, true))
-    .orderBy(asc(questionCategories.sortOrder), asc(questionCategories.label));
+/**
+ * Pick a single vetted subcategory with enough questions to cover every
+ * round of the house game. Returns the theme label (subcategory) along with
+ * its parent category so `smartPullQuestions` can still apply its category
+ * filter and round-appropriate bias. Returns `null` if no subcategory has
+ * sufficient vetted questions — caller treats that as a skippable no-op.
+ */
+async function pickHouseTheme(): Promise<{
+  label: string;
+  category: string;
+} | null> {
+  const rows = await db
+    .select({
+      subcategory: questions.subcategory,
+      category: questions.category,
+      n: sql<number>`count(*)`,
+    })
+    .from(questions)
+    .where(and(eq(questions.vetted, true), eq(questions.retired, false)))
+    .groupBy(questions.subcategory, questions.category)
+    .having(sql`count(*) >= ${HOUSE_MIN_QUESTIONS_PER_THEME}`);
 
-  const labels = cats.length
-    ? cats.map((c) => c.label)
-    : (
-        await db
-          .select({ label: questions.category })
-          .from(questions)
-          .where(and(eq(questions.vetted, true), eq(questions.retired, false)))
-          .groupBy(questions.category)
-          .orderBy(desc(sql`count(*)`))
-      ).map((r) => r.label);
+  if (rows.length === 0) return null;
 
-  if (labels.length === 0) return [];
-
-  // Random subset of 3 (or whatever we have), preferring labels with the most
-  // vetted questions.
-  const shuffled = [...labels].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, HOUSE_ROUND_COUNT);
+  const pick = rows[Math.floor(Math.random() * rows.length)]!;
+  return { label: pick.subcategory, category: pick.category };
 }
 
 /**
- * Create a single house game landing at the next 15-minute boundary from
- * `now`. Returns the new session id + pending join code (the real join code
- * is issued at launch time). Throws if we can't find a platform account to
- * own the game.
+ * Create a single house game landing at the next boundary from `now`
+ * (default grid is :00 / :30 UTC). Returns the new session id + chosen
+ * theme. Throws if we can't find a platform account to own the game.
  */
 export async function createHouseSession(now: Date): Promise<{
   sessionId: string;
   eventStartsAt: Date;
-  categories: string[];
+  theme: string;
+  category: string;
 }> {
   const houseAccountId = await resolveHouseAccountId();
   if (!houseAccountId) {
@@ -132,33 +136,33 @@ export async function createHouseSession(now: Date): Promise<{
   }
 
   const eventStartsAt = nextBoundaryMinutes(now, HOUSE_INTERVAL_MIN);
-  const categories = await pickHouseCategories();
-  if (categories.length === 0) {
-    throw new Error("No vetted questions available to seed a house game");
+  const theme = await pickHouseTheme();
+  if (!theme) {
+    throw new Error(
+      `No vetted subcategory has ≥${HOUSE_MIN_QUESTIONS_PER_THEME} questions to seed a themed house game`
+    );
   }
 
-  const roundPlans: Array<{ category: string; questions: { id: string }[] }> = [];
+  // Every round pulls from the same (category, subcategory) tuple so the
+  // session stays on-topic end-to-end.
   const chosen = new Set<string>();
-  for (let i = 0; i < categories.length; i++) {
-    const cat = categories[i]!;
+  const roundPlans: Array<{ questions: { id: string }[] }> = [];
+  for (let i = 0; i < HOUSE_ROUND_COUNT; i++) {
     const picked = await smartPullQuestions({
       venueAccountId: houseAccountId,
       roundNumber: i + 1,
-      category: cat,
+      category: theme.category,
+      subcategory: theme.label,
       count: HOUSE_QUESTIONS_PER_ROUND,
       excludeQuestionIds: [...chosen],
     });
     for (const q of picked) chosen.add(q.id);
-    if (picked.length < HOUSE_QUESTIONS_PER_ROUND) {
-      // Not enough to keep the round meaningful; skip and hope the other
-      // rounds are healthy. We still create the session so the cron doesn't
-      // get stuck retrying.
-      if (picked.length === 0) continue;
-    }
-    roundPlans.push({ category: cat, questions: picked });
+    if (picked.length === 0) continue;
+    roundPlans.push({ questions: picked });
   }
+
   if (roundPlans.length === 0) {
-    throw new Error("Could not pull any vetted questions for house game rounds");
+    throw new Error("Could not pull any vetted questions for themed house game rounds");
   }
 
   const pendingCode = `pending_${placeholder()}`;
@@ -180,6 +184,7 @@ export async function createHouseSession(now: Date): Promise<{
         prizeDescription: null,
         listedPublic: true,
         houseGame: true,
+        theme: theme.label,
       })
       .returning({ id: sessions.id });
 
@@ -192,7 +197,7 @@ export async function createHouseSession(now: Date): Promise<{
         .values({
           sessionId: session.id,
           roundNumber: i + 1,
-          category: plan.category,
+          category: theme.category,
           secondsPerQuestion: HOUSE_SECONDS_PER_QUESTION,
         })
         .returning({ id: rounds.id });
@@ -213,7 +218,12 @@ export async function createHouseSession(now: Date): Promise<{
     return session.id;
   });
 
-  return { sessionId, eventStartsAt, categories: roundPlans.map((p) => p.category) };
+  return {
+    sessionId,
+    eventStartsAt,
+    theme: theme.label,
+    category: theme.category,
+  };
 }
 
 /**
@@ -222,13 +232,23 @@ export async function createHouseSession(now: Date): Promise<{
  */
 export async function scheduleNextHouseGame(now: Date): Promise<
   | { created: false; reason: string }
-  | { created: true; sessionId: string; eventStartsAt: Date; categories: string[] }
+  | {
+      created: true;
+      sessionId: string;
+      eventStartsAt: Date;
+      theme: string;
+      category: string;
+    }
 > {
   const houseAccountId = await resolveHouseAccountId();
   if (!houseAccountId) {
     return { created: false, reason: "no_house_account" };
   }
-  const alreadyPlanned = await hasUpcomingHouseGame(houseAccountId, now, 30);
+  const alreadyPlanned = await hasUpcomingHouseGame(
+    houseAccountId,
+    now,
+    HOUSE_INTERVAL_MIN
+  );
   if (alreadyPlanned) {
     return { created: false, reason: "already_scheduled" };
   }

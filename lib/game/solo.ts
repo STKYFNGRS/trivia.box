@@ -7,7 +7,7 @@ import {
   soloQuestions,
   soloSessions,
 } from "@/lib/db/schema";
-import { BASE_POINTS, STREAK_BONUSES, computeAnswerPoints } from "@/lib/game/scoring";
+import { STREAK_BONUSES, computeAnswerPoints } from "@/lib/game/scoring";
 import {
   MAX_SOLO_QUESTIONS,
   MIN_SOLO_QUESTIONS,
@@ -547,6 +547,7 @@ export async function loadSoloRecap(soloSessionId: string) {
     startedAt: session.startedAt,
     completedAt: session.completedAt,
     questions: rows,
-    maxScorePerQuestion: BASE_POINTS + Math.max(...Object.values(STREAK_BONUSES)),
+    maxScorePerQuestion:
+      (session.timerSeconds ?? 15) + Math.max(...Object.values(STREAK_BONUSES)),
   };
 }

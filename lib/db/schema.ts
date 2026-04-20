@@ -344,8 +344,14 @@ export const sessions = pgTable(
      * legacy rows created before this column existed.
      */
     estimatedEndAt: timestamp("estimated_end_at", { withTimezone: true }),
-    /** Free-to-play "house" session scheduled every 15 minutes by the cron. */
+    /** Free-to-play "house" session scheduled on a fixed minute grid by the cron. */
     houseGame: boolean("house_game").notNull().default(false),
+    /**
+     * Human-readable theme label for house games ("90s movies", "NBA finals", etc).
+     * Populated from the chosen subcategory when the cron creates the session.
+     * Optional for hosted sessions.
+     */
+    theme: text("theme"),
     listedPublic: boolean("listed_public").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

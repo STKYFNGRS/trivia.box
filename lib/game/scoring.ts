@@ -14,39 +14,43 @@ import {
 import { tryGrantAchievementsAfterAnswer } from "@/lib/game/achievements";
 import { awardCorrectAnswerXp } from "@/lib/xp";
 
-/** Base points for a correct answer at t=0. */
-export const BASE_POINTS = 1000;
-
 /** Streak bonus thresholds. If a correct answer brings the player to one of
- *  these streak counts, add the value on top of the time-weighted base. */
+ *  these streak counts, add the value on top of the speed-based base. Sized
+ *  to roughly match a typical fast correct answer (~10 pts) so streaks feel
+ *  rewarding without distorting the per-question economy. */
 export const STREAK_BONUSES: Record<number, number> = {
-  3: 100,
-  5: 200,
-  7: 300,
-  10: 500,
+  3: 3,
+  5: 5,
+  7: 10,
+  10: 15,
 };
+
+/** Fallback "base" used only when the session has no valid timer to subtract
+ *  elapsed seconds from. Rare; manual-timer sessions with no round override.
+ *  Kept small to stay within the new economy. */
+export const NO_TIMER_FALLBACK_POINTS = 5;
 
 export type PointsBreakdown = {
   points: number;
   basePoints: number;
   streakBonus: number;
   newStreak: number;
+  /** Elapsed-vs-timer ratio remaining at answer time, in [0, 1]. Telemetry. */
   fraction: number;
 };
 
 /**
- * Kahoot-style scoring.
+ * Speed-weighted scoring.
  *
- * - Wrong answer → 0 points, streak resets to 0.
- * - Correct answer → `BASE_POINTS * (0.5 + 0.5 * fraction)` rounded to the
- *   nearest integer, where `fraction = max(0, 1 - elapsed/timerMs)`. Answering
- *   instantly gives full points; right at the buzzer still gives half.
- * - When the new streak matches a threshold in `STREAK_BONUSES`, that bonus is
- *   added on top.
+ * - Wrong / unanswered → 0 points, streak resets to 0.
+ * - Correct → `max(0, timerSeconds - floor(elapsedMs / 1000))`. So a 15s
+ *   timer answered in 2s gives 13 points; right at the buzzer gives 0.
+ * - When the new streak matches a threshold in `STREAK_BONUSES`, the flat
+ *   bonus is added on top.
  *
- * `timerSeconds` may be null/0 in degenerate cases (e.g. manual-timer sessions
- * with no round override). We treat those as a flat 750 points to avoid
- * divide-by-zero while still rewarding correctness.
+ * `timerSeconds` may be null/0 in degenerate cases (manual-timer sessions
+ * with no round override). We award a flat `NO_TIMER_FALLBACK_POINTS` so
+ * correctness still pays out without a divide-by-zero.
  */
 export function computeAnswerPoints(input: {
   isCorrect: boolean;
@@ -65,19 +69,24 @@ export function computeAnswerPoints(input: {
     };
   }
 
-  const timerMs =
+  const timerS =
     typeof input.timerSeconds === "number" && input.timerSeconds > 0
-      ? input.timerSeconds * 1000
+      ? input.timerSeconds
       : 0;
 
-  let fraction = 1;
-  if (timerMs > 0) {
-    const elapsed = Math.max(0, Math.min(input.timeToAnswerMs, timerMs));
-    fraction = 1 - elapsed / timerMs;
+  let basePoints: number;
+  let fraction: number;
+  if (timerS > 0) {
+    const elapsedS = Math.min(
+      timerS,
+      Math.floor(Math.max(0, input.timeToAnswerMs) / 1000)
+    );
+    basePoints = Math.max(0, timerS - elapsedS);
+    fraction = (timerS - elapsedS) / timerS;
   } else {
-    fraction = 0.5; // flat 750 when we have no timer signal.
+    basePoints = NO_TIMER_FALLBACK_POINTS;
+    fraction = 0.5;
   }
-  const basePoints = Math.round(BASE_POINTS * (0.5 + 0.5 * fraction));
 
   const newStreak = previousStreak + 1;
   const streakBonus = STREAK_BONUSES[newStreak] ?? 0;

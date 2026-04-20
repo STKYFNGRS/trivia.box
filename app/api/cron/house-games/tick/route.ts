@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { scheduleNextHouseGame } from "@/lib/game/houseGames";
 
 /**
- * Vercel cron hook: called every 15 minutes to ensure there is always an
- * upcoming free-to-play "house" game waiting for players on `/play`. Idempotent
- * — if the next 30 minutes already have a house game, the tick is a no-op.
+ * Vercel cron hook: called periodically to ensure there is always an upcoming
+ * free-to-play "house" game waiting for players on `/play`. Games land on a
+ * 30-minute grid (`:00` / `:30` UTC). Idempotent — if a pending or active
+ * house game already exists within the current grid window, the tick is a
+ * no-op.
  *
  * The existing `auto-launch-sessions` cron picks up the pending house session
  * once `eventStartsAt` arrives, so we don't duplicate the launch logic here.

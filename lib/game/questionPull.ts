@@ -54,6 +54,8 @@ function roundBoost(roundNumber: number): number {
 export async function countSmartPullEligible(input: {
   venueAccountId: string;
   category: string;
+  /** Optional narrower filter (e.g. "90s movies") used by themed house games. */
+  subcategory?: string;
   excludeQuestionIds: string[];
 }): Promise<number> {
   const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
@@ -80,6 +82,7 @@ export async function countSmartPullEligible(input: {
         eq(questions.vetted, true),
         eq(questions.retired, false),
         eq(questions.category, input.category),
+        input.subcategory ? eq(questions.subcategory, input.subcategory) : undefined,
         excludeList.length ? notInArray(questions.id, excludeList) : undefined
       )
     );
@@ -90,11 +93,18 @@ export async function countSmartPullEligible(input: {
 /**
  * Smart pull: vetted, not retired, not used at venue in last 90 days,
  * max 2 per subcategory (soft constraint, relaxed if needed), harder bias in later rounds.
+ *
+ * When `subcategory` is provided, all candidates are narrowed to that topic —
+ * used by themed house games so every round sticks to the same subject. The
+ * max-2-per-subcategory soft constraint is skipped in that case (every row
+ * shares a single subcategory, so the constraint would starve the round).
  */
 export async function smartPullQuestions(input: {
   venueAccountId: string;
   roundNumber: number;
   category: string;
+  /** Optional narrower filter (e.g. "90s movies") used by themed house games. */
+  subcategory?: string;
   count: number;
   excludeQuestionIds: string[];
 }): Promise<PulledQuestion[]> {
@@ -122,6 +132,7 @@ export async function smartPullQuestions(input: {
         eq(questions.vetted, true),
         eq(questions.retired, false),
         eq(questions.category, input.category),
+        input.subcategory ? eq(questions.subcategory, input.subcategory) : undefined,
         excludeList.length ? notInArray(questions.id, excludeList) : undefined
       )
     );
@@ -138,18 +149,24 @@ export async function smartPullQuestions(input: {
   weighted.sort((a, b) => b.w - a.w);
   const ordered = weighted.map((x) => x.q);
 
+  // Themed pulls collapse to the chosen subcategory, so the max-2-per-subcat
+  // guard would starve them. Skip the guard in that mode.
+  const enforceSubcatCap = !input.subcategory;
+
   const picked: PulledQuestion[] = [];
   const subcatCounts = new Map<string, number>();
 
   for (const q of ordered) {
     if (picked.length >= input.count) break;
-    const c = subcatCounts.get(q.subcategory) ?? 0;
-    if (c >= 2) continue;
+    if (enforceSubcatCap) {
+      const c = subcatCounts.get(q.subcategory) ?? 0;
+      if (c >= 2) continue;
+      subcatCounts.set(q.subcategory, c + 1);
+    }
     picked.push(q);
-    subcatCounts.set(q.subcategory, c + 1);
   }
 
-  if (picked.length < input.count) {
+  if (picked.length < input.count && enforceSubcatCap) {
     for (const q of shuffle(base)) {
       if (picked.length >= input.count) break;
       if (picked.some((p) => p.id === q.id)) continue;

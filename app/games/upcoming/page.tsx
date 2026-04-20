@@ -55,6 +55,8 @@ export default async function UpcomingGamesPage() {
       eventTimezone: sessions.eventTimezone,
       hasPrize: sessions.hasPrize,
       prizeDescription: sessions.prizeDescription,
+      theme: sessions.theme,
+      houseGame: sessions.houseGame,
     })
     .from(sessions)
     .innerJoin(accounts, eq(sessions.venueAccountId, accounts.id))
@@ -149,6 +151,12 @@ export default async function UpcomingGamesPage() {
                           <StatusPill tone={g.runMode === "autopilot" ? "info" : "accent"}>
                             {g.runMode === "autopilot" ? "Autopilot" : "Hosted"}
                           </StatusPill>
+                          {g.houseGame ? (
+                            <StatusPill tone="accent">House</StatusPill>
+                          ) : null}
+                          {g.theme ? (
+                            <StatusPill tone="info">{g.theme}</StatusPill>
+                          ) : null}
                         </div>
                         <div className="mt-1 text-sm tabular-nums text-white/70">
                           {g.venueCity ? (
