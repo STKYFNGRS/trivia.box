@@ -31,6 +31,11 @@ import {
   type VenueProfileSummary,
 } from "@/components/dashboard/venue/VenueProfileDialog";
 import { COMMON_IANA_TIMEZONES } from "@/lib/timezones";
+import {
+  autopilotEstimate,
+  computeEstimatedEndAt,
+  estimatedDurationMinutes,
+} from "@/lib/game/sessionEndTime";
 
 type VenueOption = {
   venueAccountId: string;
@@ -399,12 +404,92 @@ export function GameSetup() {
   const [hasPrize, setHasPrize] = useState(false);
   const [prizeDescription, setPrizeDescription] = useState("");
   const [listedPublic, setListedPublic] = useState(true);
+  /**
+   * Hosted-mode only: desired duration in minutes. Defaults to the
+   * autopilot estimate (questions * (seconds + buffer) + warmup). Empty
+   * string means "unset" so we fall back to the autopilot estimate on the
+   * server. Ignored while `runMode === "autopilot"`.
+   */
+  const [hostDurationMinutes, setHostDurationMinutes] = useState<string>("");
+  /**
+   * Hosted-mode only: explicit `datetime-local` override. When set this
+   * wins over `hostDurationMinutes`. Value is a local-wall-clock string in
+   * `YYYY-MM-DDTHH:mm` format, interpreted in the caller's browser TZ.
+   */
+  const [hostEndsAtOverride, setHostEndsAtOverride] = useState<string>("");
 
   const timezoneOptions = useMemo(() => {
     const set = new Set<string>([...COMMON_IANA_TIMEZONES]);
     set.add(browserTz);
     return [...set].sort();
   }, [browserTz]);
+
+  /**
+   * Live preview of the projected end time. Uses the same
+   * `computeEstimatedEndAt` helper the server uses so the host sees the
+   * exact value that will be persisted. Falls back to `null` while the
+   * date/time inputs are in an invalid transient state.
+   */
+  const endTimePreview = useMemo(() => {
+    const localIso = `${eventLocalDate}T${eventLocalTime}:00`;
+    const eventStartsAt = new Date(localIso);
+    if (Number.isNaN(eventStartsAt.getTime())) return null;
+    const questionCount = Math.max(1, rounds) * Math.max(1, perRound);
+    const overrideDate =
+      hostEndsAtOverride && runMode === "hosted" ? new Date(hostEndsAtOverride) : null;
+    const durationMinutes =
+      hostDurationMinutes && runMode === "hosted"
+        ? Math.max(0, Number(hostDurationMinutes) || 0)
+        : null;
+    const end = computeEstimatedEndAt({
+      eventStartsAt,
+      questionCount,
+      secondsPerQuestion: timerMode === "manual" ? null : seconds,
+      runMode,
+      hostDurationMinutes: durationMinutes,
+      hostOverrideEndsAt: overrideDate && !Number.isNaN(overrideDate.getTime()) ? overrideDate : null,
+    });
+    const autopilotEnd = autopilotEstimate({
+      eventStartsAt,
+      questionCount,
+      secondsPerQuestion: timerMode === "manual" ? null : seconds,
+      runMode: "autopilot",
+    });
+    const defaultDuration = estimatedDurationMinutes({
+      eventStartsAt,
+      questionCount,
+      secondsPerQuestion: timerMode === "manual" ? null : seconds,
+      runMode: "autopilot",
+    });
+    return { end, autopilotEnd, defaultDuration };
+  }, [
+    eventLocalDate,
+    eventLocalTime,
+    rounds,
+    perRound,
+    timerMode,
+    seconds,
+    runMode,
+    hostDurationMinutes,
+    hostEndsAtOverride,
+  ]);
+
+  const endTimePreviewLabel = useMemo(() => {
+    if (!endTimePreview) return null;
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone: eventTimezone,
+        timeZoneName: "short",
+      }).format(endTimePreview.end);
+    } catch {
+      return endTimePreview.end.toLocaleString();
+    }
+  }, [endTimePreview, eventTimezone]);
 
   function updateLine(idx: number, patch: Partial<RoundLine>) {
     setRoundLines((prev) => {
@@ -573,6 +658,12 @@ export function GameSetup() {
           hasPrize,
           listedPublic,
           prizeDescription: hasPrize ? prizeDescription.trim() || undefined : undefined,
+          ...(runMode === "hosted" && hostEndsAtOverride
+            ? { hostEndsAtOverride: new Date(hostEndsAtOverride).toISOString() }
+            : {}),
+          ...(runMode === "hosted" && hostDurationMinutes && !hostEndsAtOverride
+            ? { hostDurationMinutes: Math.max(5, Math.min(480, Number(hostDurationMinutes) || 0)) }
+            : {}),
         }),
       });
       const data = (await res.json()) as {
@@ -901,6 +992,63 @@ export function GameSetup() {
               everything; Resume picks up where you left off.
             </p>
           </div>
+          {runMode === "hosted" ? (
+            <div className="grid gap-3 md:col-span-2 rounded-md border border-border/60 bg-muted/30 p-3">
+              <div>
+                <Label className="text-sm font-medium">Game length</Label>
+                <p className="text-muted-foreground mt-0.5 text-xs">
+                  Hosted games need an approximate end time so the session drops off the
+                  dashboard after it finishes, and so the autopilot sweeper can close it if you
+                  forget to tap <strong>End session</strong>.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="duration-minutes" className="text-xs">
+                    Duration (minutes)
+                  </Label>
+                  <Input
+                    id="duration-minutes"
+                    type="number"
+                    inputMode="numeric"
+                    min={5}
+                    max={480}
+                    step={5}
+                    value={hostDurationMinutes}
+                    placeholder={
+                      endTimePreview ? String(endTimePreview.defaultDuration) : "60"
+                    }
+                    disabled={!!hostEndsAtOverride}
+                    onChange={(e) => setHostDurationMinutes(e.target.value)}
+                  />
+                  <p className="text-muted-foreground text-[11px]">
+                    Blank = use our estimate ({
+                      endTimePreview ? `${endTimePreview.defaultDuration} min` : "auto"
+                    }).
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="ends-at-override" className="text-xs">
+                    Ends at (override, optional)
+                  </Label>
+                  <Input
+                    id="ends-at-override"
+                    type="datetime-local"
+                    value={hostEndsAtOverride}
+                    onChange={(e) => setHostEndsAtOverride(e.target.value)}
+                  />
+                  <p className="text-muted-foreground text-[11px]">
+                    Pin an exact end time — wins over the duration field.
+                  </p>
+                </div>
+              </div>
+              {endTimePreviewLabel ? (
+                <p className="text-foreground text-xs">
+                  Ends approx. <strong>{endTimePreviewLabel}</strong>
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <div className="grid gap-2">
             <Label>Timer mode</Label>
             <Select

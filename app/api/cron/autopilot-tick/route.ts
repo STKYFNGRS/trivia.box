@@ -9,6 +9,7 @@ import {
   lockActive,
   revealActive,
   startNextQuestion,
+  sweepStaleSessions,
   type SessionForHost,
 } from "@/lib/game/hostActions";
 import { zodErrorResponse } from "@/lib/apiError";
@@ -177,11 +178,22 @@ async function runTick(req: Request, input: unknown) {
     }
   }
 
+  // Safety net: close out sessions whose estimated_end_at has elapsed but
+  // were never properly ended by the host. Runs after the autopilot loop
+  // so we don't race our own state machine for sessions we just advanced.
+  let swept: Awaited<ReturnType<typeof sweepStaleSessions>> = [];
+  try {
+    swept = await sweepStaleSessions();
+  } catch (err) {
+    console.error("sweepStaleSessions threw", err);
+  }
+
   return NextResponse.json({
     now: new Date(nowMs).toISOString(),
     processed: rows.length,
     actions: results.filter((r) => r.action).length,
     results,
+    swept: swept.map((s) => ({ sessionId: s.sessionId, joinCode: s.joinCode })),
     tuning: { GRACE_MS, POST_LOCK_MS, POST_REVEAL_MS },
   });
 }

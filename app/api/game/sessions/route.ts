@@ -23,6 +23,7 @@ import {
 } from "@/lib/game/questionPull";
 import { InsufficientQuestionPoolError } from "@/lib/game/sessionQuestionPoolError";
 import { assertHostCanUseVenue } from "@/lib/game/sessionPermissions";
+import { computeEstimatedEndAt } from "@/lib/game/sessionEndTime";
 import { hasEffectiveOrganizerSubscription } from "@/lib/subscription";
 import { isValidIanaTimeZone } from "@/lib/timezones";
 
@@ -122,6 +123,19 @@ const createSchema = z
     hasPrize: z.boolean(),
     listedPublic: z.boolean().optional().default(true),
     prizeDescription: z.string().max(500).optional(),
+    /**
+     * Hosted-mode only. If set (minutes), the session's `estimated_end_at`
+     * is `eventStartsAt + hostDurationMinutes`. Ignored for autopilot (which
+     * computes from question count), and overridden by
+     * `hostEndsAtOverride` when both are present.
+     */
+    hostDurationMinutes: z.number().int().min(5).max(480).optional(),
+    /**
+     * Hosted-mode only. Explicit ISO end-time. Wins over
+     * `hostDurationMinutes`. Must be strictly after `eventStartsAt`
+     * (validated by the computation clamp).
+     */
+    hostEndsAtOverride: z.string().datetime().optional(),
   })
   .superRefine((data, ctx) => {
     if (!isValidIanaTimeZone(data.eventTimezone)) {
@@ -476,6 +490,16 @@ export async function POST(req: Request) {
 
   const joinCode = `pending_${nanoid(18)}`;
 
+  const totalQuestionCount = planned.reduce((sum, p) => sum + p.questions.length, 0);
+  const estimatedEndAt = computeEstimatedEndAt({
+    eventStartsAt,
+    questionCount: totalQuestionCount,
+    secondsPerQuestion: body.secondsPerQuestion ?? null,
+    runMode: body.runMode,
+    hostDurationMinutes: body.hostDurationMinutes ?? null,
+    hostOverrideEndsAt: body.hostEndsAtOverride ? new Date(body.hostEndsAtOverride) : null,
+  });
+
   const sessionId = await db.transaction(async (tx) => {
     const [session] = await tx
       .insert(sessions)
@@ -489,6 +513,7 @@ export async function POST(req: Request) {
         joinCode,
         eventStartsAt,
         eventTimezone: body.eventTimezone.trim(),
+        estimatedEndAt,
         hasPrize: body.hasPrize,
         prizeDescription: body.hasPrize ? (body.prizeDescription ?? "").trim() : null,
         listedPublic: body.listedPublic ?? true,

@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { publishGameEvent } from "@/lib/ably/server";
 import { track } from "@/lib/analytics/server";
 import { db } from "@/lib/db/client";
@@ -345,4 +345,85 @@ export async function resumeSession(session: SessionForHost): Promise<void> {
     .set({ pausedAt: null })
     .where(eq(sessions.id, session.id));
   await publishGameEvent(session.joinCode, "game_resumed", {});
+}
+
+/**
+ * Grace window — a session is swept only after this many minutes past its
+ * `estimated_end_at`. Keeps us from closing a session a host is still
+ * actively running (e.g. players slow on buzzer / spillover).
+ */
+const STALE_SESSION_GRACE_MINUTES = 30;
+
+export type SweptStaleSession = {
+  sessionId: string;
+  joinCode: string;
+  estimatedEndAt: Date | null;
+};
+
+/**
+ * Safety net for sessions that never got a proper `End session` from the
+ * host: any row with `status ∈ {pending, active, paused}` whose
+ * `estimated_end_at` is older than `now() - 30 min` is flipped to
+ * `completed` and the post-completion hooks (podium XP, prize claim
+ * materialization, achievements, leaderboard broadcast) are fired so
+ * players still see their results.
+ *
+ * Runs inside the autopilot-tick cron so it piggybacks on the existing
+ * once-a-minute cadence. Return value is logged by the cron for
+ * observability.
+ */
+export async function sweepStaleSessions(): Promise<SweptStaleSession[]> {
+  const candidates = await db
+    .select({
+      id: sessions.id,
+      joinCode: sessions.joinCode,
+      estimatedEndAt: sessions.estimatedEndAt,
+    })
+    .from(sessions)
+    .where(
+      and(
+        inArray(sessions.status, ["pending", "active", "paused"]),
+        isNotNull(sessions.estimatedEndAt),
+        lt(
+          sessions.estimatedEndAt,
+          sql`now() - (${STALE_SESSION_GRACE_MINUTES} || ' minutes')::interval`,
+        ),
+      ),
+    )
+    .limit(50);
+
+  const swept: SweptStaleSession[] = [];
+  for (const row of candidates) {
+    try {
+      await db
+        .update(sessions)
+        .set({ status: "completed" })
+        .where(eq(sessions.id, row.id));
+      try {
+        await tryGrantAchievementsAfterSession(row.id);
+      } catch {
+        // non-fatal
+      }
+      await runPostCompletionHooks(row.id);
+      const board = await getLeaderboardTop(row.id, 50);
+      await publishGameEvent(row.joinCode, "game_completed", { leaderboard: board });
+      void track("session_completed", {
+        distinctId: `session:${row.id}`,
+        properties: {
+          sessionId: row.id,
+          joinCode: row.joinCode,
+          trigger: "sweepStaleSessions",
+          estimatedEndAt: row.estimatedEndAt?.toISOString() ?? null,
+        },
+      });
+      swept.push({
+        sessionId: row.id,
+        joinCode: row.joinCode,
+        estimatedEndAt: row.estimatedEndAt,
+      });
+    } catch (err) {
+      console.error("sweepStaleSessions failed for session", row.id, err);
+    }
+  }
+  return swept;
 }

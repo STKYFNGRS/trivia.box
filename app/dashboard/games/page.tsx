@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { desc, eq } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { Gamepad2 } from "lucide-react";
 import { getCurrentAccount } from "@/lib/accounts";
 import { buttonVariants } from "@/components/ui/button";
@@ -51,6 +51,13 @@ export default async function GamesPage() {
   const account = await getCurrentAccount();
   if (!account) return null;
 
+  // Active / upcoming view: hide completed or cancelled sessions, plus
+  // anything whose `estimated_end_at` is more than 10 minutes in the past
+  // (so stuck pending/active rows also fall off the dashboard once they're
+  // clearly over). The stale-session sweeper in the autopilot cron will
+  // eventually mark those rows `completed`; this filter hides them the
+  // moment they're past-due so the host view stays focused on what's next.
+  // Full history still lives in `/dashboard/stats`.
   const rows = await db
     .select({
       id: sessions.id,
@@ -58,11 +65,21 @@ export default async function GamesPage() {
       status: sessions.status,
       createdAt: sessions.createdAt,
       eventStartsAt: sessions.eventStartsAt,
+      estimatedEndAt: sessions.estimatedEndAt,
       runMode: sessions.runMode,
     })
     .from(sessions)
-    .where(eq(sessions.hostAccountId, account.id))
-    .orderBy(desc(sessions.createdAt))
+    .where(
+      and(
+        eq(sessions.hostAccountId, account.id),
+        inArray(sessions.status, ["pending", "active", "paused", "draft"]),
+        or(
+          isNull(sessions.estimatedEndAt),
+          gt(sessions.estimatedEndAt, sql`now() - interval '10 minutes'`),
+        ),
+      ),
+    )
+    .orderBy(asc(sessions.eventStartsAt))
     .limit(25);
 
   return (

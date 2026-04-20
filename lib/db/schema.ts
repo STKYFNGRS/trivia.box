@@ -335,6 +335,15 @@ export const sessions = pgTable(
     prizeInstructions: text("prize_instructions"),
     /** When prize claims expire after session completion. */
     prizeExpiresAt: timestamp("prize_expires_at", { withTimezone: true }),
+    /**
+     * Best-effort projected end time. Computed at creation from question
+     * count + seconds/question (autopilot) or from a host-supplied duration
+     * / end-time override (hosted). Used to auto-hide finished sessions
+     * from the host dashboard list, and as a safety net for the stale
+     * sweeper to close sessions a host forgot to mark complete. NULL for
+     * legacy rows created before this column existed.
+     */
+    estimatedEndAt: timestamp("estimated_end_at", { withTimezone: true }),
     /** Free-to-play "house" session scheduled every 15 minutes by the cron. */
     houseGame: boolean("house_game").notNull().default(false),
     listedPublic: boolean("listed_public").notNull().default(true),
@@ -343,6 +352,7 @@ export const sessions = pgTable(
   (t) => [
     uniqueIndex("sessions_join_code_unique").on(t.joinCode),
     index("sessions_house_idx").on(t.houseGame, t.eventStartsAt),
+    index("sessions_estimated_end_idx").on(t.status, t.estimatedEndAt),
   ]
 );
 
