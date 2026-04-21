@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Loader2, UserMinus, UserPlus } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -105,7 +106,7 @@ export function AddFriendButton({ targetPlayerId, targetLabel, disabled }: Props
 
   if (anon) {
     return (
-      <a
+      <Link
         href="/sign-in"
         className={cn(
           base,
@@ -115,7 +116,7 @@ export function AddFriendButton({ targetPlayerId, targetLabel, disabled }: Props
       >
         <UserPlus className="size-3.5" aria-hidden />
         Add friend
-      </a>
+      </Link>
     );
   }
 

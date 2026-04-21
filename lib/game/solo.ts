@@ -3,7 +3,6 @@ import { db } from "@/lib/db/client";
 import {
   playerStats,
   playerXpEvents,
-  questionDecks,
   questions,
   soloQuestions,
   soloSessions,
