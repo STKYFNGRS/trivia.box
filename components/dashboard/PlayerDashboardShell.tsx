@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
+import { ManageBillingMenuItem } from "@/components/billing/ManageBillingMenuItem";
 import { buttonVariants } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
@@ -77,7 +78,11 @@ export function PlayerDashboardShell(props: { username: string; children: React.
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <UserButton afterSignOutUrl="/" />
+            <UserButton afterSignOutUrl="/">
+              <UserButton.MenuItems>
+                <ManageBillingMenuItem />
+              </UserButton.MenuItems>
+            </UserButton>
           </div>
         </div>
       </header>

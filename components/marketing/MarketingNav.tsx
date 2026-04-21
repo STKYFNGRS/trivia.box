@@ -4,6 +4,7 @@ import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { ManageBillingMenuItem } from "@/components/billing/ManageBillingMenuItem";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -127,7 +128,11 @@ export function MarketingNav() {
                   avatarBox: "size-8 ring-1 ring-white/20",
                 },
               }}
-            />
+            >
+              <UserButton.MenuItems>
+                <ManageBillingMenuItem />
+              </UserButton.MenuItems>
+            </UserButton>
           </SignedIn>
         </div>
       </div>
