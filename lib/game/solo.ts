@@ -7,7 +7,11 @@ import {
   soloQuestions,
   soloSessions,
 } from "@/lib/db/schema";
-import { STREAK_BONUSES, computeAnswerPoints } from "@/lib/game/scoring";
+import {
+  STREAK_BONUSES,
+  computeAnswerPoints,
+  normalizeDifficulty,
+} from "@/lib/game/scoring";
 import {
   MAX_SOLO_QUESTIONS,
   MIN_SOLO_QUESTIONS,
@@ -325,11 +329,15 @@ export async function submitSoloAnswer(input: {
   }
 
   const qRows = await db
-    .select({ correctAnswer: questions.correctAnswer })
+    .select({
+      correctAnswer: questions.correctAnswer,
+      difficulty: questions.difficulty,
+    })
     .from(questions)
     .where(eq(questions.id, sq.questionId))
     .limit(1);
   const correctAnswer = qRows[0]?.correctAnswer ?? "";
+  const difficulty = normalizeDifficulty(qRows[0]?.difficulty);
   const isCorrect =
     input.answerGiven.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
 
@@ -343,6 +351,7 @@ export async function submitSoloAnswer(input: {
     timeToAnswerMs: elapsedMs,
     timerSeconds: session.timerSeconds,
     previousStreak,
+    difficulty,
   });
 
   await db

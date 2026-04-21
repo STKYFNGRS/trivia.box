@@ -5,6 +5,7 @@ import { Crown, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { Countdown } from "@/components/game/Countdown";
+import { FinalStandings } from "@/components/game/FinalStandings";
 import { GameShell, buildVenueImageUrl } from "@/components/game/GameShell";
 import { useGameChannel } from "@/lib/ably/useGameChannel";
 
@@ -370,6 +371,22 @@ export default function DisplayPage() {
                 </div>
               ) : null}
             </motion.div>
+          ) : boot?.status === "completed" ? (
+            /* Big-screen podium for the room. Uses the oversized
+               `big-screen` variant so it's legible from across a pub. */
+            <motion.div
+              key="completed"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.35 }}
+              className="m-auto w-full max-w-5xl"
+            >
+              <FinalStandings
+                variant="big-screen"
+                leaderboard={boot?.leaderboard ?? []}
+              />
+            </motion.div>
           ) : (
             <motion.div
               key="idle"
@@ -385,14 +402,10 @@ export default function DisplayPage() {
                 className="inline-block h-4 w-4 rounded-full bg-[var(--stage-accent)] shadow-[0_0_24px_rgb(56_189_248_/_0.7)]"
               />
               <div className="text-6xl font-black tracking-tight text-white drop-shadow-xl">
-                {boot?.status === "completed"
-                  ? "Game complete"
-                  : "Waiting for the host…"}
+                Waiting for the host…
               </div>
               <div className="text-sm uppercase tracking-[0.4em] text-white/60">
-                {boot?.status === "completed"
-                  ? "Thanks for playing"
-                  : "The show is about to begin"}
+                The show is about to begin
               </div>
             </motion.div>
           )}

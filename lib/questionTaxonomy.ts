@@ -506,3 +506,135 @@ export async function pickBalancedGenerationTargets(totalJobs: number): Promise<
     jobCount: allocation.get(b.id) ?? 0,
   }));
 }
+
+// ---------------------------------------------------------------------------
+// Difficulty balance (1 = easy / 2 = medium / 3 = hard)
+//
+// Before this helper existed, the LLM decided the difficulty of every
+// question on its own and the app just validated the shape — that's how
+// the pool ended up at 1 easy / 161 medium / 18 hard. We now steer every
+// generation run toward whichever bucket is furthest behind a 1/3-1/3-1/3
+// split, scoped to the category+subcategory the run is targeting so each
+// subcategory independently converges on balanced coverage.
+// ---------------------------------------------------------------------------
+
+export type DifficultyCounts = Record<1 | 2 | 3, number>;
+
+const ZERO_DIFFICULTY_COUNTS: DifficultyCounts = { 1: 0, 2: 0, 3: 0 };
+
+/**
+ * Count non-retired questions + in-flight drafts by difficulty, scoped to
+ * an optional category / subcategory pair. Drafts are weighted the same
+ * way [`pickBalancedGenerationTargets`](#pickBalancedGenerationTargets)
+ * weights them (approved = 0.25, pending_review = 0.1) so the allocator
+ * doesn't keep generating for a bucket that already has a queue waiting
+ * on review.
+ *
+ * Falls back to all-zero counts if the `question_drafts` or `questions`
+ * tables don't exist yet (fresh clone before migrations), so callers can
+ * call this unconditionally during bootstrap.
+ */
+export async function getDifficultyCoverage(scope: {
+  categoryLabel?: string | null;
+  subcategoryLabel?: string | null;
+}): Promise<DifficultyCounts> {
+  const conditions = [eq(questions.retired, false)] as ReturnType<typeof eq>[];
+  if (scope.categoryLabel) {
+    conditions.push(eq(questions.category, scope.categoryLabel));
+  }
+  if (scope.subcategoryLabel) {
+    conditions.push(eq(questions.subcategory, scope.subcategoryLabel));
+  }
+
+  const vettedCounts: DifficultyCounts = { ...ZERO_DIFFICULTY_COUNTS };
+  try {
+    const rows = await db
+      .select({
+        difficulty: questions.difficulty,
+        c: count(),
+      })
+      .from(questions)
+      .where(and(...conditions))
+      .groupBy(questions.difficulty);
+    for (const r of rows) {
+      if (r.difficulty === 1 || r.difficulty === 2 || r.difficulty === 3) {
+        vettedCounts[r.difficulty] = r.c;
+      }
+    }
+  } catch (err) {
+    if (!isTaxonomyMissingError(err)) throw err;
+  }
+
+  const draftConditions = [] as ReturnType<typeof eq>[];
+  if (scope.categoryLabel) {
+    draftConditions.push(eq(questionDrafts.category, scope.categoryLabel));
+  }
+  if (scope.subcategoryLabel) {
+    draftConditions.push(eq(questionDrafts.subcategory, scope.subcategoryLabel));
+  }
+
+  // Pending + approved drafts, weighted the same way pickBalancedGenerationTargets does.
+  const draftCredit: DifficultyCounts = { ...ZERO_DIFFICULTY_COUNTS };
+  try {
+    const rows = await db
+      .select({
+        difficulty: questionDrafts.difficulty,
+        status: questionDrafts.status,
+        c: count(),
+      })
+      .from(questionDrafts)
+      .where(draftConditions.length ? and(...draftConditions) : undefined)
+      .groupBy(questionDrafts.difficulty, questionDrafts.status);
+    for (const r of rows) {
+      if (r.difficulty !== 1 && r.difficulty !== 2 && r.difficulty !== 3) continue;
+      const weight =
+        r.status === "approved" ? 0.25 : r.status === "pending_review" ? 0.1 : 0;
+      if (weight === 0) continue;
+      draftCredit[r.difficulty] += r.c * weight;
+    }
+  } catch (err) {
+    if (!isTaxonomyMissingError(err)) throw err;
+  }
+
+  return {
+    1: vettedCounts[1] + draftCredit[1],
+    2: vettedCounts[2] + draftCredit[2],
+    3: vettedCounts[3] + draftCredit[3],
+  };
+}
+
+/**
+ * Return the difficulty (1=easy, 2=medium, 3=hard) that's furthest below
+ * a 1/3-1/3-1/3 split inside the given scope. Ties are broken at random
+ * so a pool that's already balanced doesn't always get fed the same
+ * difficulty first. Empty scope (no questions or drafts yet) also falls
+ * back to a random pick so initial runs don't deterministically skew.
+ *
+ * Called by the generation runner on every `pipeline.runSingle` so the
+ * LLM is asked for a *specific* difficulty on every generation (see
+ * [`lib/ai/pipeline.ts`](./ai/pipeline.ts)).
+ */
+export async function pickNeediestDifficulty(scope: {
+  categoryLabel?: string | null;
+  subcategoryLabel?: string | null;
+}): Promise<1 | 2 | 3> {
+  const counts = await getDifficultyCoverage(scope);
+  const total = counts[1] + counts[2] + counts[3];
+
+  const levels: Array<1 | 2 | 3> = [1, 2, 3];
+  if (total <= 0) {
+    return levels[Math.floor(Math.random() * 3)];
+  }
+
+  const target = total / 3;
+  const deficits = levels.map((lvl) => ({
+    lvl,
+    deficit: target - counts[lvl],
+  }));
+  const maxDeficit = Math.max(...deficits.map((d) => d.deficit));
+  // Anything within half a question of the max is treated as tied — avoids
+  // ping-pong when two difficulties are essentially neck-and-neck.
+  const tied = deficits.filter((d) => maxDeficit - d.deficit < 0.5);
+  const pick = tied[Math.floor(Math.random() * tied.length)];
+  return pick.lvl;
+}

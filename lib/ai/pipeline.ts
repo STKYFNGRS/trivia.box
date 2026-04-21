@@ -26,6 +26,17 @@ export type QuestionPipelineInput = {
   subcategoryLabel?: string | null;
   /** Optional bucket notes from taxonomy, injected into prompts. */
   notesForGeneration?: string | null;
+  /**
+   * When set, the LLM prompt asks for exactly this difficulty (1=easy,
+   * 2=medium, 3=hard) and any generation with a different value is
+   * clamped back to this one before it lands in `question_drafts`. The
+   * generation runner fills this from
+   * [`pickNeediestDifficulty`](../questionTaxonomy.ts) so each run fills
+   * whichever bucket is furthest below a 1/3-1/3-1/3 split inside the
+   * target subcategory. Leave unset and the LLM picks freely (used only
+   * by legacy callers / tests).
+   */
+  forcedDifficulty?: 1 | 2 | 3;
 };
 
 export type QuestionPipelineResult = {
@@ -97,9 +108,21 @@ async function generateWithAnthropic(
     ? `Subcategory (use exactly this label in JSON): ${forcedSubcategory}.`
     : "";
   const notesLine = input.notesForGeneration ? `Bucket guidance: ${input.notesForGeneration}` : "";
+  // When the runner picks a neediest difficulty for this run, spell out
+  // what each level means so the model produces something calibrated to
+  // that level rather than its default "medium-ish" output. We still
+  // post-clamp the returned value, but a prompt that says "write a HARD
+  // question" produces noticeably harder questions in practice.
+  const difficultyLine = input.forcedDifficulty
+    ? `Difficulty must be exactly ${input.forcedDifficulty} ` +
+      `(1 = easy / widely known, 2 = medium / requires some recall, 3 = hard / ` +
+      `requires specialist knowledge). Write the question at that level and ` +
+      `return "difficulty": ${input.forcedDifficulty} in the JSON.`
+    : "";
   const user = `Category: ${input.category}. ${subLine}
 Topic hint: ${input.topicHint ?? "general"}.
 ${notesLine}
+${difficultyLine}
 ${diversity}
 Return ONLY valid JSON with shape:
 { "questions": [ { "body": string, "correctAnswer": string, "wrongAnswers": [string,string,string], "category": string, "subcategory": string, "difficulty": 1|2|3, "timeHint": 10|20|30 } ] }
@@ -112,13 +135,36 @@ Include exactly one question in the array. Category must be exactly one of: ${al
   });
 
   const rawList = Array.isArray(data.questions) ? data.questions : [];
-  const questions = rawList
+  const coerced = rawList
     .map((r) => coerceGenerated(r, input.category, allowedSet, forcedSubcategory))
     .filter((q): q is GeneratedQuestion => Boolean(q));
 
+  // Difficulty clamp: models occasionally ignore the "must be exactly N"
+  // instruction, especially for easy/hard which they otherwise under-
+  // produce. Rather than waste a regeneration, we snap to the forced
+  // difficulty and let the pipeline log record the override so curators
+  // can audit how often the model disobeys.
+  let difficultyOverrides = 0;
+  const questions = input.forcedDifficulty
+    ? coerced.map((q) => {
+        if (q.difficulty === input.forcedDifficulty) return q;
+        difficultyOverrides += 1;
+        return { ...q, difficulty: input.forcedDifficulty } as GeneratedQuestion;
+      })
+    : coerced;
+
   return {
     questions,
-    usage: { input: meta.inputTokens, output: meta.outputTokens },
+    usage: {
+      input: meta.inputTokens,
+      output: meta.outputTokens,
+      ...(input.forcedDifficulty
+        ? {
+            forcedDifficulty: input.forcedDifficulty,
+            difficultyOverrides,
+          }
+        : {}),
+    },
   };
 }
 
@@ -173,7 +219,11 @@ export async function runQuestionDraftPipeline(input: QuestionPipelineInput): Pr
     provider,
     pipelineVersion: PIPELINE_VERSION,
     steps: {} as Record<string, unknown>,
-    resolved: { category: input.category, subcategory: subLabel },
+    resolved: {
+      category: input.category,
+      subcategory: subLabel,
+      forcedDifficulty: input.forcedDifficulty ?? null,
+    },
   };
 
   const forcedSub = input.subcategoryLabel?.trim() ? subLabel : undefined;

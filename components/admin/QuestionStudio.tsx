@@ -1,12 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FolderTree, Library, ListChecks, RefreshCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/ui/section-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QuestionLibrary } from "./QuestionLibrary";
+import {
+  QuestionPoolStats,
+  type QuestionPoolStatsHandle,
+} from "./QuestionPoolStats";
 import { QuestionReview } from "./QuestionReview";
 import { QuestionGenerate } from "./QuestionGenerate";
 import { QuestionTaxonomy } from "./QuestionTaxonomy";
@@ -73,6 +77,13 @@ export function QuestionStudio(props: { isSiteOperator: boolean }) {
     !props.isSiteOperator && initialView !== "library" ? "library" : initialView
   );
   const [taxonomy, setTaxonomy] = useState<TaxonomyState>({ status: "loading" });
+  // Imperative handle so child tabs (Library edits, Review decisions, and
+  // Generate enqueues) can tell the pool-stats strip in the header to
+  // refresh without either component owning the other's state.
+  const poolStatsRef = useRef<QuestionPoolStatsHandle>(null);
+  const refreshPoolStats = useCallback(() => {
+    poolStatsRef.current?.refresh();
+  }, []);
 
   useEffect(() => {
     const next = parseView(searchParams.get("view"));
@@ -165,13 +176,23 @@ export function QuestionStudio(props: { isSiteOperator: boolean }) {
         description="Generate, review, edit, retire, and organize the vetted question pool from one place."
         actions={
           taxonomy.status === "ready" ? (
-            <Button type="button" size="sm" variant="outline" onClick={() => void loadTaxonomy()}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                void loadTaxonomy();
+                refreshPoolStats();
+              }}
+            >
               <RefreshCw className="size-4" />
-              Reload taxonomy
+              Reload
             </Button>
           ) : null
         }
       />
+
+      <QuestionPoolStats handleRef={poolStatsRef} />
 
       {taxonomy.status === "missing" ? (
         <TaxonomyMissingBanner
@@ -212,7 +233,10 @@ export function QuestionStudio(props: { isSiteOperator: boolean }) {
         </div>
 
         <TabsContent value="library" className="mt-0">
-          <QuestionLibrary taxonomy={activeCategories} />
+          <QuestionLibrary
+            taxonomy={activeCategories}
+            onChanged={refreshPoolStats}
+          />
         </TabsContent>
 
         {props.isSiteOperator ? (
@@ -220,6 +244,7 @@ export function QuestionStudio(props: { isSiteOperator: boolean }) {
             <QuestionReview
               initialTab={initialReviewTab}
               onTabChange={(t) => switchTab("review", { status: t })}
+              onDecision={refreshPoolStats}
             />
           </TabsContent>
         ) : null}
@@ -229,7 +254,10 @@ export function QuestionStudio(props: { isSiteOperator: boolean }) {
             {taxonomy.status === "ready" ? (
               <QuestionGenerate
                 taxonomy={activeCategories}
-                onDraftsChanged={() => void loadTaxonomy()}
+                onDraftsChanged={() => {
+                  void loadTaxonomy();
+                  refreshPoolStats();
+                }}
               />
             ) : taxonomyLoading ? (
               <p className="text-sm text-muted-foreground">Loading taxonomy…</p>

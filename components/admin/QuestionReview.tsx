@@ -91,7 +91,12 @@ const TAB_META: Array<{
   { id: "approved", label: "Recently approved", icon: CheckCircle2 },
 ];
 
-export function QuestionReview(props: { initialTab?: Tab; onTabChange?: (tab: Tab) => void }) {
+export function QuestionReview(props: {
+  initialTab?: Tab;
+  onTabChange?: (tab: Tab) => void;
+  /** Fires after an approval/rejection so the Studio can refresh pool stats. */
+  onDecision?: () => void;
+}) {
   const [tab, setTab] = useState<Tab>(props.initialTab ?? "pending");
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [loading, setLoading] = useState(false);
@@ -129,6 +134,7 @@ export function QuestionReview(props: { initialTab?: Tab; onTabChange?: (tab: Ta
       if (!res.ok) throw new Error(data.error ?? "Request failed");
       toast.success(action === "approve" ? "Approved" : "Rejected");
       await refresh(tab);
+      props.onDecision?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed");
     } finally {

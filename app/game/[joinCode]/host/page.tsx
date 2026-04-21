@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Countdown } from "@/components/game/Countdown";
+import { FinalStandings } from "@/components/game/FinalStandings";
 import { GameShell } from "@/components/game/GameShell";
 import { useGameChannel } from "@/lib/ably/useGameChannel";
 import type { GameChannelMessage } from "@/lib/ably/useGameChannel";
@@ -44,6 +45,8 @@ type BootstrapQuestion = {
   correctAnswer: string | null;
 };
 
+type LeaderboardEntry = { playerId: string; username: string; score: number };
+
 type PublicSessionJson = {
   sessionId?: string;
   status?: string;
@@ -54,6 +57,7 @@ type PublicSessionJson = {
   currentQuestion?: BootstrapQuestion | null;
   totalQuestions?: number;
   completedCount?: number;
+  leaderboard?: LeaderboardEntry[];
   error?: string;
 };
 
@@ -590,133 +594,148 @@ export default function HostPage() {
             </p>
           ) : null}
 
-          <div className="rounded-2xl bg-[var(--stage-glass)] p-5 ring-1 ring-white/10 shadow-[var(--shadow-card)] backdrop-blur-xl">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <div className="text-[10px] uppercase tracking-[0.2em] text-white/50">
-                  Current question
-                </div>
-                <div className="mt-2 text-xl font-semibold leading-snug text-white">
-                  {current?.body ?? "—"}
-                </div>
-              </div>
+          {boot?.status === "completed" ? (
+            /* Completed session: swap the live question panel + control
+               buttons for a shared FinalStandings card. Keeps the
+               timeline visible in the aside so post-mortem review still
+               works. */
+            <div className="rounded-2xl bg-[var(--stage-glass)] p-5 ring-1 ring-white/10 shadow-[var(--shadow-card)] backdrop-blur-xl">
+              <FinalStandings
+                variant="host"
+                leaderboard={boot?.leaderboard ?? []}
+              />
             </div>
-
-            {current?.choices?.length ? (
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                {current.choices.map((c, i) => {
-                  const tint = ANSWER_TINTS[i % ANSWER_TINTS.length];
-                  const isCorrect = revealedForActive && current.correctAnswer === c;
-                  return (
-                    <div
-                      key={`${current.sessionQuestionId}-${i}-${c}`}
-                      className={cn(
-                        "flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm ring-1",
-                        tint,
-                        isCorrect &&
-                          "ring-2 ring-emerald-400/80 bg-emerald-400/20 shadow-[0_0_24px_-8px_theme(colors.emerald.400)]",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
-                          isCorrect
-                            ? "bg-emerald-400 text-emerald-950"
-                            : "bg-white/10 text-white/70",
-                        )}
-                      >
-                        {isCorrect ? (
-                          <CheckCircle2 className="h-4 w-4" />
-                        ) : (
-                          String.fromCharCode(65 + i)
-                        )}
-                      </span>
-                      <span className="flex-1 leading-snug">{c}</span>
+          ) : (
+            <>
+              <div className="rounded-2xl bg-[var(--stage-glass)] p-5 ring-1 ring-white/10 shadow-[var(--shadow-card)] backdrop-blur-xl">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="text-[10px] uppercase tracking-[0.2em] text-white/50">
+                      Current question
                     </div>
-                  );
-                })}
-              </div>
-            ) : null}
-
-            {answeredForActive ? (
-              <div className="mt-4 flex items-center gap-3">
-                <ThinProgress value={answerPct} className="flex-1" />
-                <div className="shrink-0 text-xs tabular-nums text-white/70">
-                  <span className="font-semibold text-white">{answeredCount}</span>
-                  {totalPlayers !== null ? (
-                    <>
-                      <span className="text-white/40"> / </span>
-                      <span>{totalPlayers}</span>
-                    </>
-                  ) : null}
-                  <span className="ml-1 text-white/50">answered</span>
+                    <div className="mt-2 text-xl font-semibold leading-snug text-white">
+                      {current?.body ?? "—"}
+                    </div>
+                  </div>
                 </div>
+
+                {current?.choices?.length ? (
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                    {current.choices.map((c, i) => {
+                      const tint = ANSWER_TINTS[i % ANSWER_TINTS.length];
+                      const isCorrect = revealedForActive && current.correctAnswer === c;
+                      return (
+                        <div
+                          key={`${current.sessionQuestionId}-${i}-${c}`}
+                          className={cn(
+                            "flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm ring-1",
+                            tint,
+                            isCorrect &&
+                              "ring-2 ring-emerald-400/80 bg-emerald-400/20 shadow-[0_0_24px_-8px_theme(colors.emerald.400)]",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
+                              isCorrect
+                                ? "bg-emerald-400 text-emerald-950"
+                                : "bg-white/10 text-white/70",
+                            )}
+                          >
+                            {isCorrect ? (
+                              <CheckCircle2 className="h-4 w-4" />
+                            ) : (
+                              String.fromCharCode(65 + i)
+                            )}
+                          </span>
+                          <span className="flex-1 leading-snug">{c}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {answeredForActive ? (
+                  <div className="mt-4 flex items-center gap-3">
+                    <ThinProgress value={answerPct} className="flex-1" />
+                    <div className="shrink-0 text-xs tabular-nums text-white/70">
+                      <span className="font-semibold text-white">{answeredCount}</span>
+                      {totalPlayers !== null ? (
+                        <>
+                          <span className="text-white/40"> / </span>
+                          <span>{totalPlayers}</span>
+                        </>
+                      ) : null}
+                      <span className="ml-1 text-white/50">answered</span>
+                    </div>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              disabled={busy || paused}
-              onClick={() => onManualHostAction("start")}
-            >
-              <Play className="h-4 w-4" />
-              Start question
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={busy || paused}
-              onClick={() => onManualHostAction("lock")}
-            >
-              <Lock className="h-4 w-4" />
-              Lock answers
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={busy || paused}
-              onClick={() => onManualHostAction("reveal")}
-            >
-              <Eye className="h-4 w-4" />
-              Reveal
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy || paused}
-              onClick={() => onManualHostAction("next")}
-            >
-              <ChevronRight className="h-4 w-4" />
-              Next
-            </Button>
-
-            <div className="ml-auto flex items-center gap-2">
-              <Separator orientation="vertical" className="h-6 bg-white/15" />
-              {paused ? (
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
-                  variant="default"
-                  disabled={busy}
-                  onClick={() => onManualHostAction("resume")}
+                  disabled={busy || paused}
+                  onClick={() => onManualHostAction("start")}
                 >
                   <Play className="h-4 w-4" />
-                  Resume
+                  Start question
                 </Button>
-              ) : (
                 <Button
                   type="button"
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => onManualHostAction("pause")}
+                  variant="secondary"
+                  disabled={busy || paused}
+                  onClick={() => onManualHostAction("lock")}
                 >
-                  <Pause className="h-4 w-4" />
-                  Pause
+                  <Lock className="h-4 w-4" />
+                  Lock answers
                 </Button>
-              )}
-            </div>
-          </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={busy || paused}
+                  onClick={() => onManualHostAction("reveal")}
+                >
+                  <Eye className="h-4 w-4" />
+                  Reveal
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy || paused}
+                  onClick={() => onManualHostAction("next")}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                  Next
+                </Button>
+
+                <div className="ml-auto flex items-center gap-2">
+                  <Separator orientation="vertical" className="h-6 bg-white/15" />
+                  {paused ? (
+                    <Button
+                      type="button"
+                      variant="default"
+                      disabled={busy}
+                      onClick={() => onManualHostAction("resume")}
+                    >
+                      <Play className="h-4 w-4" />
+                      Resume
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => onManualHostAction("pause")}
+                    >
+                      <Pause className="h-4 w-4" />
+                      Pause
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </section>
 
         <aside className="flex flex-col">

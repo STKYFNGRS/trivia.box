@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Loader2, Lock, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Countdown } from "@/components/game/Countdown";
+import { FinalStandings } from "@/components/game/FinalStandings";
 import { GameShell, buildVenueImageUrl } from "@/components/game/GameShell";
 import { useGameChannel } from "@/lib/ably/useGameChannel";
 
@@ -387,20 +388,13 @@ export default function PlayPage() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.22 }}
-                className="flex flex-col items-center gap-3 py-6 text-center"
+                className="py-2"
               >
-                <motion.div
-                  initial={{ scale: 0.8, rotate: -8 }}
-                  animate={{ scale: 1, rotate: 0 }}
-                  transition={{ type: "spring", stiffness: 200, damping: 12 }}
-                  className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--stage-accent)]/15 ring-1 ring-[var(--stage-accent)]/30"
-                >
-                  <Trophy className="h-8 w-8 text-[var(--stage-accent)]" aria-hidden />
-                </motion.div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.3em] text-white/60">
-                  Game Complete
-                </div>
-                <p className="max-w-md text-lg text-white/85">Thanks for playing!</p>
+                <FinalStandings
+                  variant="phone"
+                  leaderboard={boot?.leaderboard ?? []}
+                  viewerPlayerId={playerId ?? null}
+                />
               </motion.div>
             ) : (
               <motion.div

@@ -64,7 +64,11 @@ const emptyCreateForm = (): CreateForm => ({
   vetted: false,
 });
 
-export function QuestionLibrary(props: { taxonomy: TaxonomyCat[] }) {
+export function QuestionLibrary(props: {
+  taxonomy: TaxonomyCat[];
+  /** Fires after a create / save / delete so the Studio header can refresh pool stats. */
+  onChanged?: () => void;
+}) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Question | null>(null);
@@ -150,6 +154,7 @@ export function QuestionLibrary(props: { taxonomy: TaxonomyCat[] }) {
       toast.success("Saved");
       setSelected(null);
       await refresh();
+      props.onChanged?.();
     } finally {
       setSaving(false);
     }
@@ -185,6 +190,7 @@ export function QuestionLibrary(props: { taxonomy: TaxonomyCat[] }) {
       }
       setSelected(null);
       await refresh();
+      props.onChanged?.();
     } finally {
       setDeleting(false);
     }
@@ -231,6 +237,7 @@ export function QuestionLibrary(props: { taxonomy: TaxonomyCat[] }) {
       setShowCreate(false);
       setCreateForm(emptyCreateForm());
       await refresh();
+      props.onChanged?.();
     } finally {
       setCreating(false);
     }
@@ -244,6 +251,22 @@ export function QuestionLibrary(props: { taxonomy: TaxonomyCat[] }) {
             <CardTitle className="text-base font-semibold tracking-tight">Question library</CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">
               Filter, edit, vet, and retire questions in the pool.
+            </p>
+            {/*
+             * Result count hint. The GET endpoint caps rows at 200; when
+             * we hit that cap we tell the curator explicitly so they know
+             * to tighten the filters rather than assume the pool is
+             * smaller than it really is. Header stats above still show
+             * the unfiltered totals.
+             */}
+            <p className="mt-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              {loading
+                ? "Loading…"
+                : questions.length === 0
+                  ? "No matches"
+                  : questions.length >= 200
+                    ? "Showing first 200 matches — narrow filters to see more"
+                    : `Showing ${questions.length} ${questions.length === 1 ? "match" : "matches"}`}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

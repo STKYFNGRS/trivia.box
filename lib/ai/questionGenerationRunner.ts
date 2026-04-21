@@ -2,7 +2,11 @@ import { eq, sql } from "drizzle-orm";
 import { runQuestionDraftPipeline } from "@/lib/ai/pipeline";
 import { db } from "@/lib/db/client";
 import { questionGenerationJobs } from "@/lib/db/schema";
-import { getSubcategoryById, pickNextGapSubcategoryForCategoryLabel } from "@/lib/questionTaxonomy";
+import {
+  getSubcategoryById,
+  pickNeediestDifficulty,
+  pickNextGapSubcategoryForCategoryLabel,
+} from "@/lib/questionTaxonomy";
 
 /** Jobs that have been in `running` longer than this are considered stale and requeued. */
 const STALE_RUNNING_MS = 10 * 60 * 1000;
@@ -101,11 +105,20 @@ export async function processQueuedQuestionGenerationJobs(maxJobs: number): Prom
 
     try {
       const args = await resolvePipelineArgs(job);
+      // Pick the difficulty whose coverage is furthest from a 1/3-1/3-1/3
+      // split inside this category+subcategory. We do this *per job* rather
+      // than at enqueue time so a 500-question run naturally converges on
+      // balanced coverage even if approvals/rejections land mid-run.
+      const forcedDifficulty = await pickNeediestDifficulty({
+        categoryLabel: args.category,
+        subcategoryLabel: args.subcategoryLabel,
+      });
       const out = await runQuestionDraftPipeline({
         category: args.category,
         topicHint: job.topicHint,
         subcategoryLabel: args.subcategoryLabel,
         notesForGeneration: args.notesForGeneration,
+        forcedDifficulty,
       });
       await db
         .update(questionGenerationJobs)

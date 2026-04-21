@@ -104,7 +104,12 @@ export default async function GamesPage() {
         inArray(sessions.status, ["pending", "active", "paused", "draft"]),
         or(
           isNull(sessions.estimatedEndAt),
-          gt(sessions.estimatedEndAt, sql`now() - interval '10 minutes'`),
+          // Tightened from 10 → 3 min. sweepStaleSessions flips anything
+          // 5 min past its estimated end to `completed`, and completeSession
+          // stamps `estimated_end_at = now()` when a game ends early — so a
+          // 3-minute window keeps real live overruns visible without letting
+          // finished games linger in "Active & upcoming".
+          gt(sessions.estimatedEndAt, sql`now() - interval '3 minutes'`),
         ),
       ),
     )

@@ -1,8 +1,14 @@
-import { and, asc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { publishGameEvent } from "@/lib/ably/server";
 import { track } from "@/lib/analytics/server";
 import { db } from "@/lib/db/client";
-import { questions, rounds, sessionQuestions, sessions } from "@/lib/db/schema";
+import {
+  answers,
+  questions,
+  rounds,
+  sessionQuestions,
+  sessions,
+} from "@/lib/db/schema";
 import { tryGrantAchievementsAfterSession } from "@/lib/game/achievements";
 import { getLeaderboardTop } from "@/lib/game/scoring";
 import { buildChoiceList } from "@/lib/game/shuffleChoices";
@@ -117,28 +123,7 @@ export async function startNextQuestion(session: SessionForHost): Promise<
   }
   const next = ordered.find((q) => q.status === "pending");
   if (!next) {
-    await db
-      .update(sessions)
-      .set({ status: "completed" })
-      .where(eq(sessions.id, session.id));
-    try {
-      await tryGrantAchievementsAfterSession(session.id);
-    } catch {
-      // non-fatal
-    }
-    await runPostCompletionHooks(session.id);
-    const board = await getLeaderboardTop(session.id, 50);
-    await publishGameEvent(session.joinCode, "game_completed", { leaderboard: board });
-    void track("session_completed", {
-      distinctId: `session:${session.id}`,
-      properties: {
-        sessionId: session.id,
-        joinCode: session.joinCode,
-        runMode: session.runMode,
-        timerMode: session.timerMode,
-        trigger: "startNextQuestion-no-more-pending",
-      },
-    });
+    await completeSession(session, "startNextQuestion-no-more-pending");
     return { kind: "completed" };
   }
 
@@ -167,6 +152,55 @@ export async function startNextQuestion(session: SessionForHost): Promise<
     timerMode: session.timerMode,
   });
   return { kind: "started", sessionQuestionId: next.sqId };
+}
+
+/**
+ * Shared "flip to completed" routine so every completion path — host
+ * `next` with no remaining questions, `startNextQuestion` no-more-
+ * pending, `advanceOrComplete` no-more-pending, and
+ * `sweepStaleSessions` — runs the exact same sequence:
+ *
+ *   1. status → 'completed'
+ *   2. estimated_end_at → now() so the host dashboard's
+ *      "Recent games" section orders by actual completion time and
+ *      the "Active & upcoming" 3-minute stale window drops the row
+ *      immediately (a session that finished early otherwise kept an
+ *      estimatedEndAt in the future and would linger in the top
+ *      section until the clock caught up).
+ *   3. achievements grant (best-effort)
+ *   4. podium XP + prize claim materialization (best-effort)
+ *   5. game_completed publish with top-50 leaderboard
+ *   6. session_completed analytics event
+ *
+ * Separate from `runPostCompletionHooks` because the DB + broadcast
+ * belong on the hot path, while the hooks are fire-and-forget.
+ */
+async function completeSession(
+  session: Pick<SessionForHost, "id" | "joinCode" | "runMode" | "timerMode">,
+  trigger: string
+): Promise<void> {
+  await db
+    .update(sessions)
+    .set({ status: "completed", estimatedEndAt: new Date() })
+    .where(eq(sessions.id, session.id));
+  try {
+    await tryGrantAchievementsAfterSession(session.id);
+  } catch {
+    // non-fatal
+  }
+  await runPostCompletionHooks(session.id);
+  const board = await getLeaderboardTop(session.id, 50);
+  await publishGameEvent(session.joinCode, "game_completed", { leaderboard: board });
+  void track("session_completed", {
+    distinctId: `session:${session.id}`,
+    properties: {
+      sessionId: session.id,
+      joinCode: session.joinCode,
+      runMode: session.runMode,
+      timerMode: session.timerMode,
+      trigger,
+    },
+  });
 }
 
 /**
@@ -273,28 +307,7 @@ export async function advanceOrComplete(session: SessionForHost): Promise<
   const remaining = await loadOrderedQuestions(session.id);
   const next = remaining.find((q) => q.status === "pending");
   if (!next) {
-    await db
-      .update(sessions)
-      .set({ status: "completed" })
-      .where(eq(sessions.id, session.id));
-    try {
-      await tryGrantAchievementsAfterSession(session.id);
-    } catch {
-      // non-fatal
-    }
-    await runPostCompletionHooks(session.id);
-    const board = await getLeaderboardTop(session.id, 50);
-    await publishGameEvent(session.joinCode, "game_completed", { leaderboard: board });
-    void track("session_completed", {
-      distinctId: `session:${session.id}`,
-      properties: {
-        sessionId: session.id,
-        joinCode: session.joinCode,
-        runMode: session.runMode,
-        timerMode: session.timerMode,
-        trigger: "advanceOrComplete-no-more-pending",
-      },
-    });
+    await completeSession(session, "advanceOrComplete-no-more-pending");
     return { kind: "completed" };
   }
 
@@ -348,35 +361,51 @@ export async function resumeSession(session: SessionForHost): Promise<void> {
 }
 
 /**
- * Grace window — a session is swept only after this many minutes past its
- * `estimated_end_at`. Keeps us from closing a session a host is still
- * actively running (e.g. players slow on buzzer / spillover).
+ * Grace window — a session is swept only after this many minutes past
+ * its `estimated_end_at`. Tightened from 30 → 5 minutes so a finished
+ * game disappears from the host dashboard quickly, but still wide
+ * enough to cover the dashboard's 3-minute stale filter + a cron tick
+ * of drift.
  */
-const STALE_SESSION_GRACE_MINUTES = 30;
+const STALE_SESSION_GRACE_MINUTES = 5;
+
+/**
+ * Additional safeguard — a session isn't swept if there's been answer
+ * activity within this many minutes, even if its `estimated_end_at`
+ * has lapsed. Protects a still-live but slow-paced game (e.g. players
+ * taking their time on a bonus round) from getting force-completed.
+ */
+const STALE_SESSION_LAST_ANSWER_GUARD_MINUTES = 2;
 
 export type SweptStaleSession = {
   sessionId: string;
   joinCode: string;
+  runMode: string;
   estimatedEndAt: Date | null;
 };
 
 /**
- * Safety net for sessions that never got a proper `End session` from the
- * host: any row with `status ∈ {pending, active, paused}` whose
- * `estimated_end_at` is older than `now() - 30 min` is flipped to
- * `completed` and the post-completion hooks (podium XP, prize claim
- * materialization, achievements, leaderboard broadcast) are fired so
- * players still see their results.
+ * Safety net for sessions that never got a proper `End session` from
+ * the host: any row with `status ∈ {pending, active, paused}` whose
+ * `estimated_end_at` is older than `now() - 5 min` **and** has had no
+ * answer activity in the last 2 min is flipped to `completed` and the
+ * post-completion hooks (podium XP, prize claim materialization,
+ * achievements, leaderboard broadcast) are fired so players still see
+ * their results.
  *
- * Runs inside the autopilot-tick cron so it piggybacks on the existing
- * once-a-minute cadence. Return value is logged by the cron for
- * observability.
+ * The filter is deliberately run-mode agnostic — a hosted session
+ * whose host closed the tab mid-game gets swept exactly the same way
+ * an autopilot session does. Runs inside the autopilot-tick cron so
+ * it piggybacks on the existing once-a-minute cadence. Return value
+ * is logged by the cron for observability.
  */
 export async function sweepStaleSessions(): Promise<SweptStaleSession[]> {
   const candidates = await db
     .select({
       id: sessions.id,
       joinCode: sessions.joinCode,
+      runMode: sessions.runMode,
+      timerMode: sessions.timerMode,
       estimatedEndAt: sessions.estimatedEndAt,
     })
     .from(sessions)
@@ -395,30 +424,34 @@ export async function sweepStaleSessions(): Promise<SweptStaleSession[]> {
   const swept: SweptStaleSession[] = [];
   for (const row of candidates) {
     try {
-      await db
-        .update(sessions)
-        .set({ status: "completed" })
-        .where(eq(sessions.id, row.id));
-      try {
-        await tryGrantAchievementsAfterSession(row.id);
-      } catch {
-        // non-fatal
+      // Per-session last-answer guard: skip if any answer landed in
+      // the last N minutes. This costs one indexed query per candidate
+      // — capped to 50 candidates per tick so the worst case is small.
+      const lastAnswerRows = await db
+        .select({ createdAt: answers.createdAt })
+        .from(answers)
+        .innerJoin(
+          sessionQuestions,
+          eq(sessionQuestions.id, answers.sessionQuestionId),
+        )
+        .where(eq(sessionQuestions.sessionId, row.id))
+        .orderBy(desc(answers.createdAt))
+        .limit(1);
+      const lastAnswerAt = lastAnswerRows[0]?.createdAt ?? null;
+      if (lastAnswerAt) {
+        const ageMs = Date.now() - lastAnswerAt.getTime();
+        if (ageMs < STALE_SESSION_LAST_ANSWER_GUARD_MINUTES * 60 * 1000) {
+          continue;
+        }
       }
-      await runPostCompletionHooks(row.id);
-      const board = await getLeaderboardTop(row.id, 50);
-      await publishGameEvent(row.joinCode, "game_completed", { leaderboard: board });
-      void track("session_completed", {
-        distinctId: `session:${row.id}`,
-        properties: {
-          sessionId: row.id,
-          joinCode: row.joinCode,
-          trigger: "sweepStaleSessions",
-          estimatedEndAt: row.estimatedEndAt?.toISOString() ?? null,
-        },
-      });
+      await completeSession(
+        { id: row.id, joinCode: row.joinCode, runMode: row.runMode, timerMode: row.timerMode },
+        "sweepStaleSessions",
+      );
       swept.push({
         sessionId: row.id,
         joinCode: row.joinCode,
+        runMode: row.runMode,
         estimatedEndAt: row.estimatedEndAt,
       });
     } catch (err) {

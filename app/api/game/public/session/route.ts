@@ -152,7 +152,12 @@ export async function GET(req: Request) {
   let leaderboard: Array<{ playerId: string; username: string; score: number }> = [];
   if (session.status === "active" || session.status === "completed") {
     try {
-      leaderboard = await getLeaderboardTop(session.id, 10);
+      // Full top-50 on completion so the FinalStandings UI on all three
+      // surfaces (player phone, host, big-screen) can render a real
+      // podium + long-tail list without a second round-trip; during live
+      // play 10 is enough for the rail leaderboard.
+      const limit = session.status === "completed" ? 50 : 10;
+      leaderboard = await getLeaderboardTop(session.id, limit);
     } catch {
       leaderboard = [];
     }

@@ -30,6 +30,39 @@ export const STREAK_BONUSES: Record<number, number> = {
  *  Kept small to stay within the new economy. */
 export const NO_TIMER_FALLBACK_POINTS = 5;
 
+/**
+ * Difficulty multipliers applied to the speed-based `basePoints` after the
+ * elapsed-seconds subtraction (order B from the design: *subtract, then
+ * scale*, rounded to whole points). A hard question pays out the full
+ * remaining seconds; medium is 2/3; easy is 1/3. This keeps a 30s easy
+ * from ever out-scoring a 10s hard:
+ *
+ *   hard 10s, 4s elapsed → (10-4) * 1.00 = 6
+ *   medium 10s, 4s elapsed → (10-4) * 0.67 = 4 (rounded from 4.0)
+ *   easy 10s, 4s elapsed → (10-4) * 0.33 = 2 (rounded from 2.0)
+ *   easy 30s, 10s elapsed → (30-10) * 0.33 = 7
+ *
+ * Exact fractions (1/3, 2/3, 1) instead of decimal approximations keep the
+ * rounding stable across the range of timer sizes we actually use. */
+export const DIFFICULTY_POINT_WEIGHTS: Record<1 | 2 | 3, number> = {
+  1: 1 / 3,
+  2: 2 / 3,
+  3: 1,
+};
+
+export type Difficulty = 1 | 2 | 3;
+
+/**
+ * Coerce an arbitrary `questions.difficulty` read (historically `integer`,
+ * so in principle any int) into the `1|2|3` tuple scoring expects. Anything
+ * outside that set falls back to medium. Centralized here so `recordAnswer`
+ * and `recordSoloAnswer` share the same guard.
+ */
+export function normalizeDifficulty(raw: number | null | undefined): Difficulty {
+  if (raw === 1 || raw === 2 || raw === 3) return raw;
+  return 2;
+}
+
 export type PointsBreakdown = {
   points: number;
   basePoints: number;
@@ -37,28 +70,45 @@ export type PointsBreakdown = {
   newStreak: number;
   /** Elapsed-vs-timer ratio remaining at answer time, in [0, 1]. Telemetry. */
   fraction: number;
+  /** Difficulty multiplier applied to `basePoints`. Telemetry. */
+  difficultyWeight: number;
 };
 
 /**
- * Speed-weighted scoring.
+ * Speed-weighted, difficulty-scaled scoring.
  *
  * - Wrong / unanswered → 0 points, streak resets to 0.
- * - Correct → `max(0, timerSeconds - floor(elapsedMs / 1000))`. So a 15s
- *   timer answered in 2s gives 13 points; right at the buzzer gives 0.
+ * - Correct → `round(max(0, timerSeconds - floor(elapsedMs / 1000)) *
+ *   DIFFICULTY_POINT_WEIGHTS[difficulty])`. So a hard 15s answered in 2s
+ *   gives 13 points; medium gives 9 (13 × 2/3 ≈ 8.67, rounded); easy gives
+ *   4 (13 × 1/3 ≈ 4.33, rounded).
  * - When the new streak matches a threshold in `STREAK_BONUSES`, the flat
- *   bonus is added on top.
+ *   bonus is added on top. Streak bonuses are **not** difficulty-scaled —
+ *   they already ride on top of a difficulty-scaled base, and scaling them
+ *   twice would make medium/easy streaks feel punitive.
  *
  * `timerSeconds` may be null/0 in degenerate cases (manual-timer sessions
- * with no round override). We award a flat `NO_TIMER_FALLBACK_POINTS` so
- * correctness still pays out without a divide-by-zero.
+ * with no round override). We award a flat `NO_TIMER_FALLBACK_POINTS`,
+ * also scaled by difficulty, so correctness still pays out without a
+ * divide-by-zero.
  */
 export function computeAnswerPoints(input: {
   isCorrect: boolean;
   timeToAnswerMs: number;
   timerSeconds: number | null | undefined;
   previousStreak: number;
+  /**
+   * Question difficulty (1=easy, 2=medium, 3=hard). Required going forward
+   * so scoring reflects the curated difficulty. Callers that only know the
+   * question id must join `questions.difficulty` before scoring (see
+   * `recordAnswer` below and `recordSoloAnswer` in `lib/game/solo.ts`).
+   */
+  difficulty: Difficulty;
 }): PointsBreakdown {
   const previousStreak = Math.max(0, input.previousStreak | 0);
+  const weight =
+    DIFFICULTY_POINT_WEIGHTS[input.difficulty] ?? DIFFICULTY_POINT_WEIGHTS[2];
+
   if (!input.isCorrect) {
     return {
       points: 0,
@@ -66,6 +116,7 @@ export function computeAnswerPoints(input: {
       streakBonus: 0,
       newStreak: 0,
       fraction: 0,
+      difficultyWeight: weight,
     };
   }
 
@@ -81,10 +132,11 @@ export function computeAnswerPoints(input: {
       timerS,
       Math.floor(Math.max(0, input.timeToAnswerMs) / 1000)
     );
-    basePoints = Math.max(0, timerS - elapsedS);
+    const remaining = Math.max(0, timerS - elapsedS);
+    basePoints = Math.round(remaining * weight);
     fraction = (timerS - elapsedS) / timerS;
   } else {
-    basePoints = NO_TIMER_FALLBACK_POINTS;
+    basePoints = Math.round(NO_TIMER_FALLBACK_POINTS * weight);
     fraction = 0.5;
   }
 
@@ -97,6 +149,7 @@ export function computeAnswerPoints(input: {
     streakBonus,
     newStreak,
     fraction,
+    difficultyWeight: weight,
   };
 }
 
@@ -264,12 +317,19 @@ export async function recordAnswer(input: {
     throw new Error("Session question not found");
   }
 
+  // Difficulty lives on `questions`, not denormalized onto `session_questions`
+  // — pulled alongside `correctAnswer` so scoring can apply the difficulty
+  // weight without a second round-trip.
   const qRows = await db
-    .select({ correctAnswer: questions.correctAnswer })
+    .select({
+      correctAnswer: questions.correctAnswer,
+      difficulty: questions.difficulty,
+    })
     .from(questions)
     .where(eq(questions.id, sq.questionId))
     .limit(1);
   const correct = qRows[0]?.correctAnswer ?? "";
+  const difficulty = normalizeDifficulty(qRows[0]?.difficulty);
 
   const isCorrect =
     input.answerGiven.trim().toLowerCase() === String(correct).trim().toLowerCase();
@@ -288,6 +348,7 @@ export async function recordAnswer(input: {
     timeToAnswerMs: scoringElapsed,
     timerSeconds: sq.timerSeconds,
     previousStreak,
+    difficulty,
   });
 
   // Insert-or-skip on the (player, sessionQuestion) unique index. The DB is
