@@ -1,11 +1,9 @@
 import { auth } from "@clerk/nextjs/server";
-import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAccountByClerkUserId } from "@/lib/accounts";
 import { apiErrorResponse } from "@/lib/apiError";
-import { db } from "@/lib/db/client";
-import { accounts } from "@/lib/db/schema";
+import { resolveStripeCustomerId } from "@/lib/billing/resolveStripeCustomer";
 import { getStripe } from "@/lib/stripe";
 
 const bodySchema = z.object({
@@ -72,19 +70,11 @@ export async function POST(req: Request) {
       : defaultReturn;
 
     const stripe = getStripe();
-
-    let customerId = account.stripeCustomerId ?? undefined;
-    if (!customerId) {
-      const customer = await stripe.customers.create({
-        email: account.email,
-        metadata: { accountId: account.id },
-      });
-      customerId = customer.id;
-      await db
-        .update(accounts)
-        .set({ stripeCustomerId: customerId })
-        .where(eq(accounts.id, account.id));
-    }
+    // Self-healing customer lookup — if the stored id is missing in Stripe
+    // (account rotated, customer deleted, env copied between test/live), we
+    // transparently create a fresh one and persist it instead of 500-ing
+    // with "No such customer".
+    const customerId = await resolveStripeCustomerId(stripe, account);
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",

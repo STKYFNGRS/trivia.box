@@ -1,7 +1,10 @@
 import { auth } from "@clerk/nextjs/server";
+import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getAccountByClerkUserId } from "@/lib/accounts";
 import { apiErrorResponse } from "@/lib/apiError";
+import { db } from "@/lib/db/client";
+import { accounts } from "@/lib/db/schema";
 import { getStripe } from "@/lib/stripe";
 
 export const dynamic = "force-dynamic";
@@ -57,19 +60,37 @@ export async function POST() {
       "http://localhost:3000";
 
     const stripe = getStripe();
-    const session = await stripe.billingPortal.sessions.create({
-      customer: account.stripeCustomerId,
-      return_url: `${base}/dashboard`,
-    });
+    try {
+      const session = await stripe.billingPortal.sessions.create({
+        customer: account.stripeCustomerId,
+        return_url: `${base}/dashboard`,
+      });
 
-    if (!session.url) {
-      return NextResponse.json(
-        { error: "Stripe did not return a portal URL" },
-        { status: 502 }
-      );
+      if (!session.url) {
+        return NextResponse.json(
+          { error: "Stripe did not return a portal URL" },
+          { status: 502 }
+        );
+      }
+
+      return NextResponse.json({ url: session.url, kind: "portal" });
+    } catch (err) {
+      // Stale `stripeCustomerId` (rotated Stripe key, deleted customer, etc.).
+      // Clear the bad id and send them through checkout to get a fresh one
+      // rather than throwing a confusing "No such customer" 500.
+      const code = (err as { code?: string } | null)?.code;
+      if (code === "resource_missing") {
+        await db
+          .update(accounts)
+          .set({ stripeCustomerId: null })
+          .where(eq(accounts.id, account.id));
+        return NextResponse.json({
+          url: "/dashboard/player/upgrade",
+          kind: "upgrade",
+        });
+      }
+      throw err;
     }
-
-    return NextResponse.json({ url: session.url, kind: "portal" });
   } catch (e) {
     console.error("[billing/portal] failed", e);
     return apiErrorResponse(e, "Could not open billing portal");
