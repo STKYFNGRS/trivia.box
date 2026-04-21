@@ -3,8 +3,9 @@ import { redirect } from "next/navigation";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { PlayerDashboardShell } from "@/components/dashboard/PlayerDashboardShell";
 import { SiteAdminDashboardShell } from "@/components/dashboard/SiteAdminDashboardShell";
-import { ensureAccountFromClerkUser } from "@/lib/accounts";
+import { ensureAccountFromClerkUser, getCurrentAccount } from "@/lib/accounts";
 import { isClerkAdmin } from "@/lib/admin";
+import { reconcileOrganizerSubscription } from "@/lib/billing/reconcile";
 import { ensurePlayerRowForAccount, getPlayerByAccountId } from "@/lib/players";
 import { hasEffectiveOrganizerSubscription } from "@/lib/subscription";
 
@@ -14,7 +15,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect("/sign-in");
   }
 
-  const account = await ensureAccountFromClerkUser();
+  let account = await ensureAccountFromClerkUser();
   if (!account) {
     redirect("/sign-in");
   }
@@ -29,6 +30,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   const admin = await isClerkAdmin();
+  // Best-effort self-heal: if the Stripe webhook missed an event, the banner
+  // would otherwise keep nagging a user who has already paid. Runs on every
+  // non-player dashboard render (one Stripe API call if there's a customer
+  // id, else instant).
+  const reconciled = await reconcileOrganizerSubscription(account);
+  if (reconciled.changed) {
+    account = (await getCurrentAccount()) ?? account;
+  }
   const organizerEffective = hasEffectiveOrganizerSubscription(account);
 
   if (account.accountType === "site_admin") {

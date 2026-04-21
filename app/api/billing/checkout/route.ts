@@ -76,6 +76,38 @@ export async function POST(req: Request) {
     // with "No such customer".
     const customerId = await resolveStripeCustomerId(stripe, account);
 
+    // Duplicate-subscription guard. If Stripe already has an active / trialing
+    // sub for this customer, sending them through Checkout would silently
+    // charge them a second time. Reroute them to the billing portal where
+    // they can cancel, swap cards, or download an invoice. This is the bug
+    // that bit us when the webhook missed a `checkout.session.completed` —
+    // the user "re-subscribed" and got double-billed.
+    try {
+      const existing = await stripe.subscriptions.list({
+        customer: customerId,
+        status: "all",
+        limit: 5,
+      });
+      const liveSub = existing.data.find(
+        (s) => s.status === "active" || s.status === "trialing"
+      );
+      if (liveSub) {
+        const portal = await stripe.billingPortal.sessions.create({
+          customer: customerId,
+          return_url: `${base}${returnPath}?checkout=existing`,
+        });
+        return NextResponse.json({
+          url: portal.url,
+          kind: "portal",
+          reason: "already_subscribed",
+        });
+      }
+    } catch (err) {
+      console.warn("[billing/checkout] duplicate-sub guard failed", err);
+      // Swallow — we'd rather fall through to a potentially-duplicate checkout
+      // (webhook will still promote the account) than fail the click entirely.
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,

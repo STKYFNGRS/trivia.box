@@ -2,13 +2,15 @@ import { redirect } from "next/navigation";
 import { getCurrentAccount } from "@/lib/accounts";
 import { CreatorPerksCard } from "@/components/dashboard/CreatorPerksCard";
 import { HostDashboard } from "@/components/dashboard/HostDashboard";
+import { ManageSubscriptionButton } from "@/components/billing/ManageSubscriptionButton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusPill } from "@/components/ui/status-pill";
+import { reconcileOrganizerSubscription } from "@/lib/billing/reconcile";
 import { hasEffectiveOrganizerSubscription } from "@/lib/subscription";
 
 export default async function DashboardHomePage() {
-  const account = await getCurrentAccount();
+  let account = await getCurrentAccount();
   if (!account) {
     return null;
   }
@@ -17,7 +19,17 @@ export default async function DashboardHomePage() {
     redirect("/dashboard/player");
   }
 
+  // Self-heal missed webhooks — if the user paid but `/api/webhooks/stripe`
+  // never flipped `subscription_active`, this pulls the truth from Stripe on
+  // every dashboard load so they don't sit in a half-subscribed limbo.
+  const reconcile = await reconcileOrganizerSubscription(account);
+  if (reconcile.changed) {
+    account = (await getCurrentAccount()) ?? account;
+  }
+
   const orgSub = hasEffectiveOrganizerSubscription(account);
+  const hasStripeCustomer = Boolean(account.stripeCustomerId);
+  const showDuplicateWarning = reconcile.activeSubscriptionCount > 1;
 
   const profileHint =
     account.accountType === "site_admin"
@@ -56,8 +68,27 @@ export default async function DashboardHomePage() {
             {orgSub ? "Active" : "Inactive"}
           </StatusPill>
         </CardHeader>
-        <CardContent className="text-muted-foreground text-sm">
-          Manage billing from the header banner or by reactivating a subscription.
+        <CardContent className="flex flex-col gap-3 text-muted-foreground text-sm">
+          {showDuplicateWarning ? (
+            <div className="rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-900 dark:text-amber-200">
+              Stripe reports{" "}
+              <span className="font-medium">
+                {reconcile.activeSubscriptionCount} active subscriptions
+              </span>{" "}
+              on this account. Open the customer portal below and cancel the
+              duplicate so you&apos;re only charged once.
+            </div>
+          ) : null}
+          <p>
+            {hasStripeCustomer
+              ? "Update your card, download invoices, switch plans or cancel any time from the Stripe customer portal."
+              : "Manage billing from the header banner once you&apos;ve subscribed."}
+          </p>
+          {hasStripeCustomer ? (
+            <div>
+              <ManageSubscriptionButton />
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

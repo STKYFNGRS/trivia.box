@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { AccountRow } from "@/lib/accounts";
+import { ManageSubscriptionButton } from "@/components/billing/ManageSubscriptionButton";
 import { SubscribeButton } from "@/components/billing/SubscribeButton";
 import { buttonVariants } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -97,7 +98,15 @@ export function SiteAdminDashboardShell(props: {
               <code className="rounded bg-black/5 px-1 dark:bg-white/10">SITE_ADMIN_DEV_BYPASS=1</code> in dev to
               run sessions without billing.
             </div>
-            <SubscribeButton returnPath={pathname ?? "/dashboard"} />
+            <div className="flex flex-wrap items-center gap-2">
+              <SubscribeButton returnPath={pathname ?? "/dashboard"} />
+              {/* Escape hatch when Stripe has a paid sub but our DB disagrees
+                  (missed webhook, etc.) — lets the admin open the Portal to
+                  cancel / inspect even while the banner still shows. */}
+              {props.account.stripeCustomerId ? (
+                <ManageSubscriptionButton variant="outline" size="default" />
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}

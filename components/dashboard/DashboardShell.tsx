@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { AccountRow } from "@/lib/accounts";
+import { ManageSubscriptionButton } from "@/components/billing/ManageSubscriptionButton";
 import { SubscribeButton } from "@/components/billing/SubscribeButton";
 import { buttonVariants } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -87,7 +88,15 @@ export function DashboardShell(props: {
               Your host subscription is inactive. You can review past activity, but launching live games requires
               an active subscription.
             </div>
-            <SubscribeButton returnPath={pathname ?? "/dashboard"} />
+            <div className="flex flex-wrap items-center gap-2">
+              <SubscribeButton returnPath={pathname ?? "/dashboard"} />
+              {/* If Stripe has a paid sub but our DB disagrees (missed
+                  webhook), the portal gives the host an immediate way to
+                  verify / cancel rather than being forced to pay again. */}
+              {props.account.stripeCustomerId ? (
+                <ManageSubscriptionButton variant="outline" size="default" />
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}
