@@ -272,6 +272,15 @@ export default async function GamesPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="flex flex-wrap items-center justify-end gap-2 text-sm">
+                    <Link
+                      href={`/dashboard/games/${s.id}/recap`}
+                      className={cn(
+                        buttonVariants({ size: "sm", variant: "secondary" }),
+                      )}
+                      title="View post-game analytics"
+                    >
+                      Recap
+                    </Link>
                     <RemoveSessionButton sessionId={s.id} joinCode={s.joinCode} />
                   </CardContent>
                 </Card>

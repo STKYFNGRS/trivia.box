@@ -446,14 +446,16 @@ export async function recordAnswer(input: {
     pointsAwarded: breakdown.points,
   }).catch(() => {});
 
-  // Phase 4.1: +1 XP per correct answer in hosted games. The `answers`
-  // unique constraint on (player, sessionQuestion) makes the surrounding
-  // insert idempotent, so we only fire XP on the initial successful write.
+  // Difficulty-weighted XP per correct answer (easy/medium/hard → 1/2/3).
+  // The `answers` unique constraint on (player, sessionQuestion) makes the
+  // surrounding insert idempotent, so we only fire XP on the initial
+  // successful write.
   if (isCorrect) {
     void awardCorrectAnswerXp({
       playerId: input.playerId,
       sessionId: sq.sessionId,
       questionId: sq.questionId,
+      difficulty,
     }).catch((err) => {
       console.error("awardCorrectAnswerXp failed", err);
     });

@@ -46,6 +46,9 @@ export type PublicPlayerStats = {
     fastestCorrectMs: number | null;
     totalGames: number;
     totalCorrect: number;
+    dailyStreak: number;
+    longestDailyStreak: number;
+    lastDailyPlayDate: string | null;
   };
   achievements: {
     slug: string;
@@ -149,11 +152,29 @@ export async function getPublicPlayerStats(
       fastestCorrectMs: playerStats.fastestCorrectMs,
       totalGames: playerStats.totalGames,
       totalCorrect: playerStats.totalCorrect,
+      dailyStreak: playerStats.dailyStreak,
+      longestDailyStreak: playerStats.longestDailyStreak,
+      lastDailyPlayDate: playerStats.lastDailyPlayDate,
     })
     .from(playerStats)
     .where(eq(playerStats.playerId, player.id))
     .limit(1);
   const rollupRow = rollupRows[0];
+
+  // Derive the *display* daily streak — a stored streak is only "alive"
+  // until the end of the day after `lastDailyPlayDate`. If the player
+  // missed yesterday, the flame is visually cold even though the stored
+  // number waits for their next completion to reset.
+  const todayKey = new Date().toISOString().slice(0, 10);
+  let displayDailyStreak = rollupRow?.dailyStreak ?? 0;
+  if (rollupRow?.lastDailyPlayDate) {
+    const lastMs = Date.parse(rollupRow.lastDailyPlayDate + "T00:00:00Z");
+    const todayMs = Date.parse(todayKey + "T00:00:00Z");
+    const diff = Math.round((todayMs - lastMs) / (24 * 60 * 60 * 1000));
+    if (diff > 1) displayDailyStreak = 0;
+  } else {
+    displayDailyStreak = 0;
+  }
 
   const rollup = {
     totalXp: Number(rollupRow?.totalXp ?? 0),
@@ -163,6 +184,9 @@ export async function getPublicPlayerStats(
     fastestCorrectMs: rollupRow?.fastestCorrectMs ?? null,
     totalGames: rollupRow?.totalGames ?? gamesPlayed,
     totalCorrect: rollupRow?.totalCorrect ?? correctAnswers,
+    dailyStreak: displayDailyStreak,
+    longestDailyStreak: rollupRow?.longestDailyStreak ?? 0,
+    lastDailyPlayDate: rollupRow?.lastDailyPlayDate ?? null,
   };
 
   const achievementRows = await db

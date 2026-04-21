@@ -102,7 +102,7 @@ export default function OpenGraphImage() {
           }}
         >
           <div style={{ maxWidth: 640 }}>
-            Free house games every 15 min · Live venue nights · Solo runs any time.
+            Free house games every 30 min · Live venue nights · Solo runs any time.
           </div>
           <div
             style={{

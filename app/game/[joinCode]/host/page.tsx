@@ -603,6 +603,12 @@ export default function HostPage() {
               <FinalStandings
                 variant="host"
                 leaderboard={boot?.leaderboard ?? []}
+                shareUrl={
+                  effectiveSessionId
+                    ? `/r/session/${effectiveSessionId}`
+                    : null
+                }
+                shareTitle="Trivia.Box recap"
               />
             </div>
           ) : (

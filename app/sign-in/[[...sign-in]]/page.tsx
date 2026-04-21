@@ -7,10 +7,10 @@ import { FilmGrain } from "@/components/marketing/FilmGrain";
 
 export default async function Page() {
   // Already signed-in visitors shouldn't see the sign-in screen — bounce them
-  // straight to their dashboard. This mirrors the auth-aware nav so we never
-  // dead-end a logged-in user on a "sign in" surface.
+  // straight to their player dashboard. This mirrors the auth-aware nav so we
+  // never dead-end a logged-in user on a "sign in" surface.
   const { userId } = await auth();
-  if (userId) redirect("/dashboard");
+  if (userId) redirect("/dashboard/player");
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--stage-bg)] p-6 text-white">
       <FilmGrain />
@@ -49,7 +49,7 @@ export default async function Page() {
           routing="path"
           path="/sign-in"
           signUpUrl="/sign-up"
-          forceRedirectUrl="/dashboard"
+          forceRedirectUrl="/dashboard/player"
           appearance={cinematicClerkAppearance}
         />
       </div>

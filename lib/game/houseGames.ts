@@ -65,6 +65,49 @@ export async function resolveHouseAccountId(): Promise<string | null> {
 }
 
 /**
+ * Return the soonest future house game, if one is scheduled. Powers the
+ * post-game "Next house game starts in X min" chip inside `FinalStandings`
+ * and the `/play` hub when we want to nudge players straight into the
+ * next round. Returns `null` when no house account is configured or no
+ * pending house game exists.
+ */
+export async function getNextUpcomingHouseGame(now = new Date()): Promise<{
+  sessionId: string;
+  joinCode: string;
+  eventStartsAt: Date;
+  theme: string | null;
+} | null> {
+  const houseAccountId = await resolveHouseAccountId();
+  if (!houseAccountId) return null;
+  const rows = await db
+    .select({
+      id: sessions.id,
+      joinCode: sessions.joinCode,
+      eventStartsAt: sessions.eventStartsAt,
+      theme: sessions.theme,
+    })
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.houseGame, true),
+        eq(sessions.venueAccountId, houseAccountId),
+        eq(sessions.status, "pending"),
+        gte(sessions.eventStartsAt, now)
+      )
+    )
+    .orderBy(asc(sessions.eventStartsAt))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    sessionId: row.id,
+    joinCode: row.joinCode,
+    eventStartsAt: row.eventStartsAt,
+    theme: row.theme ?? null,
+  };
+}
+
+/**
  * Is there already a pending or active house game landing in the next
  * `lookaheadMin` minutes? Caller uses this to skip scheduling.
  */

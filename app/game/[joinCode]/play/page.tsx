@@ -177,6 +177,64 @@ export default function PlayPage() {
   const pausedAt = boot?.pausedAt ?? null;
   const completed = boot?.status === "completed";
 
+  // Post-session unlock toasts. Fire once per (sessionId) when the client
+  // first sees `completed` — `tryGrantAchievementsAfterSession` already
+  // ran server-side by then, so `/new-achievements` can cheaply report
+  // what this viewer just unlocked.
+  const sessionId = boot?.sessionId ?? null;
+  const announcedAchievementsForSessionRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!completed || !sessionId) return;
+    if (announcedAchievementsForSessionRef.current === sessionId) return;
+    announcedAchievementsForSessionRef.current = sessionId;
+    // Survive a page reload on the same completed session — `sessionStorage`
+    // is scoped to this tab, which matches our "one toast stream per
+    // game attendance" semantics.
+    const storageKey = `trivia.announced.achievements.${sessionId}`;
+    try {
+      if (sessionStorage.getItem(storageKey)) return;
+    } catch {
+      // private mode / storage disabled → fall through and just toast.
+    }
+    const ac = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/game/sessions/${sessionId}/new-achievements`,
+          { signal: ac.signal, cache: "no-store" }
+        );
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          achievements?: Array<{
+            slug: string;
+            title: string;
+            description?: string | null;
+          }>;
+        };
+        const list = data.achievements ?? [];
+        if (list.length === 0) return;
+        try {
+          sessionStorage.setItem(storageKey, "1");
+        } catch {
+          /* noop */
+        }
+        list.forEach((a, i) => {
+          // Stagger so a big unlock dump doesn't pile into a single
+          // toast stack — this way the player actually sees each one.
+          setTimeout(() => {
+            toast.success(`Achievement unlocked: ${a.title}`, {
+              description: a.description ?? undefined,
+              duration: 6000,
+            });
+          }, i * 900);
+        });
+      } catch {
+        // Non-fatal; the achievements still exist on the profile.
+      }
+    })();
+    return () => ac.abort();
+  }, [completed, sessionId]);
+
   const [picked, setPicked] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -199,6 +257,16 @@ export default function PlayPage() {
     const idx = boot.leaderboard.findIndex((e) => e.playerId === playerId);
     if (idx < 0) return null;
     return { rank: idx + 1, score: boot.leaderboard[idx].score };
+  }, [boot?.leaderboard, playerId]);
+
+  // Viewer's username comes straight off the leaderboard row (already keyed
+  // by playerId). Gives `FinalStandings` the `/u/<username>` deep link so
+  // the end-of-game screen isn't a single exit ramp back to `/play`.
+  const viewerUsername = useMemo(() => {
+    if (!playerId || !boot?.leaderboard?.length) return null;
+    return (
+      boot.leaderboard.find((e) => e.playerId === playerId)?.username ?? null
+    );
   }, [boot?.leaderboard, playerId]);
 
   /**
@@ -394,6 +462,21 @@ export default function PlayPage() {
                   variant="phone"
                   leaderboard={boot?.leaderboard ?? []}
                   viewerPlayerId={playerId ?? null}
+                  profileHref={
+                    viewerUsername
+                      ? `/u/${encodeURIComponent(viewerUsername)}`
+                      : null
+                  }
+                  shareUrl={
+                    boot?.sessionId ? `/r/session/${boot.sessionId}` : null
+                  }
+                  shareTitle={
+                    boot?.venueDisplayName
+                      ? `${boot.venueDisplayName} trivia recap`
+                      : "Trivia.Box recap"
+                  }
+                  venueSlug={boot?.venueSlug ?? null}
+                  venueDisplayName={boot?.venueDisplayName ?? null}
                 />
               </motion.div>
             ) : (

@@ -121,7 +121,7 @@ function Hero({ houseCountdown }: { houseCountdown: string }) {
           </h1>
 
           <p className="mt-7 max-w-2xl text-lg leading-relaxed text-white/75 md:text-xl">
-            A free house game every 15 minutes, live venue nights, and
+            A free house game every 30 minutes, live venue nights, and
             server-scored solo runs. One app for players, one dashboard for
             hosts. No CSV wrangling.
           </p>
@@ -267,7 +267,7 @@ function LiveTicker({
     },
     {
       icon: <Timer className="size-3.5" />,
-      text: "Next free house game drops every :00 :15 :30 :45",
+      text: "Next free house game drops every :00 and :30",
     },
     {
       icon: <Library className="size-3.5" />,
@@ -335,7 +335,7 @@ function PlayModes({ nextHouse }: { nextHouse: string }) {
     {
       tone: "lime",
       title: "House game",
-      subtitle: "Free · Every 15 min",
+      subtitle: "Free · Every 30 min",
       body: "Our always-on autopilot round. Jump in anonymously, climb the live board, brag in the group chat.",
       cta: { href: "/play", label: "See the next round" },
       meta: nextHouse,
@@ -836,11 +836,11 @@ function FaqSection() {
   const faqs: Array<{ q: string; a: string }> = [
     {
       q: "Do I need an account to play?",
-      a: "No. Solo runs and house games are fully playable as a guest. Signing in just keeps your streaks, XP, and leaderboard rank across devices.",
+      a: "Solo runs work fully anonymously — jump in with one tap. Multiplayer games (house rounds + venue nights) ask for a free account so your name appears on the leaderboard and your streaks, XP, and rank persist across devices.",
     },
     {
       q: "How often do free house games run?",
-      a: "Every 15 minutes, around the clock. The autopilot scheduler queues the next round automatically, so there's always one within reach.",
+      a: "Every 30 minutes, around the clock. The autopilot scheduler queues the next round automatically, so there's always one within reach.",
     },
     {
       q: "What does a host pay for?",
@@ -1004,7 +1004,7 @@ function SectionLead({
 
 function formatCountdown(ms: number | null, status: string | undefined): string {
   if (status === "active") return "House game live now";
-  if (ms === null) return "House games run every 15 minutes";
+  if (ms === null) return "House games run every 30 minutes";
   if (ms <= 0) return "Next house game any second now";
   const total = Math.round(ms / 1000);
   const m = Math.floor(total / 60);

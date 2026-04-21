@@ -16,6 +16,14 @@
     {
       "path": "/api/cron/house-games/tick",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/email-digests?kind=upcoming",
+      "schedule": "0 */3 * * *"
+    },
+    {
+      "path": "/api/cron/email-digests?kind=weekly",
+      "schedule": "15 14 * * 1"
     }
   ]
 }

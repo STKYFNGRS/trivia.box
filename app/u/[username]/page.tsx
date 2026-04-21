@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AddFriendButton } from "@/components/social/AddFriendButton";
 import { XpLevelBadge } from "@/components/player/XpLevelBadge";
 import { PlayerStatCards } from "@/components/player/PlayerStatCards";
 import { TrophyWall } from "@/components/player/TrophyWall";
@@ -9,6 +10,7 @@ import { RecentGamesTable } from "@/components/player/RecentGamesTable";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getPublicPlayerStats } from "@/lib/game/publicPlayerStats";
+import { xpToLevel } from "@/lib/xp";
 
 export async function generateMetadata(props: {
   params: Promise<{ username: string }>;
@@ -19,7 +21,7 @@ export async function generateMetadata(props: {
     // Let the template do its thing so the tab reads "username · trivia.box".
     return { title: username };
   }
-  const description = `Level ${Math.max(1, Math.floor(stats.rollup.totalXp / 1000) + 1)} · ${stats.rollup.totalPoints.toLocaleString()} lifetime points · ${stats.achievements.length} trophies on trivia.box`;
+  const description = `Level ${xpToLevel(stats.rollup.totalXp).level} · ${stats.rollup.totalPoints.toLocaleString()} lifetime points · ${stats.achievements.length} trophies on trivia.box`;
   // Root layout's `title.template = "%s · trivia.box"` appends the suffix,
   // so we return just the username here.
   return {
@@ -97,8 +99,26 @@ export default async function PublicPlayerPage(props: {
                 <span className="tabular-nums">{memberSince}</span>. Everything
                 below reflects live stats across every venue they&apos;ve played.
               </p>
-              <div className="mt-5">
+              <div className="mt-5 flex flex-wrap items-center gap-2">
                 <XpLevelBadge xp={rollup.totalXp} />
+                {rollup.dailyStreak > 0 ? (
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-300"
+                    title="Active daily challenge streak"
+                  >
+                    {/* inline SVG to avoid new lucide import here */}
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="12"
+                      height="12"
+                      fill="currentColor"
+                      aria-hidden
+                    >
+                      <path d="M12 2c0 3 3 5 3 8a3 3 0 1 1-6 0c0-2 1-4 3-8zm-2 12a5 5 0 1 0 10 0c0-3-2-5-4-7 1 3-1 4-2 4-1 0-2-1-2-3-2 2-2 4-2 6z" />
+                    </svg>
+                    Daily streak {rollup.dailyStreak}
+                  </span>
+                ) : null}
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -126,6 +146,10 @@ export default async function PublicPlayerPage(props: {
               >
                 Leaderboards
               </Link>
+              <AddFriendButton
+                targetPlayerId={stats.player.id}
+                targetLabel={stats.player.username}
+              />
             </div>
           </div>
 

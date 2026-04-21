@@ -3,8 +3,10 @@ import {
   bigint,
   boolean,
   customType,
+  date,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -525,6 +527,15 @@ export const playerStats = pgTable("player_stats", {
   longestStreak: integer("longest_streak").notNull().default(0),
   fastestCorrectMs: integer("fastest_correct_ms"),
   lastPlayedAt: timestamp("last_played_at", { withTimezone: true }),
+  /**
+   * Daily challenge streak — number of consecutive UTC days the player has
+   * played *today's* daily challenge. Bumped on completion via
+   * `recordDailyChallengeCompletion` in `lib/game/dailyChallenge.ts`; a
+   * gap of one day resets it to 1 (the day they just played).
+   */
+  dailyStreak: integer("daily_streak").notNull().default(0),
+  longestDailyStreak: integer("longest_daily_streak").notNull().default(0),
+  lastDailyPlayDate: date("last_daily_play_date", { mode: "string" }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -774,6 +785,12 @@ export const soloSessions = pgTable(
     status: text("status").notNull().default("active"), // active | completed | abandoned
     totalScore: integer("total_score").notNull().default(0),
     correctCount: integer("correct_count").notNull().default(0),
+    /**
+     * Set (to the UTC day) when the solo run is the player's attempt at
+     * the global daily challenge, so we can enforce one-per-day and roll
+     * streaks up on completion. Null for regular solo runs.
+     */
+    dailyChallengeDate: date("daily_challenge_date", { mode: "string" }),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
   },
@@ -806,6 +823,187 @@ export const soloQuestions = pgTable(
   (t) => [
     index("solo_questions_session_idx").on(t.soloSessionId),
     uniqueIndex("solo_questions_session_position_unique").on(t.soloSessionId, t.position),
+  ]
+);
+
+/**
+ * Global "challenge of the day". Seeded once per UTC day — either by the
+ * `house-games/tick` cron extension or lazily on first access to
+ * `/play/daily`. `questionIds` is a small JSONB array of exactly 5
+ * question UUIDs drawn from the vetted pool with a balanced difficulty
+ * mix. Every player sees the same 5 questions for the day so we can
+ * build a shareable daily leaderboard on top of it.
+ */
+export const dailyChallenges = pgTable("daily_challenges", {
+  challengeDate: date("challenge_date", { mode: "string" }).primaryKey(),
+  questionIds: jsonb("question_ids").$type<string[]>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Per-account email opt-ins. One row per account; lazily upserted the
+ * first time we read (dashboard) or try to send (triggers) for an
+ * account, so the migration doesn't need a backfill. Defaults favour
+ * "yes" for the rare-but-valuable messages (prize wins, weekly digest,
+ * upcoming sessions at venues they've visited) and "no" for marketing
+ * blasts, mirroring the FTC/CAN-SPAM best-practice of being clearly
+ * opt-in for anything that isn't directly transactional.
+ *
+ * `unsubscribedAllAt`, when set, overrides every flag to `false` for
+ * outgoing sends (the one-click unsubscribe link flips this bit). The
+ * preferences UI can still edit individual flags, and saving any flag
+ * clears `unsubscribedAllAt` so accounts that change their mind aren't
+ * silently stuck at "all off".
+ */
+export const emailPreferences = pgTable("email_preferences", {
+  accountId: uuid("account_id")
+    .primaryKey()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  prizeWon: boolean("prize_won").notNull().default(true),
+  weeklyDigest: boolean("weekly_digest").notNull().default(true),
+  upcomingSessions: boolean("upcoming_sessions").notNull().default(true),
+  marketing: boolean("marketing").notNull().default(false),
+  unsubscribedAllAt: timestamp("unsubscribed_all_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Append-only ledger of transactional emails attempted. The composite
+ * unique (`kind`, `dedupe_key`) is how `sendMail` guarantees idempotency:
+ * the caller supplies a stable dedupe key (e.g. the prize-claim id) and
+ * the `ON CONFLICT DO NOTHING` insert wins the race so a cron retry can
+ * never double-send. `status` transitions queued -> sent|failed when the
+ * Resend call returns. We intentionally don't store the full HTML — ops
+ * can replay via the dedupe key + template if truly needed.
+ */
+export const sentEmails = pgTable(
+  "sent_emails",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id").references(() => accounts.id, { onDelete: "set null" }),
+    toEmail: text("to_email").notNull(),
+    kind: text("kind").notNull(),
+    dedupeKey: text("dedupe_key").notNull(),
+    subject: text("subject").notNull(),
+    providerMessageId: text("provider_message_id"),
+    status: text("status").notNull().default("queued"), // queued | sent | failed | skipped
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("sent_emails_kind_dedupe_unique").on(t.kind, t.dedupeKey),
+    index("sent_emails_account_idx").on(t.accountId, t.createdAt),
+  ]
+);
+
+/**
+ * Venue follows — lightweight many-to-many for "save this venue" that
+ * powers the FinalStandings "Follow" CTA and unlocks the venue's upcoming-
+ * sessions digest. See `drizzle/0017_venue_follows.sql`.
+ */
+export const venueFollows = pgTable(
+  "venue_follows",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    playerId: uuid("player_id")
+      .notNull()
+      .references(() => players.id, { onDelete: "cascade" }),
+    venueAccountId: uuid("venue_account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("venue_follows_player_venue_uidx").on(
+      t.playerId,
+      t.venueAccountId
+    ),
+    index("venue_follows_venue_idx").on(t.venueAccountId),
+  ]
+);
+
+/**
+ * Web Push subscriptions — one row per (account, browser endpoint). See
+ * `drizzle/0020_push_subscriptions.sql`. Actual sending requires the
+ * `web-push` npm dep and a VAPID keypair (see `lib/push/send.ts`).
+ */
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("push_subscriptions_endpoint_uidx").on(t.endpoint),
+    index("push_subscriptions_account_idx").on(t.accountId),
+  ]
+);
+
+/**
+ * Seasons — named time windows over the answers table used to power the
+ * "Season leaderboard" tab on `/leaderboards`. Hand-curated so admins can
+ * roll them over on whatever cadence suits the operator without a
+ * migration. See `drizzle/0019_seasons.sql`.
+ */
+export const seasons = pgTable(
+  "seasons",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    slug: text("slug").notNull(),
+    label: text("label").notNull(),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("seasons_slug_uidx").on(t.slug),
+    index("seasons_window_idx").on(t.startsAt, t.endsAt),
+  ]
+);
+
+/**
+ * Friendships — directed request rows that collapse into a symmetric social
+ * graph once accepted. See `drizzle/0018_friendships.sql` for the rationale.
+ *
+ * `requester_id` is the user who tapped "Add friend"; `addressee_id` sees a
+ * pending invite in their inbox. The row is re-used in place when accepted —
+ * we do NOT duplicate it with the addressee as requester. The data layer in
+ * `lib/friends.ts` handles the bi-directional lookup.
+ */
+export const friendships = pgTable(
+  "friendships",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    requesterId: uuid("requester_id")
+      .notNull()
+      .references(() => players.id, { onDelete: "cascade" }),
+    addresseeId: uuid("addressee_id")
+      .notNull()
+      .references(() => players.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("friendships_pair_uidx").on(t.requesterId, t.addresseeId),
+    index("friendships_requester_idx").on(t.requesterId),
+    index("friendships_addressee_idx").on(t.addresseeId),
   ]
 );
 

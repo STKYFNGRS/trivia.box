@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Home, Medal, Trophy, UserCircle2 } from "lucide-react";
+import { NextHouseGameChip } from "@/components/game/NextHouseGameChip";
+import { ShareRecapButton } from "@/components/share/ShareRecapButton";
+import { FollowVenueButton } from "@/components/venue/FollowVenueButton";
 import { cn } from "@/lib/utils";
 
 export type FinalStandingsEntry = {
@@ -34,6 +37,32 @@ type FinalStandingsProps = {
    * secondary action. When omitted the button is hidden.
    */
   profileHref?: string | null;
+  /**
+   * Absolute URL to the public session recap (/r/session/[id]).
+   * When provided the phone/host variants render a Share chip that
+   * drops into the system share sheet (clipboard fallback). Omit
+   * for the big-screen variant — room displays have no input.
+   */
+  shareUrl?: string | null;
+  /**
+   * Optional display name used by the share sheet (e.g. venue or
+   * theme). Defaults to a generic Trivia.Box recap title.
+   */
+  shareTitle?: string | null;
+  /**
+   * Venue identity for the contextual "Follow this venue" CTA on the
+   * phone variant. When both are provided we render a follow toggle
+   * right beneath the top-N table — see `FollowVenueButton` for the
+   * auth/state semantics. Omit to hide.
+   */
+  venueSlug?: string | null;
+  venueDisplayName?: string | null;
+  /**
+   * When `true` (default on the phone variant) we render the "Next
+   * house game in Xm" chip — great on the player phone to keep them
+   * rolling into the next house round. Forced `false` on big-screen.
+   */
+  showNextHouseGame?: boolean;
   className?: string;
 };
 
@@ -58,6 +87,11 @@ export function FinalStandings({
   viewerPlayerId = null,
   variant = "phone",
   profileHref = null,
+  shareUrl = null,
+  shareTitle = null,
+  venueSlug = null,
+  venueDisplayName = null,
+  showNextHouseGame,
   className,
 }: FinalStandingsProps) {
   const top = leaderboard.slice(0, variant === "big-screen" ? 10 : 10);
@@ -70,6 +104,7 @@ export function FinalStandings({
 
   const isBig = variant === "big-screen";
   const isPhone = variant === "phone";
+  const showHouseChip = !isBig && (showNextHouseGame ?? isPhone);
 
   return (
     <div
@@ -224,6 +259,22 @@ export function FinalStandings({
         </div>
       )}
 
+      {/* Contextual nudges — only on the player phone / host variant.
+         The `NextHouseGameChip` self-hides when no house game is
+         scheduled, so we can always mount it. */}
+      {!isBig ? (
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {showHouseChip ? <NextHouseGameChip /> : null}
+          {venueSlug && venueDisplayName && isPhone ? (
+            <FollowVenueButton
+              venueSlug={venueSlug}
+              venueDisplayName={venueDisplayName}
+              size="sm"
+            />
+          ) : null}
+        </div>
+      ) : null}
+
       {/* Actions — hidden on big-screen (room display has no user input). */}
       {!isBig ? (
         <div className="flex flex-wrap items-center justify-center gap-2">
@@ -254,6 +305,17 @@ export function FinalStandings({
               ) : null}
             </>
           )}
+          {shareUrl ? (
+            <ShareRecapButton
+              url={shareUrl}
+              title={shareTitle ?? "Trivia.Box recap"}
+              text={
+                viewerEntry && viewerRank
+                  ? `I finished #${viewerRank} with ${viewerEntry.score.toLocaleString()} pts.`
+                  : "Check out the final standings on Trivia.Box."
+              }
+            />
+          ) : null}
         </div>
       ) : null}
     </div>

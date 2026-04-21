@@ -8,6 +8,7 @@ import {
   prizeClaims,
   sessions,
 } from "@/lib/db/schema";
+import { notifyPrizeWon } from "@/lib/email/triggers";
 
 /**
  * Phase 4.2 venue IRL prize claim flow.
@@ -148,6 +149,18 @@ export async function materializePrizeClaims(
       });
     }
   }
+
+  // Fan out "you won a prize" email in the background. We await them all
+  // so a cron worker knows the send completed, but wrap in try/catch so a
+  // single failure can't unwind the other claims — `sendMail` is already
+  // idempotent on `(kind, dedupe_key)` so cron retries are safe.
+  await Promise.all(
+    results.map((r) =>
+      notifyPrizeWon(r.id).catch((err) => {
+        console.error("notifyPrizeWon failed", r.id, err);
+      })
+    )
+  );
 
   return results;
 }

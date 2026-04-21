@@ -10,6 +10,7 @@ import {
   questions,
   sessionQuestions,
 } from "@/lib/db/schema";
+import { normalizeDifficulty, type Difficulty } from "@/lib/game/scoring";
 
 /**
  * Phase 4.1 XP / points system.
@@ -38,6 +39,28 @@ import {
 export const XP_PER_CORRECT_ANSWER = 1;
 export const XP_PODIUM = [50, 25, 10] as const;
 export const XP_CREATOR_PER_DECK_PLAY = 10;
+
+/**
+ * XP per correct answer, scaled by difficulty. Parallel shape to
+ * `DIFFICULTY_POINT_WEIGHTS` in `lib/game/scoring.ts` — a hard correct is
+ * worth 3× an easy correct, keeping XP aligned with the points economy.
+ * Integer math so `totalXp` stays clean without rounding drift.
+ *
+ *   easy   → 1 XP
+ *   medium → 2 XP
+ *   hard   → 3 XP
+ */
+export const XP_PER_CORRECT_BY_DIFFICULTY: Record<Difficulty, number> = {
+  1: 1,
+  2: 2,
+  3: 3,
+};
+
+export function xpPerCorrectForDifficulty(
+  raw: number | null | undefined
+): number {
+  return XP_PER_CORRECT_BY_DIFFICULTY[normalizeDifficulty(raw)];
+}
 
 export type AwardXpKind =
   | "correct_answer"
@@ -83,17 +106,24 @@ export async function awardXp(
 
 /**
  * Called by `recordAnswer` after a correct answer has been newly inserted
- * (so duplicates are impossible). One XP per correct answer. Wrapped in a
- * try/catch by the caller to avoid breaking gameplay if the XP write fails.
+ * (so duplicates are impossible). XP is scaled to difficulty so a hard
+ * correct pays 3× an easy correct — same curve the points system uses.
+ * Wrapped in a try/catch by the caller to avoid breaking gameplay if the
+ * XP write fails.
+ *
+ * `difficulty` is optional for backwards compat; unknown values fall back
+ * to the medium weight via `xpPerCorrectForDifficulty`.
  */
 export async function awardCorrectAnswerXp(input: {
   playerId: string;
   sessionId: string;
   questionId: string;
+  difficulty?: number | null;
 }): Promise<void> {
-  await awardXp(input.playerId, "correct_answer", XP_PER_CORRECT_ANSWER, {
+  const amount = xpPerCorrectForDifficulty(input.difficulty);
+  await awardXp(input.playerId, "correct_answer", amount, {
     sessionId: input.sessionId,
-    note: `Correct answer · ${input.questionId}`,
+    note: `Correct answer · d${normalizeDifficulty(input.difficulty)} · ${input.questionId}`,
   });
 }
 

@@ -1,8 +1,10 @@
 import { SignedOut } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
 import * as Sentry from "@sentry/nextjs";
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
-import { Dice5, Gamepad2, Library, LogIn, ScanQrCode, Timer } from "lucide-react";
+import { CalendarDays, Dice5, Flame, Gamepad2, Library, LogIn, ScanQrCode, Timer } from "lucide-react";
 import Link from "next/link";
+import { getAccountByClerkUserId } from "@/lib/accounts";
 import { MarketingShell } from "@/components/marketing/MarketingShell";
 import { NeonCard, type NeonTone } from "@/components/marketing/NeonCard";
 import { buttonVariants } from "@/components/ui/button";
@@ -11,7 +13,9 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { StatusPill } from "@/components/ui/status-pill";
 import { db } from "@/lib/db/client";
 import { accounts, sessions, venueProfiles } from "@/lib/db/schema";
+import { getDailyStreak } from "@/lib/game/dailyChallenge";
 import { getNextHouseGame } from "@/lib/game/houseGames";
+import { getPlayerByAccountId } from "@/lib/players";
 import { cn } from "@/lib/utils";
 
 /**
@@ -93,9 +97,33 @@ function fmtWhen(d: Date, tz: string): string {
   }
 }
 
+/**
+ * Games starting within this window should surface a countdown pill + a
+ * prominent "Join now" CTA instead of a generic "View" button. Matches the
+ * corresponding threshold on `/games/upcoming` so the two surfaces stay
+ * consistent.
+ */
+const IMMINENT_WINDOW_MS = 5 * 60 * 1000;
+
+function formatImminent(ms: number): string {
+  if (ms <= 0) return "Starting now";
+  if (ms < 60_000) return `Starts in ${Math.max(1, Math.round(ms / 1000))}s`;
+  return `Starts in ${Math.max(1, Math.round(ms / 60_000))}m`;
+}
+
 export default async function PlayHubPage() {
   const now = new Date();
-  const [houseGame, upcoming] = await Promise.all([
+  const { userId } = await auth();
+  let playerId: string | null = null;
+  if (userId) {
+    const account = await getAccountByClerkUserId(userId);
+    if (account) {
+      const player = await getPlayerByAccountId(account.id);
+      if (player) playerId = player.id;
+    }
+  }
+
+  const [houseGame, upcoming, dailyStreak] = await Promise.all([
     getNextHouseGame(now).catch((err) => {
       Sentry.captureException(err, {
         tags: { route: "/play", step: "getNextHouseGame" },
@@ -103,6 +131,14 @@ export default async function PlayHubPage() {
       return null;
     }),
     loadUpcoming(now),
+    playerId
+      ? getDailyStreak(playerId, now)
+      : Promise.resolve({
+          current: 0,
+          longest: 0,
+          playedToday: false,
+          lastPlayDate: null,
+        }),
   ]);
 
   return (
@@ -146,6 +182,11 @@ export default async function PlayHubPage() {
             eventStartsAt={houseGame.eventStartsAt}
           />
         ) : null}
+
+        <DailyChallengeStrip
+          streak={dailyStreak}
+          className={cn(houseGame ? "mt-4" : "mt-6")}
+        />
 
         <div className={cn("grid gap-4 md:grid-cols-3", houseGame ? "mt-6" : "mt-8")}>
           <PlayModeCard
@@ -205,47 +246,72 @@ export default async function PlayHubPage() {
             </Card>
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
-              {upcoming.map((g) => (
-                <Card
-                  key={g.id}
-                  className="border-white/10 bg-white/[0.04] text-white shadow-[var(--shadow-card)] backdrop-blur"
-                >
-                  <CardContent className="flex items-center justify-between gap-4 p-4">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="truncate text-base font-semibold tracking-tight">
-                          {g.venueName}
+              {upcoming.map((g) => {
+                const msUntil = g.eventStartsAt.getTime() - now.getTime();
+                const imminent =
+                  g.status === "active" ||
+                  (msUntil >= 0 && msUntil <= IMMINENT_WINDOW_MS);
+                const ctaHref = imminent
+                  ? `/join?code=${g.joinCode}`
+                  : g.venueSlug
+                    ? `/v/${g.venueSlug}`
+                    : `/join?code=${g.joinCode}`;
+                const ctaLabel = imminent
+                  ? g.status === "active"
+                    ? "Join live"
+                    : "Join now"
+                  : "View";
+                return (
+                  <Card
+                    key={g.id}
+                    className="border-white/10 bg-white/[0.04] text-white shadow-[var(--shadow-card)] backdrop-blur"
+                  >
+                    <CardContent className="flex items-center justify-between gap-4 p-4">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="truncate text-base font-semibold tracking-tight">
+                            {g.venueName}
+                          </div>
+                          {g.houseGame ? (
+                            <StatusPill tone="accent">House</StatusPill>
+                          ) : g.status === "active" ? (
+                            <StatusPill tone="success" dot pulse>
+                              Live
+                            </StatusPill>
+                          ) : (
+                            <StatusPill tone="neutral">Scheduled</StatusPill>
+                          )}
+                          {g.theme ? (
+                            <StatusPill tone="info">{g.theme}</StatusPill>
+                          ) : null}
+                          {imminent && g.status !== "active" ? (
+                            <StatusPill tone="accent" dot pulse>
+                              {formatImminent(msUntil)}
+                            </StatusPill>
+                          ) : null}
                         </div>
-                        {g.houseGame ? (
-                          <StatusPill tone="accent">House</StatusPill>
-                        ) : g.status === "active" ? (
-                          <StatusPill tone="success" dot pulse>
-                            Live
-                          </StatusPill>
-                        ) : (
-                          <StatusPill tone="neutral">Scheduled</StatusPill>
+                        <div className="mt-0.5 truncate text-xs text-white/60">
+                          {g.venueCity ? `${g.venueCity} · ` : ""}
+                          {fmtWhen(g.eventStartsAt, g.eventTimezone)}
+                        </div>
+                      </div>
+                      <Link
+                        href={ctaHref}
+                        className={cn(
+                          imminent
+                            ? buttonVariants({ size: "sm" })
+                            : buttonVariants({ variant: "outline", size: "sm" }),
+                          imminent
+                            ? "shrink-0 bg-[var(--stage-accent)] text-slate-950 hover:bg-[var(--stage-accent)]/90"
+                            : "shrink-0 border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white"
                         )}
-                        {g.theme ? (
-                          <StatusPill tone="info">{g.theme}</StatusPill>
-                        ) : null}
-                      </div>
-                      <div className="mt-0.5 truncate text-xs text-white/60">
-                        {g.venueCity ? `${g.venueCity} · ` : ""}
-                        {fmtWhen(g.eventStartsAt, g.eventTimezone)}
-                      </div>
-                    </div>
-                    <Link
-                      href={g.venueSlug ? `/v/${g.venueSlug}` : `/join?code=${g.joinCode}`}
-                      className={cn(
-                        buttonVariants({ variant: "outline", size: "sm" }),
-                        "shrink-0 border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white"
-                      )}
-                    >
-                      View
-                    </Link>
-                  </CardContent>
-                </Card>
-              ))}
+                      >
+                        {ctaLabel}
+                      </Link>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </div>
@@ -286,6 +352,82 @@ export default async function PlayHubPage() {
         </SignedOut>
       </div>
     </MarketingShell>
+  );
+}
+
+/**
+ * "Come back tomorrow" daily-challenge strip rendered just under the
+ * house-game banner on `/play`. Shows the player's current streak flame
+ * when signed in (and still-active), or a muted "start your streak"
+ * invite otherwise. Keeping it as a local component so we can tune copy
+ * without touching the shared PlayModeCard.
+ */
+function DailyChallengeStrip({
+  streak,
+  className,
+}: {
+  streak: {
+    current: number;
+    longest: number;
+    playedToday: boolean;
+    lastPlayDate: string | null;
+  };
+  className?: string;
+}) {
+  const hasStreak = streak.current > 0;
+  const ctaLabel = streak.playedToday
+    ? "See today's run"
+    : hasStreak
+      ? "Keep streak alive"
+      : "Play daily challenge";
+
+  return (
+    <div
+      className={cn(
+        "overflow-hidden rounded-2xl border border-amber-400/25 bg-gradient-to-br from-amber-500/15 via-white/[0.04] to-white/[0.02] p-5 shadow-[var(--shadow-card)] backdrop-blur",
+        className,
+      )}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-amber-500/20 text-amber-300 ring-1 ring-amber-400/40">
+            <CalendarDays className="size-5" aria-hidden />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-base font-semibold tracking-tight text-white">
+                Daily challenge
+              </div>
+              {hasStreak ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-200">
+                  <Flame className="size-3" aria-hidden />
+                  {streak.current} day{streak.current === 1 ? "" : "s"}
+                </span>
+              ) : null}
+              {streak.playedToday ? (
+                <StatusPill tone="success">Played today</StatusPill>
+              ) : null}
+            </div>
+            <p className="mt-1 text-sm text-white/70">
+              {streak.playedToday
+                ? "You finished today's run — come back tomorrow to keep the streak."
+                : hasStreak
+                  ? "Play today's five questions to keep your flame alive."
+                  : "Five quick questions. Same for every player, worldwide. Build a streak."}
+            </p>
+          </div>
+        </div>
+        <Link
+          href="/play/daily"
+          className={cn(
+            buttonVariants({ size: "sm" }),
+            "bg-amber-400 text-slate-950 hover:bg-amber-300",
+          )}
+        >
+          {ctaLabel}
+        </Link>
+      </div>
+    </div>
   );
 }
 

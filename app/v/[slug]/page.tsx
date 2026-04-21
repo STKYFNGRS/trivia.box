@@ -3,6 +3,7 @@ import { CalendarClock, MapPin, Sparkles } from "lucide-react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { MarketingShell } from "@/components/marketing/MarketingShell";
+import { FollowVenueButton } from "@/components/venue/FollowVenueButton";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -157,6 +158,12 @@ export default async function VenueLobbyPage({
               {venue.tagline}
             </p>
           ) : null}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <FollowVenueButton
+              venueSlug={venue.slug}
+              venueDisplayName={venue.displayName}
+            />
+          </div>
         </div>
       </section>
 

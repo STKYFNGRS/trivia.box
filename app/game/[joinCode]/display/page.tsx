@@ -237,6 +237,23 @@ export default function DisplayPage() {
                 Waiting for the host to resume
               </div>
             </motion.div>
+          ) : boot?.status === "completed" ? (
+            /* Terminal state: show the shared end card before any live-leaderboard
+               / question branches so the TV never falls back to the generic
+               "Live Results" panel once the game is over. */
+            <motion.div
+              key="completed"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.35 }}
+              className="m-auto w-full max-w-5xl"
+            >
+              <FinalStandings
+                variant="big-screen"
+                leaderboard={boot?.leaderboard ?? []}
+              />
+            </motion.div>
           ) : showLeaderboard && leaderboard.length > 0 ? (
             <motion.div
               key="leaderboard"
@@ -370,22 +387,6 @@ export default function DisplayPage() {
                   })}
                 </div>
               ) : null}
-            </motion.div>
-          ) : boot?.status === "completed" ? (
-            /* Big-screen podium for the room. Uses the oversized
-               `big-screen` variant so it's legible from across a pub. */
-            <motion.div
-              key="completed"
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.35 }}
-              className="m-auto w-full max-w-5xl"
-            >
-              <FinalStandings
-                variant="big-screen"
-                leaderboard={boot?.leaderboard ?? []}
-              />
             </motion.div>
           ) : (
             <motion.div

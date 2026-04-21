@@ -3,10 +3,12 @@ import { db } from "@/lib/db/client";
 import {
   playerStats,
   playerXpEvents,
+  questionDecks,
   questions,
   soloQuestions,
   soloSessions,
 } from "@/lib/db/schema";
+import { recordDailyChallengeCompletion } from "@/lib/game/dailyChallenge";
 import {
   STREAK_BONUSES,
   computeAnswerPoints,
@@ -69,16 +71,26 @@ function shuffle<T>(arr: T[]): T[] {
 
 /**
  * Pull `count` vetted, non-retired questions for a solo session, optionally
- * constrained to one or more category labels. Unlike the hosted smart-pull
- * this does NOT exclude recently-used questions — for an anonymous solo run
- * we don't know the player's history, and for authenticated players we'd
- * rather let them replay than dry out the pool.
+ * constrained to one or more category labels or a specific deck. Unlike
+ * the hosted smart-pull this does NOT exclude recently-used questions —
+ * for an anonymous solo run we don't know the player's history, and for
+ * authenticated players we'd rather let them replay than dry out the pool.
+ *
+ * When `deckId` is supplied we scope to that deck. Decks are usually much
+ * smaller than the global pool (often <50 questions), so if the deck has
+ * fewer questions than `count` we simply return what we have — the caller
+ * sizes the session to the available pool and the CTA wording on
+ * `/decks/[id]` makes "play this deck" semantics clear.
  */
 async function pickSoloQuestions(input: {
   categoryFilter: string[] | null;
+  deckId?: string | null;
   count: number;
 }): Promise<Array<typeof questions.$inferSelect>> {
   const where = [eq(questions.vetted, true), eq(questions.retired, false)];
+  if (input.deckId) {
+    where.push(eq(questions.deckId, input.deckId));
+  }
   if (input.categoryFilter && input.categoryFilter.length > 0) {
     where.push(inArray(questions.category, input.categoryFilter));
   }
@@ -107,6 +119,12 @@ export async function startSoloSession(input: {
   speed: SoloSpeed;
   questionCount: number;
   categoryFilter: string[] | null;
+  /**
+   * Optional community-deck id. When set, we only draw vetted questions
+   * belonging to this deck. Callers must gate on deck visibility first —
+   * `/api/solo/start` checks public/owner before handing the id in.
+   */
+  deckId?: string | null;
 }): Promise<{ sessionId: string; timerSeconds: number; totalQuestions: number }> {
   if (!input.playerId && !input.guestId) {
     throw new Error("Must supply playerId or guestId");
@@ -119,10 +137,15 @@ export async function startSoloSession(input: {
 
   const picked = await pickSoloQuestions({
     categoryFilter: input.categoryFilter,
+    deckId: input.deckId ?? null,
     count,
   });
   if (picked.length === 0) {
-    throw new Error("No vetted questions match those filters");
+    throw new Error(
+      input.deckId
+        ? "No vetted questions in this deck yet"
+        : "No vetted questions match those filters"
+    );
   }
 
   const [session] = await db
@@ -513,6 +536,17 @@ async function rollupSoloForPlayer(playerId: string, soloSessionId: string) {
       })
       .where(eq(playerStats.playerId, playerId));
   }
+
+  // Daily challenge rollup — runs *after* the normal rollup so the XP
+  // bonus lands on top of the regular solo XP. Safe to call any time;
+  // the helper is a no-op for non-daily solo runs (dateKey is null).
+  if (s.dailyChallengeDate) {
+    await recordDailyChallengeCompletion({
+      playerId,
+      soloSessionId,
+      dateKey: s.dailyChallengeDate,
+    });
+  }
 }
 
 /**
@@ -555,6 +589,8 @@ export async function loadSoloRecap(soloSessionId: string) {
     timerSeconds: session.timerSeconds,
     startedAt: session.startedAt,
     completedAt: session.completedAt,
+    /** Non-null when this solo run was the player's daily challenge attempt. */
+    dailyChallengeDate: session.dailyChallengeDate ?? null,
     questions: rows,
     maxScorePerQuestion:
       (session.timerSeconds ?? 15) + Math.max(...Object.values(STREAK_BONUSES)),

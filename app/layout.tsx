@@ -44,7 +44,7 @@ export const metadata: Metadata = {
     template: "%s · trivia.box",
   },
   description:
-    "Play live trivia in your local bar, in solo mode any time, or in a free house game every 15 minutes. Host smarter trivia nights with community decks and a real-time scoreboard.",
+    "Play live trivia in your local bar, in solo mode any time, or in a free house game every 30 minutes. Host smarter trivia nights with community decks and a real-time scoreboard.",
   applicationName: "trivia.box",
   keywords: [
     "trivia",
@@ -61,13 +61,13 @@ export const metadata: Metadata = {
     siteName: "trivia.box",
     title: "trivia.box · Bar trivia, rebuilt.",
     description:
-      "Free house games every 15 minutes, live venue nights, and solo runs. Play now, host tomorrow.",
+      "Free house games every 30 minutes, live venue nights, and solo runs. Play now, host tomorrow.",
   },
   twitter: {
     card: "summary_large_image",
     title: "trivia.box · Bar trivia, rebuilt.",
     description:
-      "Free house games every 15 minutes, live venue nights, and solo runs.",
+      "Free house games every 30 minutes, live venue nights, and solo runs.",
   },
   robots: { index: true, follow: true },
 };
@@ -100,6 +100,15 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${unbounded.variable} antialiased`}
       >
+        {/* Skip-to-content link — hidden off-screen until it receives keyboard
+            focus, at which point the browser brings it into view so keyboard
+            users can jump past our marketing nav on every page. */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-slate-900 focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-[var(--neon-magenta)]"
+        >
+          Skip to main content
+        </a>
         {publishableKey ? (
           <ClerkProvider publishableKey={publishableKey}>{themed}</ClerkProvider>
         ) : (

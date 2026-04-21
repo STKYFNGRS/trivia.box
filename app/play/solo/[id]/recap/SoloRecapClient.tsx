@@ -1,10 +1,11 @@
 "use client";
 
-import { Check, ChevronLeft, X } from "lucide-react";
+import { CalendarDays, Check, ChevronLeft, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { ShareRecapButton } from "@/components/share/ShareRecapButton";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
@@ -33,6 +34,7 @@ type Recap = {
   timerSeconds: number;
   startedAt: string;
   completedAt: string | null;
+  dailyChallengeDate: string | null;
   questions: RecapQuestion[];
   maxScorePerQuestion: number;
 };
@@ -87,13 +89,14 @@ export function SoloRecapClient({ sessionId }: { sessionId: string }) {
     recap.questionCount > 0
       ? Math.round((recap.correctCount / recap.questionCount) * 100)
       : 0;
+  const isDaily = Boolean(recap.dailyChallengeDate);
 
   return (
     <div className="min-h-screen bg-[var(--stage-bg)] text-white">
       <div className="mx-auto max-w-4xl px-6 py-10">
         <SectionHeader
           as="h1"
-          eyebrow="Solo recap"
+          eyebrow={isDaily ? "Daily challenge recap" : "Solo recap"}
           title={`${recap.correctCount} of ${recap.questionCount} correct`}
           description={`${recap.speed.toUpperCase()} · ${recap.timerSeconds}s per question · ${accuracy}% accuracy`}
           className="text-white [&_*]:text-white [&_p]:text-white/70"
@@ -110,6 +113,32 @@ export function SoloRecapClient({ sessionId }: { sessionId: string }) {
             </Link>
           }
         />
+
+        {isDaily ? (
+          <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-amber-400/25 bg-amber-500/10 p-4 text-white sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <CalendarDays className="mt-0.5 size-5 text-amber-300" aria-hidden />
+              <div className="text-sm">
+                <div className="font-semibold text-amber-200">
+                  You finished today&apos;s daily challenge.
+                </div>
+                <div className="text-white/70">
+                  Come back tomorrow to keep your streak alive — a fresh five
+                  questions drop every day.
+                </div>
+              </div>
+            </div>
+            <Link
+              href="/leaderboards"
+              className={cn(
+                buttonVariants({ size: "sm", variant: "outline" }),
+                "self-start border-amber-400/40 bg-transparent text-amber-200 hover:bg-amber-500/10 hover:text-amber-100 sm:self-auto",
+              )}
+            >
+              See who&apos;s ahead
+            </Link>
+          </div>
+        ) : null}
 
         <div className="mt-6 grid gap-4 md:grid-cols-3">
           <StatTile label="Score" value={recap.totalScore.toLocaleString()} />
@@ -176,8 +205,19 @@ export function SoloRecapClient({ sessionId }: { sessionId: string }) {
               "bg-[var(--stage-accent)] text-slate-950 hover:bg-[var(--stage-accent)]/90"
             )}
           >
-            Start another run
+            {isDaily ? "Try a solo run" : "Start another run"}
           </Link>
+          {!isDaily ? (
+            <Link
+              href="/play/daily"
+              className={cn(
+                buttonVariants({ size: "sm", variant: "outline" }),
+                "border-amber-400/40 bg-transparent text-amber-200 hover:bg-amber-500/10 hover:text-amber-100",
+              )}
+            >
+              Play today&apos;s daily
+            </Link>
+          ) : null}
           <Link
             href="/leaderboards"
             className={cn(
@@ -187,6 +227,16 @@ export function SoloRecapClient({ sessionId }: { sessionId: string }) {
           >
             Leaderboards
           </Link>
+          <ShareRecapButton
+            url={`/r/solo/${recap.id}`}
+            title={
+              isDaily
+                ? "My daily challenge run"
+                : "My Trivia.Box solo run"
+            }
+            text={`${recap.correctCount}/${recap.questionCount} correct · ${accuracy}% accuracy · ${recap.totalScore.toLocaleString()} pts`}
+            size="md"
+          />
         </div>
       </div>
     </div>

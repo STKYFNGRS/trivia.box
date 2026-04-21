@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { getPublicPlayerStats } from "@/lib/game/publicPlayerStats";
+import { xpToLevel } from "@/lib/xp";
 
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
@@ -10,10 +11,6 @@ export const alt = "Trivia.Box player profile";
 // fills on `backgroundColor` and stack gradients in `backgroundImage` only.
 // Same pattern as `app/opengraph-image.tsx`.
 
-function level(xp: number) {
-  return Math.max(1, Math.floor(xp / 1000) + 1);
-}
-
 export default async function PlayerOpenGraphImage({
   params,
 }: {
@@ -21,7 +18,10 @@ export default async function PlayerOpenGraphImage({
 }) {
   const stats = await getPublicPlayerStats(params.username);
   const username = stats?.player.username ?? params.username;
-  const lvl = stats ? level(stats.rollup.totalXp) : 1;
+  // Use the canonical level curve so the share-preview number always matches
+  // `XpLevelBadge` in-app (they were drifting — the OG image was using
+  // `floor(xp/1000)+1` while the badge uses `sqrt(xp/25)+1`).
+  const lvl = stats ? xpToLevel(stats.rollup.totalXp).level : 1;
   const score = stats ? stats.rollup.totalPoints.toLocaleString() : "0";
   const trophies = stats ? stats.achievements.length : 0;
   const games = stats ? stats.rollup.totalGames.toLocaleString() : "0";

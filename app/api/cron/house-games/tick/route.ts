@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { cronAuthOrResponse } from "@/lib/cronAuth";
+import { ensureTodayDailyChallenge } from "@/lib/game/dailyChallenge";
 import { scheduleNextHouseGame } from "@/lib/game/houseGames";
 
 /**
@@ -21,8 +22,23 @@ async function run(req: Request) {
 
   const now = new Date();
   try {
-    const result = await scheduleNextHouseGame(now);
-    return NextResponse.json({ now: now.toISOString(), ...result });
+    const [result, dailyChallenge] = await Promise.all([
+      scheduleNextHouseGame(now),
+      // Piggyback on this 5-minute tick to guarantee today's daily
+      // challenge is seeded. Idempotent — the helper ON CONFLICT DO
+      // NOTHINGs on the challenge_date PK.
+      ensureTodayDailyChallenge(now).catch((err) => {
+        return { error: err instanceof Error ? err.message : String(err) };
+      }),
+    ]);
+    return NextResponse.json({
+      now: now.toISOString(),
+      ...result,
+      dailyChallenge:
+        "error" in dailyChallenge
+          ? { seeded: false, error: dailyChallenge.error }
+          : { seeded: true, date: dailyChallenge.challengeDate },
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "unknown_error";
     return NextResponse.json(

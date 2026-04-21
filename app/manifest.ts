@@ -11,7 +11,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "trivia.box",
     short_name: "trivia.box",
     description:
-      "Play live trivia at your local bar, solo, or in a free house game every 15 minutes.",
+      "Play live trivia at your local bar, solo, or in a free house game every 30 minutes.",
     start_url: "/",
     display: "standalone",
     background_color: "#0a0613",

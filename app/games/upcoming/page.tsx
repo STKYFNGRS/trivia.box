@@ -94,6 +94,15 @@ function formatDateParts(iso: Date, timeZone: string) {
   }
 }
 
+/** ≤ 5-minute threshold for switching to a "Starts in / Join now" state. */
+const IMMINENT_WINDOW_MS = 5 * 60 * 1000;
+
+function formatImminent(ms: number): string {
+  if (ms <= 0) return "Starting now";
+  if (ms < 60_000) return `Starts in ${Math.max(1, Math.round(ms / 1000))}s`;
+  return `Starts in ${Math.max(1, Math.round(ms / 60_000))}m`;
+}
+
 export default async function UpcomingGamesPage() {
   const now = new Date();
   const games = await loadUpcomingGames(now);
@@ -145,7 +154,20 @@ export default async function UpcomingGamesPage() {
             <div className="flex flex-col gap-3">
               {games.map((g) => {
                 const parts = formatDateParts(g.eventStartsAt, g.eventTimezone);
-                const href = g.venueSlug ? `/v/${g.venueSlug}` : "/join";
+                const msUntil = g.eventStartsAt.getTime() - now.getTime();
+                const imminent =
+                  g.status === "active" ||
+                  (msUntil >= 0 && msUntil <= IMMINENT_WINDOW_MS);
+                const href = imminent
+                  ? "/join"
+                  : g.venueSlug
+                    ? `/v/${g.venueSlug}`
+                    : "/join";
+                const cta = imminent
+                  ? g.status === "active"
+                    ? "Join live"
+                    : "Join now"
+                  : "View venue";
                 return (
                   <Card
                     key={g.sessionId}
@@ -184,6 +206,11 @@ export default async function UpcomingGamesPage() {
                           {g.theme ? (
                             <StatusPill tone="info">{g.theme}</StatusPill>
                           ) : null}
+                          {imminent && g.status !== "active" ? (
+                            <StatusPill tone="accent" dot pulse>
+                              {formatImminent(msUntil)}
+                            </StatusPill>
+                          ) : null}
                         </div>
                         <div className="mt-1 text-sm tabular-nums text-white/70">
                           {g.venueCity ? (
@@ -201,11 +228,15 @@ export default async function UpcomingGamesPage() {
                       <Link
                         href={href}
                         className={cn(
-                          buttonVariants({ variant: "outline", size: "sm" }),
-                          "w-full border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white sm:w-auto"
+                          imminent
+                            ? buttonVariants({ size: "sm" })
+                            : buttonVariants({ variant: "outline", size: "sm" }),
+                          imminent
+                            ? "w-full bg-[var(--stage-accent)] text-slate-950 hover:bg-[var(--stage-accent)]/90 sm:w-auto"
+                            : "w-full border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white sm:w-auto"
                         )}
                       >
-                        View venue
+                        {cta}
                       </Link>
                     </CardContent>
                   </Card>

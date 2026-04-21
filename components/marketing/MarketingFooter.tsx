@@ -60,7 +60,7 @@ export function MarketingFooter() {
           </div>
           <p className="mt-4 max-w-sm text-sm leading-relaxed text-white/60">
             Built for the bars that take their quiz night seriously. Free house
-            games every 15 minutes, live venue nights, and solo runs for the days
+            games every 30 minutes, live venue nights, and solo runs for the days
             nothing else is on.
           </p>
           <div
@@ -76,7 +76,7 @@ export function MarketingFooter() {
                   "0 0 0 3px color-mix(in oklab, var(--neon-lime) 22%, transparent)",
               }}
             />
-            House game running every 15 min
+            House game running every 30 min
           </div>
         </div>
 

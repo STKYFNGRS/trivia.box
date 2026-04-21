@@ -199,6 +199,26 @@
     background: color-mix(in oklab, var(--neon-magenta) 55%, transparent);
     color: var(--stage-ink);
   }
+  /* Keyboard focus — explicit ring so keyboard users can always see the
+     currently-focused control, even on custom-styled buttons. Mouse/touch
+     users don't see the ring thanks to `:focus-visible`. */
+  :focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--neon-magenta) 75%, transparent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  /* Respect reduced-motion — gut the sweeping confetti / grain animations
+     for folks who've asked their OS to chill out. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 /* Film-grain overlay — pure CSS, no image asset. Kept for GameShell. */

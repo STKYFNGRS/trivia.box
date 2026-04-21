@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Gift } from "lucide-react";
+import { Bell, Flame, Gift, Medal, Sparkles, Trophy, Users } from "lucide-react";
 import { getCurrentAccount } from "@/lib/accounts";
 import { BecomeHostCard } from "@/components/billing/BecomeHostCard";
 import { XpLevelBadge } from "@/components/player/XpLevelBadge";
@@ -14,8 +14,11 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StatusPill } from "@/components/ui/status-pill";
 import { listPlayerClaims } from "@/lib/prizes";
 import { cn } from "@/lib/utils";
+import { getDailyStreak } from "@/lib/game/dailyChallenge";
 import { getPublicPlayerStats } from "@/lib/game/publicPlayerStats";
 import { getPlayerByAccountId } from "@/lib/players";
+import { getScopedPlayerRank } from "@/lib/stats/aggregate";
+import { xpToLevel } from "@/lib/xp";
 
 function formatMs(ms: number | null | undefined): string | null {
   if (ms == null) return null;
@@ -49,7 +52,13 @@ export default async function PlayerDashboardPage() {
 
   // Codes are surfaced *only* on the owner dashboard, so we fetch claims
   // separately here. The public profile uses `stats.prizes` (no codes).
-  const claims = await listPlayerClaims(player.id, { status: "all" });
+  const [claims, dailyStreak, weeklyRank] = await Promise.all([
+    listPlayerClaims(player.id, { status: "all" }),
+    getDailyStreak(player.id),
+    // Weekly is the most motivating window — "You're #14 this week" is a
+    // sharper retention hook than "#2,143 all-time".
+    getScopedPlayerRank("week", player.id),
+  ]);
 
   const { rollup } = stats;
   const totalPoints = rollup.totalPoints;
@@ -79,8 +88,58 @@ export default async function PlayerDashboardPage() {
               <p className="text-muted-foreground mt-2 max-w-md text-sm">
                 Track your play, trophies, and venues. Join live games with a six-letter code.
               </p>
-              <div className="mt-4">
+              <div className="mt-4 flex flex-wrap items-center gap-2">
                 <XpLevelBadge xp={totalXp} />
+                {(() => {
+                  const { level, needed, current } = xpToLevel(totalXp);
+                  const xpToNext = Math.max(0, needed - current);
+                  return (
+                    <span
+                      className="inline-flex items-center gap-1.5 rounded-full border border-[color-mix(in_oklab,var(--neon-cyan)_30%,transparent)] bg-[color-mix(in_oklab,var(--neon-cyan)_8%,transparent)] px-2.5 py-1 text-xs font-semibold text-[var(--neon-cyan)]"
+                      title={`Earn ${xpToNext.toLocaleString()} more XP to reach Lv ${level + 1}`}
+                    >
+                      <Sparkles className="size-3" aria-hidden />
+                      {xpToNext.toLocaleString()} XP to Lv {level + 1}
+                    </span>
+                  );
+                })()}
+                {dailyStreak.current > 0 ? (
+                  <Link
+                    href="/play/daily"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/20"
+                    title="Your daily challenge streak"
+                  >
+                    <Flame className="size-3" aria-hidden />
+                    Daily streak {dailyStreak.current}
+                  </Link>
+                ) : (
+                  <Link
+                    href="/play/daily"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-xs font-semibold text-white/70 transition hover:bg-white/10 hover:text-white"
+                    title="Play today's daily challenge"
+                  >
+                    <Flame className="size-3" aria-hidden />
+                    Start a daily streak
+                  </Link>
+                )}
+                {longestStreak > 0 ? (
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-xs font-semibold text-white/70"
+                    title="Your longest in-session answer streak"
+                  >
+                    Best answer streak {longestStreak}
+                  </span>
+                ) : null}
+                {weeklyRank ? (
+                  <Link
+                    href="/leaderboards?scope=week"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[color-mix(in_oklab,var(--neon-magenta)_30%,transparent)] bg-[color-mix(in_oklab,var(--neon-magenta)_8%,transparent)] px-2.5 py-1 text-xs font-semibold text-[var(--neon-magenta)] transition hover:bg-[color-mix(in_oklab,var(--neon-magenta)_15%,transparent)]"
+                    title={`You're ranked #${weeklyRank.rank} this week with ${weeklyRank.totalPoints.toLocaleString()} pts`}
+                  >
+                    <Medal className="size-3" aria-hidden />
+                    #{weeklyRank.rank.toLocaleString()} this week
+                  </Link>
+                ) : null}
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -92,6 +151,30 @@ export default async function PlayerDashboardPage() {
                 className={cn(buttonVariants({ variant: "secondary" }))}
               >
                 View public profile
+              </Link>
+              <Link
+                href="/dashboard/player/achievements"
+                className={cn(buttonVariants({ variant: "ghost" }))}
+                title="Browse all achievements and progress"
+              >
+                <Trophy className="size-4" aria-hidden />
+                Achievements
+              </Link>
+              <Link
+                href="/dashboard/player/friends"
+                className={cn(buttonVariants({ variant: "ghost" }))}
+                title="Manage friends + pending invites"
+              >
+                <Users className="size-4" aria-hidden />
+                Friends
+              </Link>
+              <Link
+                href="/dashboard/player/notifications"
+                className={cn(buttonVariants({ variant: "ghost" }))}
+                title="Email notification preferences"
+              >
+                <Bell className="size-4" aria-hidden />
+                Emails
               </Link>
             </div>
           </div>

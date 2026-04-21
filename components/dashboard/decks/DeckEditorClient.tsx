@@ -221,6 +221,36 @@ export function DeckEditorClient({ deckId }: { deckId: string }) {
     }
   }
 
+  async function duplicateDeck() {
+    if (!deck) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/dashboard/decks/${deck.id}/duplicate`, {
+        method: "POST",
+      });
+      const data = (await res.json()) as {
+        deck?: { id: string };
+        copiedQuestions?: number;
+        error?: unknown;
+      };
+      if (!res.ok || !data.deck) {
+        throw new Error(
+          typeof data.error === "string" ? data.error : "Duplicate failed"
+        );
+      }
+      const copied = data.copiedQuestions ?? 0;
+      toast.success(
+        copied > 0
+          ? `Duplicated with ${copied} questions copied`
+          : "Duplicated (no questions yet)"
+      );
+      window.location.href = `/dashboard/decks/${data.deck.id}`;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Duplicate failed");
+      setBusy(false);
+    }
+  }
+
   async function deleteDeck() {
     if (!deck) return;
     if (!confirm(`Delete deck "${deck.name}"? This cannot be undone.`)) return;
@@ -334,6 +364,15 @@ export function DeckEditorClient({ deckId }: { deckId: string }) {
               }
             >
               Submit for public review
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void duplicateDeck()}
+              title="Create a private copy with the same questions"
+            >
+              Duplicate
             </Button>
             <Button
               type="button"

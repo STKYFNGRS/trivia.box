@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   accounts,
@@ -229,6 +229,192 @@ export async function getVenueStats(venueAccountId: string): Promise<VenueStatsS
       playerCount: Number(r.playerCount),
     })),
   };
+}
+
+/**
+ * Tier 2.E — time-scoped global leaderboard.
+ *
+ * Lifetime ranks from `player_stats` hide fresh talent behind power users
+ * who have been grinding for months. To give daily/weekly visitors a
+ * reason to come back, we roll up `answers.points_awarded` inside a
+ * window (24h / 7d) and group by player.
+ *
+ * Uses `answers` rather than `player_sessions` so solo play counts too —
+ * keeps the scoped ladder honest for players who mostly play `/play/daily`.
+ * The `null` scope path falls back to the existing lifetime rollup.
+ */
+export type LeaderboardScope = "today" | "week" | "season" | "all";
+
+export type ScopedLeaderboardRow = {
+  username: string;
+  playerId: string;
+  totalPoints: number;
+  totalCorrect: number;
+  totalAnswered: number;
+};
+
+export type ScopedLeaderboard = {
+  scope: LeaderboardScope;
+  /** Window start used by the query — `null` for lifetime. */
+  since: Date | null;
+  rows: ScopedLeaderboardRow[];
+};
+
+async function scopeWindowStart(
+  scope: LeaderboardScope,
+  now = new Date()
+): Promise<{ since: Date | null; label?: string }> {
+  if (scope === "today")
+    return { since: new Date(now.getTime() - 24 * 60 * 60 * 1000) };
+  if (scope === "week")
+    return { since: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) };
+  if (scope === "season") {
+    // Dynamic import avoids a circular dep with `lib/seasons.ts` at module
+    // load time (seasons table lives in the shared schema module too).
+    const { ensureCurrentSeason } = await import("@/lib/seasons");
+    const season = await ensureCurrentSeason(now);
+    return { since: season.startsAt, label: season.label };
+  }
+  return { since: null };
+}
+
+export async function getScopedLeaderboard(
+  scope: LeaderboardScope,
+  limit = 100
+): Promise<ScopedLeaderboard> {
+  const { since } = await scopeWindowStart(scope);
+
+  if (since == null) {
+    // "All-time": keep using the denormalized rollup to avoid scanning the
+    // full answers table on every page hit.
+    const rows = await db
+      .select({
+        username: players.username,
+        playerId: playerStats.playerId,
+        totalPoints: playerStats.totalPoints,
+        totalCorrect: playerStats.totalCorrect,
+        totalAnswered: playerStats.totalAnswered,
+      })
+      .from(playerStats)
+      .innerJoin(players, eq(players.id, playerStats.playerId))
+      .orderBy(desc(playerStats.totalPoints))
+      .limit(limit);
+    return {
+      scope,
+      since,
+      rows: rows.map((r) => ({
+        username: r.username,
+        playerId: r.playerId,
+        totalPoints: Number(r.totalPoints ?? 0),
+        totalCorrect: r.totalCorrect,
+        totalAnswered: r.totalAnswered,
+      })),
+    };
+  }
+
+  const rows = await db
+    .select({
+      username: players.username,
+      playerId: players.id,
+      totalPoints: sql<number>`sum(${answers.pointsAwarded})::int`,
+      totalCorrect: sql<number>`sum(case when ${answers.isCorrect} then 1 else 0 end)::int`,
+      totalAnswered: sql<number>`count(*)::int`,
+    })
+    .from(answers)
+    .innerJoin(players, eq(players.id, answers.playerId))
+    .where(
+      and(
+        gte(answers.createdAt, since),
+        sql`${answers.disqualifiedAt} is null`
+      )
+    )
+    .groupBy(players.id, players.username)
+    .orderBy(desc(sql`sum(${answers.pointsAwarded})`))
+    .limit(limit);
+
+  return {
+    scope,
+    since,
+    rows: rows.map((r) => ({
+      username: r.username,
+      playerId: r.playerId,
+      totalPoints: Number(r.totalPoints ?? 0),
+      totalCorrect: Number(r.totalCorrect ?? 0),
+      totalAnswered: Number(r.totalAnswered ?? 0),
+    })),
+  };
+}
+
+/**
+ * Compute a single viewer's rank + score in a given scope. Used by the
+ * "You rank #N" chip on `/leaderboards` — we don't want to page through
+ * all 100 results to find the viewer, and ranks can be ≥ 100 anyway.
+ *
+ * Returns `null` when the player has no activity in-window (so we hide
+ * the chip instead of saying "You rank #–").
+ */
+export async function getScopedPlayerRank(
+  scope: LeaderboardScope,
+  playerId: string
+): Promise<{ rank: number; totalPoints: number } | null> {
+  const { since } = await scopeWindowStart(scope);
+
+  if (since == null) {
+    const [self] = await db
+      .select({ totalPoints: playerStats.totalPoints })
+      .from(playerStats)
+      .where(eq(playerStats.playerId, playerId))
+      .limit(1);
+    if (!self) return null;
+    const points = Number(self.totalPoints ?? 0);
+    if (points <= 0) return null;
+    const [ahead] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(playerStats)
+      .where(sql`${playerStats.totalPoints} > ${points}`);
+    return { rank: (ahead?.n ?? 0) + 1, totalPoints: points };
+  }
+
+  // Scoped: self score from in-window answers, then count players with a
+  // strictly higher in-window total. One extra aggregate round-trip is
+  // cheaper than paging through the whole leaderboard.
+  const [self] = await db
+    .select({
+      totalPoints: sql<number>`coalesce(sum(${answers.pointsAwarded}), 0)::int`,
+    })
+    .from(answers)
+    .where(
+      and(
+        eq(answers.playerId, playerId),
+        gte(answers.createdAt, since),
+        sql`${answers.disqualifiedAt} is null`
+      )
+    );
+  const points = Number(self?.totalPoints ?? 0);
+  if (points <= 0) return null;
+
+  const perPlayer = db
+    .select({
+      playerId: answers.playerId,
+      totalPoints: sql<number>`sum(${answers.pointsAwarded})::int`.as(
+        "total_points"
+      ),
+    })
+    .from(answers)
+    .where(
+      and(
+        gte(answers.createdAt, since),
+        sql`${answers.disqualifiedAt} is null`
+      )
+    )
+    .groupBy(answers.playerId)
+    .as("per_player");
+
+  const [ahead] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(perPlayer)
+    .where(sql`${perPlayer.totalPoints} > ${points}`);
+  return { rank: (ahead?.n ?? 0) + 1, totalPoints: points };
 }
 
 /**

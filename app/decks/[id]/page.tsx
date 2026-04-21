@@ -15,6 +15,8 @@ import { getMarketplaceDeck } from "@/lib/deckMarketplace";
 import { getPlayerByAccountId } from "@/lib/players";
 import { cn } from "@/lib/utils";
 import { DeckRatingClient } from "./DeckRatingClient";
+import { DuplicateDeckButton } from "./DuplicateDeckButton";
+import { PlayDeckButton } from "./PlayDeckButton";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +87,14 @@ export default async function DeckDetailPage({
                   <Medal className="mr-1 size-3" />
                   Featured
                 </StatusPill>
+              ) : null}
+              <PlayDeckButton
+                deckId={deck.id}
+                deckQuestionCount={deck.questionCount}
+                size="sm"
+              />
+              {userId && !viewerIsOwner ? (
+                <DuplicateDeckButton deckId={deck.id} size="sm" />
               ) : null}
             </div>
           }

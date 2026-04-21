@@ -126,6 +126,12 @@ export function Countdown({
         sizing.box,
         className,
       )}
+      role="timer"
+      aria-label={
+        locked
+          ? `Answers locked at ${seconds} seconds remaining`
+          : `${seconds} seconds remaining to answer`
+      }
       style={{
         filter: urgent && !locked ? "drop-shadow(0 0 14px currentColor)" : undefined,
         transition: "filter 300ms ease",
@@ -169,7 +175,7 @@ export function Countdown({
           colorClass,
           urgent && !locked && "animate-pulse",
         )}
-        aria-live="polite"
+        aria-hidden
       >
         {seconds}
       </span>

@@ -12,6 +12,7 @@ import {
 } from "@/lib/db/schema";
 import { listPlayerAchievements } from "@/lib/game/achievements";
 import { getPlayerByAccountId } from "@/lib/players";
+import { xpToLevel } from "@/lib/xp";
 
 /**
  * GET /api/me/player/stats
@@ -69,16 +70,46 @@ export async function GET() {
       username: player.username,
     },
     stats: stats
-      ? {
-          totalAnswered: stats.totalAnswered,
-          totalCorrect: stats.totalCorrect,
-          totalPoints: Number(stats.totalPoints ?? 0),
-          totalGames: stats.totalGames,
-          bestRank: stats.bestRank,
-          longestStreak: stats.longestStreak,
-          fastestCorrectMs: stats.fastestCorrectMs,
-          lastPlayedAt: stats.lastPlayedAt,
-        }
+      ? (() => {
+          const totalXp = Number(stats.totalXp ?? 0);
+          // `xpToLevel` is the canonical curve (`XpLevelBadge` uses it too)
+          // — including the derived shape here means clients can render a
+          // level pill without re-implementing the math.
+          const level = xpToLevel(totalXp);
+          // Same "display streak only if still warm" logic as
+          // `publicPlayerStats` — a gap ≥ 2 days means the flame is cold
+          // until they play the next daily.
+          const todayKey = new Date().toISOString().slice(0, 10);
+          let displayDailyStreak = stats.dailyStreak ?? 0;
+          if (stats.lastDailyPlayDate) {
+            const diff = Math.round(
+              (Date.parse(todayKey + "T00:00:00Z") -
+                Date.parse(stats.lastDailyPlayDate + "T00:00:00Z")) /
+                (24 * 60 * 60 * 1000),
+            );
+            if (diff > 1) displayDailyStreak = 0;
+          } else {
+            displayDailyStreak = 0;
+          }
+          return {
+            totalAnswered: stats.totalAnswered,
+            totalCorrect: stats.totalCorrect,
+            totalPoints: Number(stats.totalPoints ?? 0),
+            totalXp,
+            totalGames: stats.totalGames,
+            bestRank: stats.bestRank,
+            longestStreak: stats.longestStreak,
+            fastestCorrectMs: stats.fastestCorrectMs,
+            lastPlayedAt: stats.lastPlayedAt,
+            level: level.level,
+            levelProgress: level.progress,
+            xpIntoLevel: level.current,
+            xpNeededForLevel: level.needed,
+            dailyStreak: displayDailyStreak,
+            longestDailyStreak: stats.longestDailyStreak ?? 0,
+            lastDailyPlayDate: stats.lastDailyPlayDate,
+          };
+        })()
       : null,
     recentSessions: recent.map((r) => ({
       sessionId: r.sessionId,
