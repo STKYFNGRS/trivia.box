@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, Flame, Shuffle, Sparkles, Zap } from "lucide-react";
+import { ChevronRight, Flame, Rocket, Shuffle, Sparkles, Timer, Zap } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -40,6 +40,59 @@ const SPEED_META: Record<Speed, { label: string; copy: string; icon: React.React
 };
 
 const QUESTION_COUNTS = [5, 10, 15, 20, 25] as const;
+
+/**
+ * Pre-canned "Quick start" runs. One click → `/api/solo/start` → gameplay.
+ * Skips the speed/length/category config for users who just want to drop in.
+ * Each preset is an opinionated combo so the grid stays short; power users
+ * still have the full config below.
+ */
+const QUICK_STARTS: Array<{
+  id: string;
+  title: string;
+  subtitle: string;
+  tone: "magenta" | "lime" | "cyan" | "amber";
+  icon: React.ReactNode;
+  speed: Speed;
+  questionCount: number;
+}> = [
+  {
+    id: "warmup",
+    title: "Warm-up",
+    subtitle: "Chill · 5 Qs",
+    tone: "cyan",
+    icon: <Sparkles className="size-4" aria-hidden />,
+    speed: "chill",
+    questionCount: 5,
+  },
+  {
+    id: "classic",
+    title: "Classic",
+    subtitle: "Standard · 10 Qs",
+    tone: "lime",
+    icon: <Shuffle className="size-4" aria-hidden />,
+    speed: "standard",
+    questionCount: 10,
+  },
+  {
+    id: "pubnight",
+    title: "Pub night",
+    subtitle: "Standard · 15 Qs",
+    tone: "amber",
+    icon: <Timer className="size-4" aria-hidden />,
+    speed: "standard",
+    questionCount: 15,
+  },
+  {
+    id: "lightning",
+    title: "Lightning",
+    subtitle: "Blitz · 10 Qs",
+    tone: "magenta",
+    icon: <Rocket className="size-4" aria-hidden />,
+    speed: "blitz",
+    questionCount: 10,
+  },
+];
 
 export function SoloSetupClient() {
   const router = useRouter();
@@ -96,8 +149,22 @@ export function SoloSetupClient() {
     });
   }
 
-  async function start() {
-    if (insufficient) {
+  async function start(override?: {
+    speed?: Speed;
+    questionCount?: number;
+    categoryFilter?: string[] | null;
+    skipInsufficientCheck?: boolean;
+  }) {
+    const effSpeed: Speed = override?.speed ?? speed;
+    const effCount: number = override?.questionCount ?? questionCount;
+    const effFilter: string[] | null =
+      override?.categoryFilter !== undefined
+        ? override.categoryFilter
+        : selected.size > 0
+          ? [...selected]
+          : null;
+
+    if (!override?.skipInsufficientCheck && insufficient) {
       toast.error(
         `Not enough questions available (${availableCount}) for a ${questionCount}-question run.`
       );
@@ -109,9 +176,9 @@ export function SoloSetupClient() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          speed,
-          questionCount,
-          categoryFilter: selected.size > 0 ? [...selected] : null,
+          speed: effSpeed,
+          questionCount: effCount,
+          categoryFilter: effFilter,
         }),
       });
       if (!res.ok) {
@@ -126,14 +193,28 @@ export function SoloSetupClient() {
     }
   }
 
+  /** One-click preset launcher — always uses the full category pool. */
+  async function startQuick(preset: (typeof QUICK_STARTS)[number]) {
+    await start({
+      speed: preset.speed,
+      questionCount: preset.questionCount,
+      categoryFilter: null,
+      // Skip the client-side insufficient check; the server will reject
+      // cleanly if the pool truly can't fulfil the preset (rare, and the
+      // error message is clearer than a toast that references state the
+      // user didn't touch).
+      skipInsufficientCheck: true,
+    });
+  }
+
   return (
-    <div className="min-h-screen bg-[var(--stage-bg)] text-white">
+    <div className="text-white">
       <div className="mx-auto max-w-4xl px-6 py-10">
         <SectionHeader
           as="h1"
           eyebrow="Solo"
           title="Build your run"
-          description="Pick your pace, length, and categories. Server-timed, so your score reflects actual speed."
+          description="Pick your pace, length, and categories — or tap a quick start below to drop in instantly."
           className="text-white [&_*]:text-white [&_p]:text-white/70"
           actions={
             <Link
@@ -149,6 +230,66 @@ export function SoloSetupClient() {
         />
 
         <div className="mt-8 flex flex-col gap-6">
+          <Card className="border-white/10 bg-white/[0.04] text-white shadow-[var(--shadow-card)] backdrop-blur">
+            <CardHeader>
+              <CardTitle className="tracking-tight">Quick starts</CardTitle>
+              <CardDescription className="text-white/60">
+                Skip the setup. One tap, mixed categories, server-timed.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {QUICK_STARTS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => startQuick(preset)}
+                    disabled={starting || categories.length === 0}
+                    className={cn(
+                      "group flex flex-col items-start gap-2 rounded-xl border border-white/10 bg-white/[0.02] p-4 text-left transition",
+                      "hover:-translate-y-0.5 hover:bg-white/[0.06]",
+                      "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:bg-white/[0.02]"
+                    )}
+                    style={{
+                      boxShadow: `inset 0 0 0 1px color-mix(in oklab, var(--neon-${preset.tone}) 20%, transparent)`,
+                    }}
+                  >
+                    <span
+                      className="inline-flex size-8 items-center justify-center rounded-lg"
+                      style={{
+                        background: `color-mix(in oklab, var(--neon-${preset.tone}) 20%, transparent)`,
+                        color: `var(--neon-${preset.tone})`,
+                      }}
+                    >
+                      {preset.icon}
+                    </span>
+                    <div className="flex-1">
+                      <div className="text-base font-semibold text-white">
+                        {preset.title}
+                      </div>
+                      <div
+                        className="text-[11px] font-semibold uppercase tracking-[0.18em]"
+                        style={{ color: `var(--neon-${preset.tone})` }}
+                      >
+                        {preset.subtitle}
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center gap-1 text-xs text-white/60 group-hover:text-white">
+                      Start
+                      <ChevronRight className="size-3" aria-hidden />
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {categories.length === 0 && !loadingCats ? (
+                <div className="mt-3 text-xs text-white/60">
+                  Quick starts unlock once there are vetted questions in the
+                  pool.
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+
           <Card className="border-white/10 bg-white/[0.04] text-white shadow-[var(--shadow-card)] backdrop-blur">
             <CardHeader>
               <CardTitle className="tracking-tight">Speed</CardTitle>
@@ -284,7 +425,7 @@ export function SoloSetupClient() {
             <Button
               size="lg"
               disabled={starting || insufficient || categories.length === 0}
-              onClick={start}
+              onClick={() => start()}
               className="bg-[var(--stage-accent)] text-slate-950 hover:bg-[var(--stage-accent)]/90"
             >
               {starting ? "Starting..." : "Start run"}

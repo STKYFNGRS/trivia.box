@@ -14,6 +14,7 @@ import {
   Users,
   Wand2,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { GradientMesh } from "@/components/marketing/GradientMesh";
@@ -163,8 +164,10 @@ function Hero({ houseCountdown }: { houseCountdown: string }) {
           </div>
         </HomeHeroReveal>
 
-        {/* Mini "phone" visual — bottom-right hero ornament. Purely cosmetic,
-            uses only CSS shapes so there's zero asset weight. */}
+        {/* Logo ornament — floats in the upper-right of the hero on desktop,
+            hidden on smaller screens so the type-dominant mobile layout
+            stays uncluttered. Rotation + radial glow echo the original
+            "phone" silhouette without CSS mocking a device. */}
         <HeroOrnament />
       </div>
     </section>
@@ -175,71 +178,29 @@ function HeroOrnament() {
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute -right-24 top-24 hidden rotate-[8deg] lg:block"
+      className="pointer-events-none absolute -right-10 top-24 hidden rotate-[6deg] lg:block"
     >
       <div
-        className="relative h-[560px] w-[300px] rounded-[44px] border border-white/10 p-3"
+        className="relative flex h-[480px] w-[380px] items-center justify-center rounded-[44px] border border-white/10 p-10"
         style={{
+          // Two-stop radial glow behind the mark — magenta top-left, cyan
+          // bottom-right — so the logo reads as "lit from within" rather
+          // than pasted on top. The outer box-shadow pins it in front of
+          // the hero mesh without a hard edge.
           background:
-            "linear-gradient(180deg, color-mix(in oklab, var(--stage-surface) 96%, transparent), color-mix(in oklab, var(--stage-bg) 90%, transparent))",
+            "radial-gradient(110% 80% at 20% 10%, color-mix(in oklab, var(--neon-magenta) 30%, transparent), transparent 60%), radial-gradient(90% 70% at 80% 90%, color-mix(in oklab, var(--neon-cyan) 24%, transparent), transparent 65%), linear-gradient(180deg, color-mix(in oklab, var(--stage-surface) 94%, transparent), color-mix(in oklab, var(--stage-bg) 88%, transparent))",
           boxShadow:
             "0 40px 80px -30px rgb(0 0 0 / 0.6), 0 0 0 1px color-mix(in oklab, var(--neon-magenta) 20%, transparent)",
         }}
       >
-        <div
-          className="flex h-full w-full flex-col gap-2 rounded-[32px] p-4"
-          style={{
-            background:
-              "radial-gradient(120% 80% at 20% 0%, color-mix(in oklab, var(--neon-magenta) 28%, transparent), transparent), radial-gradient(100% 60% at 80% 100%, color-mix(in oklab, var(--neon-cyan) 22%, transparent), transparent), var(--stage-bg)",
-          }}
-        >
-          <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.22em] text-white/70">
-            <span>Question 4 / 10</span>
-            <span style={{ color: "var(--neon-lime)" }}>0:12</span>
-          </div>
-          <div className="font-[family-name:var(--font-display)] text-[20px] font-bold leading-tight text-white">
-            Which UK city was the first to be designated a UNESCO City of
-            Music?
-          </div>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            {[
-              ["A", "Bristol", "var(--neon-magenta)"],
-              ["B", "Glasgow", "var(--neon-lime)"],
-              ["C", "Liverpool", "var(--neon-cyan)"],
-              ["D", "Manchester", "var(--neon-amber)"],
-            ].map(([k, v, c]) => (
-              <div
-                key={k}
-                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-white"
-                style={{
-                  background:
-                    "color-mix(in oklab, var(--stage-surface) 88%, transparent)",
-                  borderLeft: `3px solid ${c}`,
-                }}
-              >
-                <span
-                  className="grid size-5 place-items-center rounded-md text-[10px] font-black"
-                  style={{ background: c, color: "oklch(0.1 0.02 270)" }}
-                >
-                  {k}
-                </span>
-                {v}
-              </div>
-            ))}
-          </div>
-          <div className="mt-auto flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] p-3 text-[11px] text-white/70">
-            <span>
-              <span
-                className="font-bold"
-                style={{ color: "var(--neon-lime)" }}
-              >
-                +842
-              </span>{" "}
-              streak bonus
-            </span>
-            <span>6-room leaderboard</span>
-          </div>
-        </div>
+        <Image
+          src="/logo.png"
+          alt=""
+          width={600}
+          height={180}
+          priority
+          className="h-auto w-full drop-shadow-[0_0_40px_color-mix(in_oklab,var(--neon-magenta)_45%,transparent)]"
+        />
       </div>
     </div>
   );
