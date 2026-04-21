@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
@@ -15,8 +16,19 @@ export function PlayerDashboardShell(props: { username: string; children: React.
       <header className="bg-card border-b">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
           <div className="flex items-center gap-6">
-            <Link href="/dashboard/player" className="font-semibold tracking-tight">
-              trivia.box
+            <Link
+              href="/dashboard/player"
+              className="inline-flex items-center"
+              aria-label="trivia.box player dashboard"
+            >
+              <Image
+                src="/logo.png"
+                alt="trivia.box"
+                width={120}
+                height={24}
+                priority
+                className="h-6 w-auto"
+              />
             </Link>
             <nav className="text-muted-foreground flex items-center gap-4 text-sm">
               <Link

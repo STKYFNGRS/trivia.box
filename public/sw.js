@@ -27,8 +27,8 @@ self.addEventListener("push", (event) => {
   const title = payload.title || "Trivia.Box";
   const options = {
     body: payload.body || "New activity on your Trivia.Box profile.",
-    icon: "/icon-192.png",
-    badge: "/icon-192.png",
+    icon: "/android-chrome-192x192.png",
+    badge: "/android-chrome-192x192.png",
     data: { url: payload.url || "/" },
     tag: payload.tag,
     renotify: true,

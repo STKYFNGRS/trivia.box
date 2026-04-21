@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 const COLS: Array<{ heading: string; links: Array<{ href: string; label: string }> }> = [
@@ -40,23 +41,14 @@ export function MarketingFooter() {
     <footer className="relative z-10 border-t border-white/10 bg-[color-mix(in_oklab,var(--stage-bg)_92%,transparent)]">
       <div className="mx-auto grid w-full max-w-7xl gap-10 px-6 py-14 md:grid-cols-[1.3fr_2fr]">
         <div>
-          <div className="flex items-center gap-2">
-            <span
-              aria-hidden
-              className="inline-flex size-8 items-center justify-center rounded-lg text-sm font-black"
-              style={{
-                background:
-                  "linear-gradient(135deg, var(--neon-magenta), var(--neon-violet))",
-                color: "var(--neon-lime)",
-                boxShadow:
-                  "0 0 0 1px color-mix(in oklab, var(--neon-magenta) 40%, transparent), 0 6px 20px -8px color-mix(in oklab, var(--neon-magenta) 65%, transparent)",
-              }}
-            >
-              T
-            </span>
-            <span className="text-base font-semibold uppercase tracking-[0.24em] text-white">
-              trivia.box
-            </span>
+          <div className="flex items-center">
+            <Image
+              src="/logo.png"
+              alt="trivia.box"
+              width={180}
+              height={36}
+              className="h-9 w-auto"
+            />
           </div>
           <p className="mt-4 max-w-sm text-sm leading-relaxed text-white/60">
             Built for the bars that take their quiz night seriously. Free house

@@ -1,6 +1,7 @@
 "use client";
 
 import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { buttonVariants } from "@/components/ui/button";
@@ -57,25 +58,17 @@ export function MarketingNav() {
       >
         <Link
           href="/"
-          className="group inline-flex items-center gap-2 text-white"
+          className="group inline-flex items-center text-white"
           aria-label="trivia.box home"
         >
-          <span
-            aria-hidden
-            className="inline-flex size-7 items-center justify-center rounded-lg text-[0.9rem] font-black"
-            style={{
-              background:
-                "linear-gradient(135deg, var(--neon-magenta), var(--neon-violet))",
-              color: "var(--neon-lime)",
-              boxShadow:
-                "0 0 0 1px color-mix(in oklab, var(--neon-magenta) 40%, transparent), 0 6px 20px -8px color-mix(in oklab, var(--neon-magenta) 65%, transparent)",
-            }}
-          >
-            T
-          </span>
-          <span className="text-sm font-semibold uppercase tracking-[0.28em] text-white/90 transition-colors group-hover:text-white">
-            trivia.box
-          </span>
+          <Image
+            src="/logo.png"
+            alt="trivia.box"
+            width={160}
+            height={32}
+            priority
+            className="h-8 w-auto transition-opacity group-hover:opacity-90"
+          />
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex">

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { AccountRow } from "@/lib/accounts";
@@ -23,8 +24,19 @@ export function SiteAdminDashboardShell(props: {
       <header className="bg-card border-b">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-4 py-3">
           <div className="flex flex-wrap items-center gap-4 sm:gap-6">
-            <Link href="/dashboard" className="font-semibold tracking-tight">
-              trivia.box
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center"
+              aria-label="trivia.box admin dashboard"
+            >
+              <Image
+                src="/logo.png"
+                alt="trivia.box"
+                width={120}
+                height={24}
+                priority
+                className="h-6 w-auto"
+              />
             </Link>
             <span className="bg-muted text-muted-foreground rounded px-2 py-0.5 text-xs font-medium">
               site admin

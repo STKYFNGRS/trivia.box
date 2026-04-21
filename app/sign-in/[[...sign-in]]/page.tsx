@@ -1,5 +1,6 @@
 import { SignIn } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cinematicClerkAppearance } from "@/components/auth/clerkAppearance";
@@ -25,25 +26,17 @@ export default async function Page() {
       <div className="relative z-10 flex w-full max-w-md flex-col items-center">
         <Link
           href="/"
-          className="mb-8 inline-flex items-center gap-2 text-white"
+          className="mb-8 inline-flex items-center text-white"
           aria-label="Back to trivia.box"
         >
-          <span
-            aria-hidden
-            className="inline-flex size-7 items-center justify-center rounded-lg text-sm font-black"
-            style={{
-              background:
-                "linear-gradient(135deg, var(--neon-magenta), var(--neon-violet))",
-              color: "var(--neon-lime)",
-              boxShadow:
-                "0 0 0 1px color-mix(in oklab, var(--neon-magenta) 40%, transparent), 0 6px 20px -8px color-mix(in oklab, var(--neon-magenta) 65%, transparent)",
-            }}
-          >
-            T
-          </span>
-          <span className="text-sm font-semibold uppercase tracking-[0.28em] text-white/80 transition-colors hover:text-white">
-            trivia.box
-          </span>
+          <Image
+            src="/logo.png"
+            alt="trivia.box"
+            width={160}
+            height={32}
+            priority
+            className="h-8 w-auto transition-opacity hover:opacity-90"
+          />
         </Link>
         <SignIn
           routing="path"
