@@ -15,9 +15,20 @@ export function SubscribeButton(props: { returnPath?: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ returnPath: props.returnPath ?? "/dashboard" }),
       });
-      const data = (await res.json()) as { url?: string; error?: string };
+      // Defensive parse — the route is supposed to always return JSON, but if
+      // an infra layer in front (edge, proxy) returns HTML we don't want the
+      // user to see a cryptic "Unexpected end of JSON input".
+      const raw = await res.text();
+      let data: { url?: string; error?: string } = {};
+      if (raw) {
+        try {
+          data = JSON.parse(raw) as typeof data;
+        } catch {
+          data = {};
+        }
+      }
       if (!res.ok) {
-        throw new Error(data.error ?? "Checkout failed");
+        throw new Error(data.error ?? `Checkout failed (HTTP ${res.status})`);
       }
       if (data.url) {
         window.location.href = data.url;
