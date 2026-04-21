@@ -53,7 +53,7 @@ export function MarketingNav() {
       <div
         className={cn(
           "mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-6 transition-all duration-300",
-          scrolled ? "h-14" : "h-16"
+          scrolled ? "h-20" : "h-24"
         )}
       >
         <Link
@@ -64,10 +64,10 @@ export function MarketingNav() {
           <Image
             src="/logo.png"
             alt="trivia.box"
-            width={160}
-            height={32}
+            width={320}
+            height={64}
             priority
-            className="h-8 w-auto transition-opacity group-hover:opacity-90"
+            className="h-16 w-auto transition-opacity group-hover:opacity-90"
           />
         </Link>
 
