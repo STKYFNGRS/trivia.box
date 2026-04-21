@@ -29,7 +29,22 @@ export default async function DashboardHomePage() {
 
   const orgSub = hasEffectiveOrganizerSubscription(account);
   const hasStripeCustomer = Boolean(account.stripeCustomerId);
-  const showDuplicateWarning = reconcile.activeSubscriptionCount > 1;
+  // Only warn when there are 2+ subs that will actually re-bill. A sub that
+  // was just canceled is `active` in Stripe until the billing period ends
+  // (`cancel_at_period_end: true`); counting that as a duplicate generated
+  // a false alarm every time someone canceled mid-cycle.
+  const showDuplicateWarning = reconcile.billingSubscriptionCount > 1;
+  // Show "access until Aug 21, 2026" when the sub is scheduled to cancel but
+  // still technically active (user canceled in the portal but the period
+  // hasn't elapsed yet). Formatted on the server so it doesn't hydrate
+  // mismatch across timezones.
+  const pendingCancelLabel = reconcile.scheduledCancelAt
+    ? reconcile.scheduledCancelAt.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    : null;
 
   const profileHint =
     account.accountType === "site_admin"
@@ -58,14 +73,20 @@ export default async function DashboardHomePage() {
             <CardTitle className="tracking-tight">Subscription</CardTitle>
             <CardDescription className="mt-1">
               {orgSub
-                ? "Your host subscription is active."
+                ? pendingCancelLabel
+                  ? `Canceled — host access remains until ${pendingCancelLabel}.`
+                  : "Your host subscription is active."
                 : account.accountType === "host"
                   ? "Your subscription ended. Reactivate it to run new games — your games, stats and players are still here."
                   : "No active host subscription."}
             </CardDescription>
           </div>
-          <StatusPill tone={orgSub ? "success" : "neutral"} dot pulse={orgSub}>
-            {orgSub ? "Active" : "Inactive"}
+          <StatusPill
+            tone={orgSub ? (pendingCancelLabel ? "warning" : "success") : "neutral"}
+            dot
+            pulse={orgSub && !pendingCancelLabel}
+          >
+            {orgSub ? (pendingCancelLabel ? "Canceling" : "Active") : "Inactive"}
           </StatusPill>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-muted-foreground text-sm">
@@ -73,20 +94,34 @@ export default async function DashboardHomePage() {
             <div className="rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-900 dark:text-amber-200">
               Stripe reports{" "}
               <span className="font-medium">
-                {reconcile.activeSubscriptionCount} active subscriptions
+                {reconcile.billingSubscriptionCount} active subscriptions
               </span>{" "}
-              on this account. Open the customer portal below and cancel the
-              duplicate so you&apos;re only charged once.
+              that will re-bill on this account. Open the customer portal
+              below and cancel the duplicate so you&apos;re only charged once.
             </div>
           ) : null}
-          <p>
-            {hasStripeCustomer
-              ? "Update your card, download invoices, switch plans or cancel any time from the Stripe customer portal."
-              : "Manage billing from the header banner once you&apos;ve subscribed."}
-          </p>
+          {pendingCancelLabel ? (
+            <p>
+              You canceled your subscription — host tools stay available
+              through{" "}
+              <span className="text-foreground font-medium">
+                {pendingCancelLabel}
+              </span>
+              . Change your mind? Reactivate from the customer portal before
+              that date to keep billing continuous.
+            </p>
+          ) : (
+            <p>
+              {hasStripeCustomer
+                ? "Update your card, download invoices, switch plans or cancel any time from the Stripe customer portal."
+                : "Manage billing from the header banner once you've subscribed."}
+            </p>
+          )}
           {hasStripeCustomer ? (
             <div>
-              <ManageSubscriptionButton />
+              <ManageSubscriptionButton
+                label={pendingCancelLabel ? "Reactivate or manage" : undefined}
+              />
             </div>
           ) : null}
         </CardContent>

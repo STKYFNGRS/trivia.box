@@ -19,9 +19,46 @@ export type ReconcileResult = {
   subscriptionActive: boolean;
   /** The Stripe subscription id we latched onto, if any. */
   stripeSubscriptionId: string | null;
-  /** How many active/trialing subscriptions Stripe reported (> 1 means duplicates). */
+  /** How many active/trialing subscriptions Stripe reported (includes those scheduled to cancel at period end). */
   activeSubscriptionCount: number;
+  /**
+   * How many subs are *actually* going to re-bill — i.e. active/trialing AND
+   * not scheduled to cancel at period end. This is the count we use to flag
+   * a real duplicate-charge situation; a single sub with
+   * `cancel_at_period_end: true` is a normal mid-cancellation state, not a
+   * duplicate.
+   */
+  billingSubscriptionCount: number;
+  /**
+   * When the latched subscription is scheduled to cancel, this is the date
+   * access will end (Stripe's `cancel_at`, falling back to the current
+   * period end). Null when the sub isn't scheduled to cancel, or no sub
+   * exists. Drives the "access until …" hint on the Subscription card.
+   */
+  scheduledCancelAt: Date | null;
 };
+
+/**
+ * Normalize the "when does this subscription end" timestamp across Stripe
+ * API versions. In older versions `current_period_end` sat on the
+ * Subscription; in the 2025+ versions it moved to each SubscriptionItem.
+ * We prefer `cancel_at` (set whenever `cancel_at_period_end: true`) and
+ * fall back to whichever period-end field the current SDK exposes.
+ */
+function extractScheduledCancelDate(sub: Stripe.Subscription): Date | null {
+  if (!sub.cancel_at_period_end) return null;
+  const raw = sub as unknown as {
+    cancel_at?: number | null;
+    current_period_end?: number | null;
+    items?: { data?: Array<{ current_period_end?: number | null }> };
+  };
+  const ts =
+    raw.cancel_at ??
+    raw.current_period_end ??
+    raw.items?.data?.[0]?.current_period_end ??
+    null;
+  return typeof ts === "number" ? new Date(ts * 1000) : null;
+}
 
 /**
  * Ask Stripe directly whether an account has an active subscription, and
@@ -51,6 +88,8 @@ export async function reconcileOrganizerSubscription(
     subscriptionActive: account.subscriptionActive,
     stripeSubscriptionId: account.stripeSubscriptionId ?? null,
     activeSubscriptionCount: 0,
+    billingSubscriptionCount: 0,
+    scheduledCancelAt: null,
   };
 
   // No Stripe customer → nothing to reconcile against.
@@ -75,10 +114,22 @@ export async function reconcileOrganizerSubscription(
 
   const activeSubs = subs.data.filter((s) => ACTIVE_STATUSES.has(s.status));
   result.activeSubscriptionCount = activeSubs.length;
+  // A sub with `cancel_at_period_end: true` is technically still "active" in
+  // Stripe until the period expires, but it won't re-bill. We don't want the
+  // dashboard to scream "2 active subscriptions!" at a user who has already
+  // canceled one — that's a normal winding-down state.
+  result.billingSubscriptionCount = activeSubs.filter(
+    (s) => !s.cancel_at_period_end
+  ).length;
 
-  const truthySub = activeSubs[0] ?? null;
+  // Prefer a sub that's actually going to re-bill; fall back to any active
+  // sub (e.g. user has one sub scheduled to cancel but nothing replacing it
+  // yet — we still want the app to say "active" until it lapses).
+  const truthySub =
+    activeSubs.find((s) => !s.cancel_at_period_end) ?? activeSubs[0] ?? null;
   const truthyActive = Boolean(truthySub);
   const truthySubId = truthySub?.id ?? null;
+  result.scheduledCancelAt = truthySub ? extractScheduledCancelDate(truthySub) : null;
 
   // Does the DB already agree with Stripe? No-op.
   if (
