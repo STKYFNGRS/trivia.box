@@ -56,15 +56,18 @@ export const metadata: Metadata = {
     "trivia venue",
   ],
   // Favicons:
-  //   - app/favicon.ico              → Next's file-based convention injects
-  //                                    <link rel="icon" href="/favicon.ico">
+  //   - public/favicon.ico           → browsers auto-request /favicon.ico for
+  //                                    every page; the file in public/ is
+  //                                    served statically and bypasses
+  //                                    middleware (see middleware.ts matcher).
   //   - public/apple-touch-icon.png  → referenced from manifest.ts at a
-  //                                    stable URL (Next's app/apple-icon.png
-  //                                    convention serves at /apple-icon
-  //                                    instead, which would break the
-  //                                    manifest's explicit href).
-  // We deliberately don't ship an `app/icon.svg`; without it, browsers use
-  // the ICO across light / dark / HiDPI tabs, which is what we want.
+  //                                    stable URL.
+  // We deliberately don't ship an `app/icon.svg` or duplicate the ICO under
+  // `app/favicon.ico`; the latter would conflict with public/favicon.ico at
+  // build time. No `metadata.icons` block either — it interacts badly with
+  // `export const dynamic = "force-dynamic"` on the root layout (Next drops
+  // the manually-listed <link>s from the initial HTML), and the browser's
+  // default /favicon.ico request is enough to wire up the tab icon.
   // Keeping them as convention files (rather than under `metadata.icons`)
   // means Next injects the tags even for dynamically rendered routes and
   // sidesteps a known issue where `dynamic = "force-dynamic"` on the root
