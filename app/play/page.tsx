@@ -7,6 +7,7 @@ import Link from "next/link";
 import { getAccountByClerkUserId } from "@/lib/accounts";
 import { MarketingShell } from "@/components/marketing/MarketingShell";
 import { NeonCard, type NeonTone } from "@/components/marketing/NeonCard";
+import { ViewerLocalTime } from "@/components/play/ViewerLocalTime";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
@@ -291,8 +292,26 @@ export default async function PlayHubPage() {
                           ) : null}
                         </div>
                         <div className="mt-0.5 truncate text-xs text-white/60">
-                          {g.venueCity ? `${g.venueCity} · ` : ""}
-                          {fmtWhen(g.eventStartsAt, g.eventTimezone)}
+                          {/* Venue-hosted games are pinned to the venue's
+                              clock ("8pm in San Diego") so out-of-town
+                              players know the *local-at-the-pub* start
+                              time. House games aren't geographically
+                              anchored — the venueCity comes from whatever
+                              account happens to be wired up as the house
+                              identity — so we suppress it and re-render
+                              the time in the viewer's local timezone via
+                              ViewerLocalTime. */}
+                          {!g.houseGame && g.venueCity
+                            ? `${g.venueCity} · `
+                            : ""}
+                          {g.houseGame ? (
+                            <ViewerLocalTime
+                              value={g.eventStartsAt.toISOString()}
+                              fallback={fmtWhen(g.eventStartsAt, g.eventTimezone)}
+                            />
+                          ) : (
+                            fmtWhen(g.eventStartsAt, g.eventTimezone)
+                          )}
                         </div>
                       </div>
                       <Link

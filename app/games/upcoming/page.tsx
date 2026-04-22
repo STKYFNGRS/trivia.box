@@ -3,6 +3,10 @@ import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import { CalendarClock, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { MarketingShell } from "@/components/marketing/MarketingShell";
+import {
+  ViewerLocalDateParts,
+  ViewerLocalTime,
+} from "@/components/play/ViewerLocalTime";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -175,15 +179,32 @@ export default async function UpcomingGamesPage() {
                   >
                     <CardContent className="flex flex-col items-start gap-4 p-5 sm:flex-row sm:items-center">
                       <div className="flex w-24 shrink-0 flex-col items-center justify-center rounded-xl bg-white/[0.06] px-3 py-3 text-center ring-1 ring-white/10">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/60">
-                          {parts.weekday}
-                        </div>
-                        <div className="text-2xl font-black tabular-nums tracking-tight">
-                          {parts.day}
-                        </div>
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">
-                          {parts.month}
-                        </div>
+                        {g.houseGame ? (
+                          // House games aren't geographically anchored, so
+                          // render the calendar tile in the viewer's local
+                          // timezone rather than the session's stored
+                          // "UTC" marker — otherwise a 10am Pacific start
+                          // shows up on the wrong day for viewers west of
+                          // the date line.
+                          <ViewerLocalDateParts
+                            value={g.eventStartsAt.toISOString()}
+                            fallbackWeekday={parts.weekday}
+                            fallbackDay={parts.day}
+                            fallbackMonth={parts.month}
+                          />
+                        ) : (
+                          <>
+                            <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/60">
+                              {parts.weekday}
+                            </div>
+                            <div className="text-2xl font-black tabular-nums tracking-tight">
+                              {parts.day}
+                            </div>
+                            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">
+                              {parts.month}
+                            </div>
+                          </>
+                        )}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -213,10 +234,18 @@ export default async function UpcomingGamesPage() {
                           ) : null}
                         </div>
                         <div className="mt-1 text-sm tabular-nums text-white/70">
-                          {g.venueCity ? (
+                          {!g.houseGame && g.venueCity ? (
                             <span className="text-white/60">{g.venueCity} · </span>
                           ) : null}
-                          {formatLocal(g.eventStartsAt, g.eventTimezone)}
+                          {g.houseGame ? (
+                            <ViewerLocalTime
+                              value={g.eventStartsAt.toISOString()}
+                              fallback={formatLocal(g.eventStartsAt, g.eventTimezone)}
+                              format="long"
+                            />
+                          ) : (
+                            formatLocal(g.eventStartsAt, g.eventTimezone)
+                          )}
                         </div>
                         {g.hasPrize && g.prizeDescription ? (
                           <div className="mt-2 inline-flex items-center gap-1.5 text-xs text-amber-200">
