@@ -48,17 +48,45 @@ export function GameShell({
       )}
     >
       {venueImageUrl ? (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{
-            backgroundImage: `linear-gradient(to top, rgb(0 0 0 / 0.85) 0%, rgb(0 0 0 / 0.55) 30%, transparent 70%), url(${venueImageUrl})`,
-            backgroundSize: "cover",
-            backgroundPosition: "center bottom",
-            backgroundRepeat: "no-repeat",
-            opacity: 0.35,
-          }}
-        />
+        <>
+          {/* Blurred cover copy fills the entire stage so there's no empty
+              corners when the venue uploaded a square logo. Heavy blur +
+              darken makes it read as ambient lighting, not a stretched
+              billboard. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 scale-110 blur-3xl"
+            style={{
+              backgroundImage: `url(${venueImageUrl})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              backgroundRepeat: "no-repeat",
+              opacity: 0.25,
+            }}
+          />
+          {/* Sharp `contain`-fit copy anchored to the bottom so the actual
+              logo/photo is visible without being cropped. Max height keeps
+              it from dominating the stage. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 flex h-[28vh] max-h-[260px] items-end justify-center"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={venueImageUrl}
+              alt=""
+              className="h-full w-auto max-w-[60vw] object-contain opacity-25"
+            />
+          </div>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "linear-gradient(to top, rgb(0 0 0 / 0.85) 0%, rgb(0 0 0 / 0.45) 35%, transparent 70%)",
+            }}
+          />
+        </>
       ) : null}
 
       {plain ? null : (

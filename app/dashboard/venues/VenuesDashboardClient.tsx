@@ -1,10 +1,11 @@
 "use client";
 
-import { Camera, ExternalLink, Pencil, MapPin } from "lucide-react";
+import { Camera, ExternalLink, MapPin, Pencil, Plus } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { AddVenueDialog } from "@/components/dashboard/venue/AddVenueDialog";
 import { VenueProfileDialog } from "@/components/dashboard/venue/VenueProfileDialog";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatVenueAddress } from "@/lib/venue-address";
 
@@ -31,6 +32,7 @@ export type VenueListItem = {
 
 export function VenuesDashboardClient({ venues }: { venues: VenueListItem[] }) {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
 
   return (
     <div className="flex flex-col gap-6">
@@ -50,6 +52,14 @@ export function VenuesDashboardClient({ venues }: { venues: VenueListItem[] }) {
             .
           </p>
         </div>
+        <Button
+          type="button"
+          onClick={() => setAddOpen(true)}
+          className="shrink-0"
+        >
+          <Plus className="mr-1.5 h-4 w-4" />
+          Add venue
+        </Button>
       </header>
 
       {venues.length === 0 ? (
@@ -176,6 +186,11 @@ export function VenuesDashboardClient({ venues }: { venues: VenueListItem[] }) {
           // tagline in the list. Avoids wiring per-row local state.
           window.location.reload();
         }}
+      />
+      <AddVenueDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        onCreated={() => window.location.reload()}
       />
     </div>
   );

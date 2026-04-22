@@ -35,6 +35,9 @@ import {
   autopilotEstimate,
   computeEstimatedEndAt,
   estimatedDurationMinutes,
+  DEFAULT_SECONDS_PER_QUESTION,
+  SESSION_REVEAL_BUFFER_SECONDS,
+  SESSION_WARMUP_SECONDS,
 } from "@/lib/game/sessionEndTime";
 
 type VenueOption = {
@@ -490,6 +493,35 @@ export function GameSetup() {
       return endTimePreview.end.toLocaleString();
     }
   }, [endTimePreview, eventTimezone]);
+
+  /**
+   * When the host picks a total game length, the number of questions is
+   * *derived* from that length (minus warm-up) divided by the per-question
+   * cost (timer seconds + reveal/leaderboard buffer), then spread evenly
+   * across the chosen round count. When this is non-null the per-round
+   * count input is replaced with a read-only summary and an effect syncs
+   * `perRound` so validation / end-time preview stay consistent.
+   */
+  const derivedPerRound = useMemo(() => {
+    const mins = Number(hostDurationMinutes);
+    if (!hostDurationMinutes || !Number.isFinite(mins) || mins <= 0) return null;
+    const secs = timerMode === "manual" ? DEFAULT_SECONDS_PER_QUESTION : seconds;
+    const perQ = Math.max(1, secs) + SESSION_REVEAL_BUFFER_SECONDS;
+    const usable = Math.max(perQ, mins * 60 - SESSION_WARMUP_SECONDS);
+    const totalQuestions = Math.max(1, Math.floor(usable / perQ));
+    const rounded = Math.max(1, Math.floor(totalQuestions / Math.max(1, rounds)));
+    return Math.min(50, rounded);
+  }, [hostDurationMinutes, timerMode, seconds, rounds]);
+
+  useEffect(() => {
+    if (derivedPerRound !== null && derivedPerRound !== perRound) {
+      setPerRound(derivedPerRound);
+    }
+    // Only reacts to the derived value changing; setter itself is stable.
+  }, [derivedPerRound, perRound]);
+
+  const derivedTotalQuestions =
+    derivedPerRound !== null ? derivedPerRound * Math.max(1, rounds) : null;
 
   function updateLine(idx: number, patch: Partial<RoundLine>) {
     setRoundLines((prev) => {
@@ -995,58 +1027,24 @@ export function GameSetup() {
           {runMode === "hosted" ? (
             <div className="grid gap-3 md:col-span-2 rounded-md border border-border/60 bg-muted/30 p-3">
               <div>
-                <Label className="text-sm font-medium">Game length</Label>
+                <Label className="text-sm font-medium">Exact end time (optional)</Label>
                 <p className="text-muted-foreground mt-0.5 text-xs">
-                  Hosted games need an approximate end time so the session drops off the
-                  dashboard after it finishes, and so the autopilot sweeper can close it if you
-                  forget to tap <strong>End session</strong>.
+                  Pin a precise wall-clock end time. Wins over the game length
+                  field below. Useful when you need to hand the room back at,
+                  say, <em>9:30 PM sharp</em>.
                 </p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="grid gap-2">
-                  <Label htmlFor="duration-minutes" className="text-xs">
-                    Duration (minutes)
-                  </Label>
-                  <Input
-                    id="duration-minutes"
-                    type="number"
-                    inputMode="numeric"
-                    min={5}
-                    max={480}
-                    step={5}
-                    value={hostDurationMinutes}
-                    placeholder={
-                      endTimePreview ? String(endTimePreview.defaultDuration) : "60"
-                    }
-                    disabled={!!hostEndsAtOverride}
-                    onChange={(e) => setHostDurationMinutes(e.target.value)}
-                  />
-                  <p className="text-muted-foreground text-[11px]">
-                    Blank = use our estimate ({
-                      endTimePreview ? `${endTimePreview.defaultDuration} min` : "auto"
-                    }).
-                  </p>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="ends-at-override" className="text-xs">
-                    Ends at (override, optional)
-                  </Label>
-                  <Input
-                    id="ends-at-override"
-                    type="datetime-local"
-                    value={hostEndsAtOverride}
-                    onChange={(e) => setHostEndsAtOverride(e.target.value)}
-                  />
-                  <p className="text-muted-foreground text-[11px]">
-                    Pin an exact end time — wins over the duration field.
-                  </p>
-                </div>
+              <div className="grid gap-2 sm:max-w-sm">
+                <Label htmlFor="ends-at-override" className="text-xs">
+                  Ends at
+                </Label>
+                <Input
+                  id="ends-at-override"
+                  type="datetime-local"
+                  value={hostEndsAtOverride}
+                  onChange={(e) => setHostEndsAtOverride(e.target.value)}
+                />
               </div>
-              {endTimePreviewLabel ? (
-                <p className="text-foreground text-xs">
-                  Ends approx. <strong>{endTimePreviewLabel}</strong>
-                </p>
-              ) : null}
             </div>
           ) : null}
           <div className="grid gap-2">
@@ -1097,11 +1095,55 @@ export function GameSetup() {
             <CardTitle className="tracking-tight">Questions</CardTitle>
           </div>
           <CardDescription>
-            Pick how many rounds, how many questions each, and what source feeds each round
-            (vetted pool, a deck, custom writes, or pinned IDs).
+            Set the game length (we work out the question count for you) or
+            leave it blank to hand-pick rounds and questions-per-round. Each
+            round pulls from its own source below.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-2 md:col-span-2">
+            <Label htmlFor="duration-minutes">Game length (minutes)</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="duration-minutes"
+                type="number"
+                inputMode="numeric"
+                min={5}
+                max={480}
+                step={5}
+                value={hostDurationMinutes}
+                placeholder={
+                  endTimePreview ? String(endTimePreview.defaultDuration) : "60"
+                }
+                disabled={!!hostEndsAtOverride}
+                onChange={(e) => setHostDurationMinutes(e.target.value)}
+                className="max-w-[12rem] tabular-nums"
+              />
+              {hostDurationMinutes ? (
+                <button
+                  type="button"
+                  onClick={() => setHostDurationMinutes("")}
+                  className="text-muted-foreground hover:text-foreground text-xs underline underline-offset-2"
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+            <p className="text-muted-foreground text-xs">
+              {derivedTotalQuestions !== null
+                ? `We'll run ${derivedTotalQuestions} questions total (${derivedPerRound} per round × ${rounds} round${
+                    rounds === 1 ? "" : "s"
+                  }) at ${
+                    timerMode === "manual" ? DEFAULT_SECONDS_PER_QUESTION : seconds
+                  }s per question + ~${SESSION_REVEAL_BUFFER_SECONDS}s reveal.`
+                : `Leave blank to pick rounds and questions-per-round directly. Setting a length derives the question count from length ÷ seconds-per-question.`}
+              {endTimePreviewLabel ? (
+                <>
+                  {" "}Ends approx. <strong>{endTimePreviewLabel}</strong>.
+                </>
+              ) : null}
+            </p>
+          </div>
           <div className="grid gap-2">
             <Label>Rounds</Label>
             <Input
@@ -1112,22 +1154,41 @@ export function GameSetup() {
               onChange={(e) => setRounds(Number(e.target.value))}
               className="tabular-nums"
             />
-          </div>
-          <div className="grid gap-2">
-            <Label>Questions per round</Label>
-            <Input
-              type="number"
-              min={1}
-              max={50}
-              value={perRound}
-              onChange={(e) => setPerRound(Number(e.target.value))}
-              className="tabular-nums"
-            />
             <p className="text-muted-foreground text-xs">
-              Each round uses the source you pick below. For <em>Random</em>, you need enough vetted questions in the
-              category; for a deck or custom questions, the source itself must cover the round length.
+              Split the game across rounds so each can pull from a different
+              category, deck, or custom source below.
             </p>
           </div>
+          {derivedPerRound !== null ? (
+            <div className="grid gap-2">
+              <Label>Questions per round</Label>
+              <div className="bg-muted/30 flex h-10 items-center rounded-md border px-3 text-sm tabular-nums">
+                {derivedPerRound}
+              </div>
+              <p className="text-muted-foreground text-xs">
+                Derived from the game length above — clear the length to set
+                this manually.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-2">
+              <Label>Questions per round</Label>
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                value={perRound}
+                onChange={(e) => setPerRound(Number(e.target.value))}
+                className="tabular-nums"
+              />
+              <p className="text-muted-foreground text-xs">
+                Each round uses the source you pick below. For <em>Random</em>,
+                you need enough vetted questions in the category; for a deck or
+                custom questions, the source itself must cover the round
+                length.
+              </p>
+            </div>
+          )}
           <div className="grid gap-2 md:col-span-2">
             <Label>Question package (optional)</Label>
             <Select

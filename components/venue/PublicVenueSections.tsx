@@ -129,11 +129,16 @@ export function PublicVenueHero({
   const addressLine = formattedAddress ?? venue.fallbackCity ?? null;
 
   return (
-    <section className="relative h-[42vh] min-h-[300px] w-full overflow-hidden">
+    <section className="relative min-h-[320px] w-full overflow-hidden sm:min-h-[360px]">
+      {/* Layered treatment so both square logos and landscape photos look
+          intentional: a heavily blurred + darkened copy fills the entire
+          band as a backdrop, while the actual image sits as a fixed-aspect
+          tile next to the title. `object-contain` keeps it letterboxed
+          instead of center-cropping a square logo into oblivion. */}
       {imageUrl ? (
         <div
           aria-hidden
-          className="absolute inset-0 scale-105 bg-cover bg-center"
+          className="absolute inset-0 scale-110 bg-cover bg-center blur-2xl"
           style={{ backgroundImage: `url(${imageUrl})` }}
         />
       ) : (
@@ -147,43 +152,58 @@ export function PublicVenueHero({
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(to bottom, rgb(0 0 0 / 0.35) 0%, rgb(0 0 0 / 0.55) 60%, var(--stage-bg) 100%)",
+            "linear-gradient(to bottom, rgb(0 0 0 / 0.55) 0%, rgb(0 0 0 / 0.7) 60%, var(--stage-bg) 100%)",
         }}
       />
-      <div className="relative z-10 mx-auto flex h-full max-w-5xl flex-col justify-end px-6 pb-8">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/80 ring-1 ring-white/15 backdrop-blur">
-            <MapPin className="h-3 w-3" />
-            Venue
-          </span>
-          {active ? (
-            <StatusPill tone="success" dot pulse>
-              Live now
-            </StatusPill>
-          ) : null}
-        </div>
-        <h1 className="mt-3 text-4xl font-black leading-[1.05] tracking-tight drop-shadow-lg sm:text-5xl md:text-6xl">
-          {venue.displayName}
-        </h1>
-        {venue.tagline ? (
-          <p className="mt-2 max-w-2xl text-base text-white/85 drop-shadow md:text-lg">
-            {venue.tagline}
-          </p>
+      <div className="relative z-10 mx-auto flex max-w-5xl flex-col gap-6 px-6 pt-10 pb-8 sm:flex-row sm:items-center sm:pt-12 sm:pb-10">
+        {imageUrl ? (
+          <div className="order-first flex-none sm:order-none">
+            <div className="relative h-28 w-28 overflow-hidden rounded-2xl bg-black/40 ring-1 ring-white/15 shadow-[0_20px_60px_-20px_rgb(0_0_0/0.6)] sm:h-36 sm:w-36">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={imageUrl}
+                alt=""
+                className="h-full w-full object-contain"
+                loading="eager"
+              />
+            </div>
+          </div>
         ) : null}
-        {addressLine ? (
-          <p className="mt-2 inline-flex items-center gap-1.5 text-sm text-white/75 drop-shadow">
-            <MapPin className="h-3.5 w-3.5" />
-            {addressLine}
-          </p>
-        ) : null}
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          {showFollowButton ? (
-            <FollowVenueButton
-              venueSlug={venue.slug}
-              venueDisplayName={venue.displayName}
-            />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/80 ring-1 ring-white/15 backdrop-blur">
+              <MapPin className="h-3 w-3" />
+              Venue
+            </span>
+            {active ? (
+              <StatusPill tone="success" dot pulse>
+                Live now
+              </StatusPill>
+            ) : null}
+          </div>
+          <h1 className="mt-3 text-4xl font-black leading-[1.05] tracking-tight drop-shadow-lg sm:text-5xl md:text-6xl">
+            {venue.displayName}
+          </h1>
+          {venue.tagline ? (
+            <p className="mt-2 max-w-2xl text-base text-white/85 drop-shadow md:text-lg">
+              {venue.tagline}
+            </p>
           ) : null}
-          {heroActionsSlot}
+          {addressLine ? (
+            <p className="mt-2 inline-flex items-center gap-1.5 text-sm text-white/75 drop-shadow">
+              <MapPin className="h-3.5 w-3.5" />
+              {addressLine}
+            </p>
+          ) : null}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {showFollowButton ? (
+              <FollowVenueButton
+                venueSlug={venue.slug}
+                venueDisplayName={venue.displayName}
+              />
+            ) : null}
+            {heroActionsSlot}
+          </div>
         </div>
       </div>
     </section>
