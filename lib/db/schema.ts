@@ -84,6 +84,17 @@ export const venueProfiles = pgTable(
     tagline: text("tagline"),
     description: text("description"),
     timezone: text("timezone"),
+    /**
+     * Structured postal address for the physical venue. All five fields are
+     * optional so legacy rows and virtual/online venues stay valid; the UI
+     * formats whatever is present into a single-line address and falls back
+     * to `accounts.city` when every field is null.
+     */
+    addressStreet: text("address_street"),
+    addressCity: text("address_city"),
+    addressRegion: text("address_region"),
+    addressPostalCode: text("address_postal_code"),
+    addressCountry: text("address_country"),
     imageMime: text("image_mime"),
     imageBytes: bytea("image_bytes"),
     imageUpdatedAt: timestamp("image_updated_at", { withTimezone: true }),

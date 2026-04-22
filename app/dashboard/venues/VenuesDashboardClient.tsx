@@ -6,6 +6,7 @@ import { useState } from "react";
 import { VenueProfileDialog } from "@/components/dashboard/venue/VenueProfileDialog";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { formatVenueAddress } from "@/lib/venue-address";
 
 export type VenueListItem = {
   accountId: string;
@@ -13,6 +14,11 @@ export type VenueListItem = {
   slug: string | null;
   city: string;
   tagline: string | null;
+  addressStreet: string | null;
+  addressCity: string | null;
+  addressRegion: string | null;
+  addressPostalCode: string | null;
+  addressCountry: string | null;
   hasImage: boolean;
   imageUpdatedAt: string | null;
   /**
@@ -57,6 +63,14 @@ export function VenuesDashboardClient({ venues }: { venues: VenueListItem[] }) {
             const bust = v.imageUpdatedAt ? new Date(v.imageUpdatedAt).getTime() : 0;
             const imageUrl =
               v.hasImage && v.slug ? `/api/venues/${v.slug}/image?v=${bust}` : null;
+            const formattedAddress = formatVenueAddress({
+              addressStreet: v.addressStreet,
+              addressCity: v.addressCity,
+              addressRegion: v.addressRegion,
+              addressPostalCode: v.addressPostalCode,
+              addressCountry: v.addressCountry,
+            });
+            const addressLine = formattedAddress ?? (v.city ? v.city : null);
             return (
               <li
                 key={v.accountId}
@@ -95,9 +109,9 @@ export function VenuesDashboardClient({ venues }: { venues: VenueListItem[] }) {
                   ) : null}
                   <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-white/55">
                     {v.slug ? <span>/v/{v.slug}</span> : null}
-                    {v.city ? (
+                    {addressLine ? (
                       <span className="inline-flex items-center gap-1">
-                        <MapPin className="h-3 w-3" /> {v.city}
+                        <MapPin className="h-3 w-3" /> {addressLine}
                       </span>
                     ) : null}
                   </div>
@@ -130,8 +144,10 @@ export function VenuesDashboardClient({ venues }: { venues: VenueListItem[] }) {
                     </button>
                   ) : null}
                   {v.slug ? (
-                    <Link
+                    <a
                       href={`/v/${v.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className={cn(
                         buttonVariants({ variant: "ghost", size: "sm" }),
                         "text-white/75 hover:bg-white/5 hover:text-white"
@@ -139,7 +155,7 @@ export function VenuesDashboardClient({ venues }: { venues: VenueListItem[] }) {
                     >
                       <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
                       View public page
-                    </Link>
+                    </a>
                   ) : null}
                   <Link
                     href={`/dashboard/stats?venueId=${encodeURIComponent(v.accountId)}`}

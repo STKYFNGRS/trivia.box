@@ -16,6 +16,11 @@ function toPublic(row: VenueProfileRow) {
     tagline: row.tagline,
     description: row.description,
     timezone: row.timezone,
+    addressStreet: row.addressStreet,
+    addressCity: row.addressCity,
+    addressRegion: row.addressRegion,
+    addressPostalCode: row.addressPostalCode,
+    addressCountry: row.addressCountry,
     hasImage: Boolean(row.imageBytes),
     imageUpdatedAt: row.imageUpdatedAt,
     imageMime: row.imageMime,
@@ -48,6 +53,13 @@ const putSchema = z.object({
   tagline: z.string().trim().max(140).nullable().optional(),
   description: z.string().trim().max(2000).nullable().optional(),
   timezone: z.string().trim().max(64).nullable().optional(),
+  // Structured postal address — all nullable so clearing a field is an
+  // explicit `null` while `undefined` means "leave as-is" downstream.
+  addressStreet: z.string().trim().max(200).nullable().optional(),
+  addressCity: z.string().trim().max(120).nullable().optional(),
+  addressRegion: z.string().trim().max(80).nullable().optional(),
+  addressPostalCode: z.string().trim().max(20).nullable().optional(),
+  addressCountry: z.string().trim().max(80).nullable().optional(),
 });
 
 export async function PUT(req: Request) {

@@ -69,6 +69,11 @@ export default async function DashboardVenuesPage() {
         slug: profile?.slug ?? null,
         city: a.city,
         tagline: profile?.tagline ?? null,
+        addressStreet: profile?.addressStreet ?? null,
+        addressCity: profile?.addressCity ?? null,
+        addressRegion: profile?.addressRegion ?? null,
+        addressPostalCode: profile?.addressPostalCode ?? null,
+        addressCountry: profile?.addressCountry ?? null,
         hasImage: Boolean(profile?.imageBytes),
         imageUpdatedAt: profile?.imageUpdatedAt
           ? new Date(profile.imageUpdatedAt).toISOString()

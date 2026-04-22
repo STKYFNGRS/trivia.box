@@ -30,6 +30,11 @@ export type VenueProfileSummary = {
   tagline: string | null;
   description: string | null;
   timezone: string | null;
+  addressStreet: string | null;
+  addressCity: string | null;
+  addressRegion: string | null;
+  addressPostalCode: string | null;
+  addressCountry: string | null;
   hasImage: boolean;
   imageUpdatedAt: string | Date | null;
 };
@@ -58,6 +63,11 @@ export function VenueProfileDialog({
   const [tagline, setTagline] = useState("");
   const [description, setDescription] = useState("");
   const [timezone, setTimezone] = useState("");
+  const [addressStreet, setAddressStreet] = useState("");
+  const [addressCity, setAddressCity] = useState("");
+  const [addressRegion, setAddressRegion] = useState("");
+  const [addressPostalCode, setAddressPostalCode] = useState("");
+  const [addressCountry, setAddressCountry] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -88,6 +98,11 @@ export function VenueProfileDialog({
     setTagline(next.tagline ?? "");
     setDescription(next.description ?? "");
     setTimezone(next.timezone ?? "");
+    setAddressStreet(next.addressStreet ?? "");
+    setAddressCity(next.addressCity ?? "");
+    setAddressRegion(next.addressRegion ?? "");
+    setAddressPostalCode(next.addressPostalCode ?? "");
+    setAddressCountry(next.addressCountry ?? "");
   }
 
   async function save() {
@@ -106,6 +121,11 @@ export function VenueProfileDialog({
           tagline: tagline.trim() || null,
           description: description.trim() || null,
           timezone: timezone.trim() || null,
+          addressStreet: addressStreet.trim() || null,
+          addressCity: addressCity.trim() || null,
+          addressRegion: addressRegion.trim() || null,
+          addressPostalCode: addressPostalCode.trim() || null,
+          addressCountry: addressCountry.trim() || null,
         }),
       });
       const data = (await res.json()) as { venue?: VenueProfileSummary; error?: unknown };
@@ -313,6 +333,79 @@ export function VenueProfileDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="grid gap-3 rounded-md border border-white/10 bg-white/[0.02] p-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <Label className="text-sm font-medium">Physical address (optional)</Label>
+                <span className="text-muted-foreground text-xs">
+                  Shown on your public venue page
+                </span>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="venue-address-street" className="text-xs">
+                  Street
+                </Label>
+                <Input
+                  id="venue-address-street"
+                  value={addressStreet}
+                  onChange={(e) => setAddressStreet(e.target.value)}
+                  maxLength={200}
+                  placeholder="123 Main St"
+                />
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="venue-address-city" className="text-xs">
+                    City
+                  </Label>
+                  <Input
+                    id="venue-address-city"
+                    value={addressCity}
+                    onChange={(e) => setAddressCity(e.target.value)}
+                    maxLength={120}
+                    placeholder="San Diego"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="venue-address-region" className="text-xs">
+                    State / region
+                  </Label>
+                  <Input
+                    id="venue-address-region"
+                    value={addressRegion}
+                    onChange={(e) => setAddressRegion(e.target.value)}
+                    maxLength={80}
+                    placeholder="CA"
+                  />
+                </div>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="venue-address-postal" className="text-xs">
+                    Postal code
+                  </Label>
+                  <Input
+                    id="venue-address-postal"
+                    value={addressPostalCode}
+                    onChange={(e) => setAddressPostalCode(e.target.value)}
+                    maxLength={20}
+                    placeholder="92101"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="venue-address-country" className="text-xs">
+                    Country
+                  </Label>
+                  <Input
+                    id="venue-address-country"
+                    value={addressCountry}
+                    onChange={(e) => setAddressCountry(e.target.value)}
+                    maxLength={80}
+                    placeholder="US"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         )}

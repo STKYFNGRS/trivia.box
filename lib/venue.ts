@@ -2,6 +2,7 @@ import { and, eq, gt, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { accounts, sessions, venueProfiles } from "@/lib/db/schema";
 import { slugifyText } from "@/lib/slug";
+export { formatVenueAddress } from "@/lib/venue-address";
 
 export type VenueProfileRow = typeof venueProfiles.$inferSelect;
 
@@ -128,6 +129,11 @@ export async function updateVenueProfile(
     tagline?: string | null;
     description?: string | null;
     timezone?: string | null;
+    addressStreet?: string | null;
+    addressCity?: string | null;
+    addressRegion?: string | null;
+    addressPostalCode?: string | null;
+    addressCountry?: string | null;
   }
 ): Promise<VenueProfileRow> {
   const current = await ensureVenueProfileForAccount(accountId);
@@ -162,6 +168,18 @@ export async function updateVenueProfile(
       tagline: patch.tagline !== undefined ? patch.tagline : current.tagline,
       description: patch.description !== undefined ? patch.description : current.description,
       timezone: patch.timezone !== undefined ? patch.timezone : current.timezone,
+      addressStreet:
+        patch.addressStreet !== undefined ? patch.addressStreet : current.addressStreet,
+      addressCity:
+        patch.addressCity !== undefined ? patch.addressCity : current.addressCity,
+      addressRegion:
+        patch.addressRegion !== undefined ? patch.addressRegion : current.addressRegion,
+      addressPostalCode:
+        patch.addressPostalCode !== undefined
+          ? patch.addressPostalCode
+          : current.addressPostalCode,
+      addressCountry:
+        patch.addressCountry !== undefined ? patch.addressCountry : current.addressCountry,
       updatedAt: new Date(),
     })
     .where(eq(venueProfiles.accountId, accountId))
