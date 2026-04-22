@@ -399,6 +399,75 @@ export type SweptStaleSession = {
  * it piggybacks on the existing once-a-minute cadence. Return value
  * is logged by the cron for observability.
  */
+/**
+ * Drive a single autopilot session forward by one step based on its current
+ * state machine position. Shared between the Vercel cron (`autopilot-tick`)
+ * and the public viewer-driven tick (`/api/game/public/autopilot-tick`) so
+ * both entry points share exactly the same rules and can't drift.
+ *
+ * Idempotent: calling this multiple times in the same second (multiple
+ * viewers concurrently polling) is safe — each branch checks the DB state
+ * and bails out if there's nothing to do. Returns a small result object
+ * used by callers for logging / debug inspection.
+ */
+export async function advanceAutopilotSession(
+  session: SessionForHost,
+  opts: { nowMs?: number; graceMs?: number } = {},
+): Promise<{ action?: string; reason?: string }> {
+  const nowMs = opts.nowMs ?? Date.now();
+  const graceMs = opts.graceMs ?? 1200;
+
+  if (session.status !== "active" || session.pausedAt) {
+    return { reason: "not_active_or_paused" };
+  }
+  if (session.runMode !== "autopilot") {
+    return { reason: "not_autopilot" };
+  }
+
+  const ordered = await loadOrderedQuestions(session.id);
+  const revealed = ordered.find((q) => q.status === "revealed");
+  const locked = ordered.find((q) => q.status === "locked");
+  const active = ordered.find((q) => q.status === "active");
+
+  if (revealed) {
+    if (session.timerMode === "hybrid") return { reason: "waiting_for_host_next" };
+    const res = await advanceOrComplete(session);
+    return { action: res.kind === "completed" ? "completed" : "advanced" };
+  }
+
+  if (locked) {
+    if (session.timerMode === "hybrid") return { reason: "waiting_for_host_reveal" };
+    const res = await revealActive(session);
+    return { action: `revealed:${res.sessionQuestionId}` };
+  }
+
+  if (active) {
+    if (session.timerMode === "manual") return { reason: "waiting_for_manual_lock" };
+    const startedAt = active.timerStartedAtMs;
+    const seconds =
+      active.timerSeconds ??
+      active.roundSecondsPerQuestion ??
+      session.secondsPerQuestion ??
+      0;
+    if (!startedAt || !seconds) return { reason: "no_timer_info" };
+    const deadlineMs = startedAt + seconds * 1000 + graceMs;
+    if (nowMs >= deadlineMs) {
+      const res = await lockActive(session);
+      return { action: `locked:${res.sessionQuestionId}` };
+    }
+    return { reason: `waiting_${deadlineMs - nowMs}ms` };
+  }
+
+  const pending = ordered.find((q) => q.status === "pending");
+  if (pending) {
+    const res = await startNextQuestion(session);
+    return {
+      action: res.kind === "completed" ? "completed" : `started:${res.sessionQuestionId}`,
+    };
+  }
+  return { reason: "nothing_to_do" };
+}
+
 export async function sweepStaleSessions(): Promise<SweptStaleSession[]> {
   const candidates = await db
     .select({

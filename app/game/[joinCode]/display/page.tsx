@@ -23,6 +23,8 @@ type LeaderboardEntry = { playerId: string; username: string; score: number };
 
 type BootstrapResponse = {
   status?: string;
+  runMode?: string;
+  houseGame?: boolean;
   pausedAt?: string | null;
   currentQuestion?: BootstrapQuestion | null;
   venueSlug?: string | null;
@@ -127,6 +129,37 @@ export default function DisplayPage() {
     void refreshBootstrap();
   }, [refreshBootstrap]);
 
+  // Viewer-driven autopilot heartbeat — see the matching comment on the
+  // hosted play page for the full rationale. The display screen acts as a
+  // viewer for this purpose: as long as it's open, the house / autopilot
+  // game keeps advancing even when the Vercel cron isn't running (dev) or
+  // is trailing by up to a minute (prod).
+  const isAutopilot = boot?.runMode === "autopilot";
+  const sessionActive = boot?.status === "active";
+  useEffect(() => {
+    if (!joinCode || !isAutopilot || !sessionActive) return;
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled) return;
+      try {
+        await fetch("/api/game/public/autopilot-tick", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ joinCode }),
+          cache: "no-store",
+        });
+      } catch {
+        /* Transient network blip — the next interval catches up. */
+      }
+    };
+    void tick();
+    const h = setInterval(tick, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(h);
+    };
+  }, [joinCode, isAutopilot, sessionActive]);
+
   const lastProcessedRef = useRef(0);
   useEffect(() => {
     if (messages.length <= lastProcessedRef.current) return;
@@ -150,11 +183,15 @@ export default function DisplayPage() {
   // the scoreboard in big format so the room gets the payoff moment.
   const showLeaderboard = !current?.body || revealedForActive;
 
-  const venueImageUrl = buildVenueImageUrl({
-    venueSlug: boot?.venueSlug,
-    venueHasImage: boot?.venueHasImage,
-    venueImageUpdatedAt: boot?.venueImageUpdatedAt,
-  });
+  // House games don't map to a real venue — swap the backdrop to the product
+  // logo so the big-screen view doesn't inherit some random venue's photo.
+  const venueImageUrl = boot?.houseGame
+    ? "/logo.png"
+    : buildVenueImageUrl({
+        venueSlug: boot?.venueSlug,
+        venueHasImage: boot?.venueHasImage,
+        venueImageUpdatedAt: boot?.venueImageUpdatedAt,
+      });
 
   const completedCount = boot?.completedCount ?? 0;
   const totalQuestions = boot?.totalQuestions ?? 0;

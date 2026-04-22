@@ -6,11 +6,7 @@ import { isCronAuthorized } from "@/lib/cronAuth";
 import { db } from "@/lib/db/client";
 import { sessions } from "@/lib/db/schema";
 import {
-  advanceOrComplete,
-  loadOrderedQuestions,
-  lockActive,
-  revealActive,
-  startNextQuestion,
+  advanceAutopilotSession,
   sweepStaleSessions,
   type SessionForHost,
 } from "@/lib/game/hostActions";
@@ -97,79 +93,8 @@ async function runTick(req: Request, input: unknown) {
     };
 
     try {
-      const ordered = await loadOrderedQuestions(session.id);
-      // Prefer revealed over locked over active — we always drive the furthest
-      // state forward first so we can't miss a reveal between ticks.
-      const revealed = ordered.find((q) => q.status === "revealed");
-      const locked = ordered.find((q) => q.status === "locked");
-      const active = ordered.find((q) => q.status === "active");
-
-      if (revealed) {
-        // In hybrid mode, the host controls reveal → next manually, so the cron
-        // must not advance for them. The host tab will click Next when ready.
-        if (session.timerMode === "hybrid") {
-          results.push({ sessionId: session.id, reason: "waiting_for_host_next" });
-          continue;
-        }
-        const res = await advanceOrComplete(session);
-        results.push({
-          sessionId: session.id,
-          action: res.kind === "completed" ? "completed" : "advanced",
-        });
-        continue;
-      }
-
-      if (locked) {
-        // Hybrid: lock happened (either auto or host) but reveal is the host's
-        // job. Leave it alone.
-        if (session.timerMode === "hybrid") {
-          results.push({ sessionId: session.id, reason: "waiting_for_host_reveal" });
-          continue;
-        }
-        const res = await revealActive(session);
-        results.push({ sessionId: session.id, action: `revealed:${res.sessionQuestionId}` });
-        continue;
-      }
-
-      if (active) {
-        // Only manual-mode auto locks happen via host click; auto/hybrid auto-
-        // lock when the server-stamped timer expires.
-        if (session.timerMode === "manual") {
-          results.push({ sessionId: session.id, reason: "waiting_for_manual_lock" });
-          continue;
-        }
-        const startedAt = active.timerStartedAtMs;
-        const seconds =
-          active.timerSeconds ??
-          active.roundSecondsPerQuestion ??
-          session.secondsPerQuestion ??
-          0;
-        if (!startedAt || !seconds) {
-          results.push({ sessionId: session.id, reason: "no_timer_info" });
-          continue;
-        }
-        const deadlineMs = startedAt + seconds * 1000 + GRACE_MS;
-        if (nowMs >= deadlineMs) {
-          const res = await lockActive(session);
-          results.push({ sessionId: session.id, action: `locked:${res.sessionQuestionId}` });
-        } else {
-          results.push({ sessionId: session.id, reason: `waiting_${deadlineMs - nowMs}ms` });
-        }
-        continue;
-      }
-
-      // Nothing active / locked / revealed: try to start the next pending
-      // question (e.g. after a fresh launch).
-      const pending = ordered.find((q) => q.status === "pending");
-      if (pending) {
-        const res = await startNextQuestion(session);
-        results.push({
-          sessionId: session.id,
-          action: res.kind === "completed" ? "completed" : `started:${res.sessionQuestionId}`,
-        });
-      } else {
-        results.push({ sessionId: session.id, reason: "nothing_to_do" });
-      }
+      const res = await advanceAutopilotSession(session, { nowMs, graceMs: GRACE_MS });
+      results.push({ sessionId: session.id, ...res });
     } catch (err) {
       results.push({
         sessionId: session.id,

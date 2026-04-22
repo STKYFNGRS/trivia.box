@@ -47,6 +47,7 @@ export async function GET(req: Request) {
       venueAccountId: sessions.venueAccountId,
       pausedAt: sessions.pausedAt,
       onlineMeetingUrl: sessions.onlineMeetingUrl,
+      houseGame: sessions.houseGame,
     })
     .from(sessions)
     .where(eq(sessions.joinCode, code.toUpperCase()))
@@ -186,6 +187,7 @@ export async function GET(req: Request) {
     // public session endpoint with a valid join code — we still
     // intentionally keep it off the upcoming-games listings.
     onlineMeetingUrl: session.onlineMeetingUrl ?? null,
+    houseGame: session.houseGame === true,
     currentQuestion,
     totalQuestions,
     completedCount,

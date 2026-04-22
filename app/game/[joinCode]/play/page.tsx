@@ -38,6 +38,8 @@ type LeaderboardEntry = { playerId: string; username: string; score: number };
 type BootstrapResponse = {
   sessionId?: string;
   status?: string;
+  runMode?: string;
+  houseGame?: boolean;
   pausedAt?: string | null;
   venueSlug?: string | null;
   venueDisplayName?: string | null;
@@ -117,6 +119,39 @@ export default function PlayPage() {
   useEffect(() => {
     void refreshBootstrap();
   }, [refreshBootstrap]);
+
+  // Viewer-driven autopilot heartbeat. For house / autopilot sessions the
+  // server state machine is nominally advanced by the Vercel cron (
+  // `/api/cron/autopilot-tick`, once per minute). That cadence is too slow
+  // for per-question timers and doesn't run at all in local dev — so while
+  // at least one player has the page open we poke the single-session
+  // public tick endpoint every 2 s. `advanceAutopilotSession` is idempotent
+  // on the server, so concurrent pokes from multiple viewers are safe.
+  const isAutopilot = boot?.runMode === "autopilot";
+  const sessionActive = boot?.status === "active";
+  useEffect(() => {
+    if (!joinCode || !isAutopilot || !sessionActive) return;
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled) return;
+      try {
+        await fetch("/api/game/public/autopilot-tick", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ joinCode }),
+          cache: "no-store",
+        });
+      } catch {
+        // Transient network blips are fine — the next interval catches up.
+      }
+    };
+    void tick();
+    const h = setInterval(tick, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(h);
+    };
+  }, [joinCode, isAutopilot, sessionActive]);
 
   // Ably events are treated as invalidation signals. We debounce slightly so a
   // burst of messages (answers_locked → answer_revealed → leaderboard_updated)
@@ -213,7 +248,13 @@ export default function PlayPage() {
   const timerSeconds = current?.timerSeconds ?? null;
   const timerStartedAtMs = current?.timerStartedAtMs ?? null;
 
-  const venueImageUrl = buildVenueImageUrl(boot ?? {});
+  // House games are Trivia.Box-owned and don't live at a real venue, so we
+  // swap the backdrop to the product logo (matching solo). Everything else
+  // (display name, online meeting URL, etc.) still flows through the normal
+  // bootstrap fields.
+  const venueImageUrl = boot?.houseGame
+    ? "/logo.png"
+    : buildVenueImageUrl(boot ?? {});
 
   const myLeaderboard = useMemo(() => {
     if (!playerId || !boot?.leaderboard?.length) return null;
