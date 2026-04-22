@@ -223,8 +223,12 @@ export default function AdminHouseGamesPage() {
     [refresh]
   );
 
-  const upcoming = data.upcoming ?? [];
-  const recent = data.recent ?? [];
+  // Wrap these in `useMemo` so their array identity stays stable across
+  // renders when `data` is unchanged — otherwise the `??` fallback returns
+  // a fresh `[]` every render and the downstream `useMemo` (nextPreview)
+  // would recompute on every parent re-render.
+  const upcoming = useMemo(() => data.upcoming ?? [], [data.upcoming]);
+  const recent = useMemo(() => data.recent ?? [], [data.recent]);
   const configured = data.houseAccountConfigured !== false;
 
   const nextPreview = useMemo(() => {
@@ -292,8 +296,8 @@ export default function AdminHouseGamesPage() {
             </CardTitle>
             <p className="text-xs text-muted-foreground">
               Forces a themed house game at the moment you pick (bypasses the
-              "already scheduled" idempotency guard). Useful for Friday-night
-              feature events or marketing pushes.
+              &ldquo;already scheduled&rdquo; idempotency guard). Useful for
+              Friday-night feature events or marketing pushes.
             </p>
           </div>
           <Button
