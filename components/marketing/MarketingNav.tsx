@@ -1,10 +1,11 @@
 "use client";
 
 import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import { CreditCard } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ManageBillingMenuItem } from "@/components/billing/ManageBillingMenuItem";
+import { openBillingPortal } from "@/components/billing/ManageBillingMenuItem";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -130,8 +131,17 @@ export function MarketingNav() {
                 },
               }}
             >
+              {/* Clerk validates MenuItems children by element type and
+                  rejects any wrapper component, so the Action has to
+                  sit here literally — see components/billing/ManageBillingMenuItem.tsx. */}
               <UserButton.MenuItems>
-                <ManageBillingMenuItem />
+                <UserButton.Action
+                  label="Manage subscription"
+                  labelIcon={<CreditCard className="size-4" aria-hidden />}
+                  onClick={() => {
+                    void openBillingPortal();
+                  }}
+                />
               </UserButton.MenuItems>
             </UserButton>
           </SignedIn>
