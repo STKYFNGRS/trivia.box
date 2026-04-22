@@ -175,33 +175,23 @@ function Hero({ houseCountdown }: { houseCountdown: string }) {
 }
 
 function HeroOrnament() {
+  // No decorative frame — the logo stands on its own with a soft drop-shadow
+  // so it reads against the hero mesh without a box around it. Positioned
+  // flush with the right edge of the hero's max-width container so the
+  // wordmark sits next to the headline instead of crammed in a corner panel.
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute -right-10 top-24 hidden rotate-[6deg] lg:block"
+      className="pointer-events-none absolute right-0 top-20 hidden rotate-[4deg] lg:block"
     >
-      <div
-        className="relative flex h-[480px] w-[380px] items-center justify-center rounded-[44px] border border-white/10 p-10"
-        style={{
-          // Two-stop radial glow behind the mark — magenta top-left, cyan
-          // bottom-right — so the logo reads as "lit from within" rather
-          // than pasted on top. The outer box-shadow pins it in front of
-          // the hero mesh without a hard edge.
-          background:
-            "radial-gradient(110% 80% at 20% 10%, color-mix(in oklab, var(--neon-magenta) 30%, transparent), transparent 60%), radial-gradient(90% 70% at 80% 90%, color-mix(in oklab, var(--neon-cyan) 24%, transparent), transparent 65%), linear-gradient(180deg, color-mix(in oklab, var(--stage-surface) 94%, transparent), color-mix(in oklab, var(--stage-bg) 88%, transparent))",
-          boxShadow:
-            "0 40px 80px -30px rgb(0 0 0 / 0.6), 0 0 0 1px color-mix(in oklab, var(--neon-magenta) 20%, transparent)",
-        }}
-      >
-        <Image
-          src="/logo.png"
-          alt=""
-          width={600}
-          height={180}
-          priority
-          className="h-auto w-full drop-shadow-[0_0_40px_color-mix(in_oklab,var(--neon-magenta)_45%,transparent)]"
-        />
-      </div>
+      <Image
+        src="/logo.png"
+        alt=""
+        width={1040}
+        height={320}
+        priority
+        className="h-auto w-[560px] drop-shadow-[0_0_60px_color-mix(in_oklab,var(--neon-magenta)_55%,transparent)]"
+      />
     </div>
   );
 }

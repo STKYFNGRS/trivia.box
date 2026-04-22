@@ -1,5 +1,6 @@
 import { and, asc, eq, gt, inArray } from "drizzle-orm";
-import { CalendarClock, MapPin, Sparkles } from "lucide-react";
+import { CalendarClock, Gift, MapPin, Sparkles } from "lucide-react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { MarketingShell } from "@/components/marketing/MarketingShell";
@@ -234,6 +235,15 @@ export default async function VenueLobbyPage({
                           <StatusPill tone={u.runMode === "autopilot" ? "info" : "accent"}>
                             {u.runMode === "autopilot" ? "Autopilot" : "Hosted"}
                           </StatusPill>
+                          {u.hasPrize ? (
+                            <StatusPill tone="warning">
+                              <Gift className="mr-1 h-3 w-3" />
+                              Prize
+                              {u.prizeDescription
+                                ? `: ${u.prizeDescription.slice(0, 32)}${u.prizeDescription.length > 32 ? "…" : ""}`
+                                : ""}
+                            </StatusPill>
+                          ) : null}
                         </div>
                         <div className="mt-1 text-sm tabular-nums text-white/70">
                           {formatEventTime(new Date(u.eventStartsAt), u.eventTimezone)}
@@ -246,15 +256,15 @@ export default async function VenueLobbyPage({
                         ) : null}
                       </div>
                       <div className="flex w-full items-center gap-2 sm:w-auto">
-                        <a
-                          href={`#event-${u.id}`}
+                        <Link
+                          href={`/v/${venue.slug}/events/${u.id}`}
                           className={cn(
                             buttonVariants({ variant: "outline", size: "sm" }),
                             "w-full border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white sm:w-auto"
                           )}
                         >
                           View details
-                        </a>
+                        </Link>
                       </div>
                     </CardContent>
                   </Card>

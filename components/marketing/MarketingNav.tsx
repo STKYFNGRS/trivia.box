@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 const NAV_LINKS = [
   { href: "/play", label: "Play" },
   { href: "/decks", label: "Decks" },
+  { href: "/venues", label: "Venues" },
   { href: "/leaderboards", label: "Leaderboards" },
   { href: "/games/upcoming", label: "Upcoming" },
 ];

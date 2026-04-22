@@ -1,10 +1,14 @@
+import { and, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Trophy } from "lucide-react";
+import { VenuePicker, type VenuePickerOption } from "@/components/dashboard/stats/VenuePicker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusPill } from "@/components/ui/status-pill";
 import { getCurrentAccount } from "@/lib/accounts";
+import { db } from "@/lib/db/client";
+import { accounts, hostVenueRelationships, venueProfiles } from "@/lib/db/schema";
 import { getHostVenueOpsStats, getVenueStats } from "@/lib/stats/aggregate";
 
 function fmtNum(n: number): string {
@@ -13,7 +17,11 @@ function fmtNum(n: number): string {
 
 export const dynamic = "force-dynamic";
 
-export default async function HostStatsPage() {
+export default async function HostStatsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ venueId?: string }>;
+}) {
   const account = await getCurrentAccount();
   if (!account) {
     redirect("/sign-in");
@@ -22,7 +30,55 @@ export default async function HostStatsPage() {
     redirect("/dashboard/player");
   }
 
-  const venueAccountId = account.id;
+  // Build the list of venues this host can view stats for: their own account
+  // first (primary venue) + any venues they host through an active
+  // `host_venue_relationships` row.
+  const rels = await db
+    .select({ venueAccountId: hostVenueRelationships.venueId })
+    .from(hostVenueRelationships)
+    .where(
+      and(
+        eq(hostVenueRelationships.hostId, account.id),
+        eq(hostVenueRelationships.status, "active")
+      )
+    );
+  const venueIds = Array.from(
+    new Set<string>([account.id, ...rels.map((r) => r.venueAccountId)])
+  );
+  const accountRows = venueIds.length
+    ? await db
+        .select({ id: accounts.id, name: accounts.name })
+        .from(accounts)
+        .where(inArray(accounts.id, venueIds))
+    : [];
+  const profileRows = venueIds.length
+    ? await db
+        .select({ accountId: venueProfiles.accountId, displayName: venueProfiles.displayName })
+        .from(venueProfiles)
+        .where(inArray(venueProfiles.accountId, venueIds))
+    : [];
+  const displayByAccount = new Map<string, string>(
+    profileRows.map((p) => [p.accountId, p.displayName])
+  );
+  const pickerOptions: VenuePickerOption[] = accountRows
+    .map((a) => ({
+      accountId: a.id,
+      displayName: displayByAccount.get(a.id) || a.name || "Untitled venue",
+    }))
+    .sort((x, y) => {
+      if (x.accountId === account.id) return -1;
+      if (y.accountId === account.id) return 1;
+      return x.displayName.localeCompare(y.displayName);
+    });
+
+  const requestedVenueId = (await searchParams).venueId ?? null;
+  // Reject unknown ids — a host shouldn't be able to pivot stats to a venue
+  // they don't belong to just by guessing the id.
+  const venueAccountId =
+    requestedVenueId && venueIds.includes(requestedVenueId)
+      ? requestedVenueId
+      : account.id;
+
   const [stats, ops] = await Promise.all([
     getVenueStats(venueAccountId),
     getHostVenueOpsStats(venueAccountId),
@@ -52,20 +108,23 @@ export default async function HostStatsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <SectionHeader
-        as="h1"
-        eyebrow="Stats"
-        title={`${stats.venue.displayName} · venue stats`}
-        description={
-          <>
-            Public snapshot available at{" "}
-            <Link href={`/v/${stats.venue.slug}`} className="underline">
-              /v/{stats.venue.slug}
-            </Link>
-            .
-          </>
-        }
-      />
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <SectionHeader
+          as="h1"
+          eyebrow="Stats"
+          title={`${stats.venue.displayName} · venue stats`}
+          description={
+            <>
+              Public snapshot available at{" "}
+              <Link href={`/v/${stats.venue.slug}`} className="underline">
+                /v/{stats.venue.slug}
+              </Link>
+              .
+            </>
+          }
+        />
+        <VenuePicker options={pickerOptions} selectedId={venueAccountId} />
+      </div>
 
       <div className="grid gap-3 md:grid-cols-4">
         <StatCard label="Completed games" value={fmtNum(stats.totals.completedGames)} />

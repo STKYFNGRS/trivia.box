@@ -362,6 +362,13 @@ export const sessions = pgTable(
      * player-facing leaderboards / XP / profiles don't forget past games.
      */
     hostHiddenAt: timestamp("host_hidden_at", { withTimezone: true }),
+    /**
+     * Free-form notes the host surfaces on the public event detail page at
+     * `/v/[slug]/events/[sessionId]` — e.g. "Happy hour 5-7, kitchen open
+     * till close, trivia starts at 7:30 sharp". Editable from the host's
+     * edit-session page.
+     */
+    hostNotes: text("host_notes"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
