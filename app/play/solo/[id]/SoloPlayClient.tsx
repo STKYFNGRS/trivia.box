@@ -1,10 +1,18 @@
 "use client";
 
-import { Check, Flame, Trophy, X } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { CheckCircle2, Loader2, Trophy } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import {
+  ANSWER_STYLES,
+  ChoiceShape,
+  PILL_CLASSES,
+} from "@/components/game/answerStyles";
+import { GameShell } from "@/components/game/GameShell";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +44,11 @@ type AnswerResult = {
   correctCount: number;
   totalQuestions: number;
 };
+
+/** Hosted games use GameShell with a venue image backdrop; solo reuses the
+ *  same shell and swaps the backdrop for the brand logo so the cabinet
+ *  looks identical across hosted and solo play. */
+const SOLO_BRAND_IMAGE = "/logo.png";
 
 const REVEAL_MS = 1400;
 
@@ -138,7 +151,6 @@ export function SoloPlayClient({ sessionId }: { sessionId: string }) {
           correct: data.correctCount,
           total: data.totalQuestions,
         });
-        // Auto-advance.
         setTimeout(() => {
           if (abortedRef.current) return;
           if (data.complete) {
@@ -146,7 +158,6 @@ export function SoloPlayClient({ sessionId }: { sessionId: string }) {
             setQuestion(null);
             setLastResult(null);
             setSubmitting(false);
-            // Recap loads via /recap.
           } else {
             void fetchNext().finally(() => setSubmitting(false));
           }
@@ -167,49 +178,88 @@ export function SoloPlayClient({ sessionId }: { sessionId: string }) {
     void handleChoice("__timeout__");
   }, [handleChoice, lastResult, question, remainingMs, submitting]);
 
+  const topBar = (
+    <>
+      <div className="flex min-w-0 items-center gap-3 leading-tight">
+        <Link
+          href="/play"
+          aria-label="Back to Play hub"
+          className="flex items-center gap-2 text-white transition hover:opacity-90"
+        >
+          <span className="relative inline-flex h-8 w-8 overflow-hidden rounded-lg bg-white/10 ring-1 ring-white/15">
+            <Image
+              src={SOLO_BRAND_IMAGE}
+              alt=""
+              fill
+              sizes="32px"
+              className="object-contain p-1"
+              priority
+            />
+          </span>
+          <span className="flex min-w-0 flex-col leading-tight">
+            <span className="truncate text-sm font-semibold text-white">
+              Trivia.Box
+            </span>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/60">
+              Solo run
+            </span>
+          </span>
+        </Link>
+      </div>
+      <div className="flex items-center gap-2">
+        {question ? (
+          <span className={cn(PILL_CLASSES, "text-white/80")}>
+            <span className="tabular-nums">
+              Q{question.position + 1} / {question.totalQuestions}
+            </span>
+          </span>
+        ) : null}
+        <span className={cn(PILL_CLASSES)} aria-label="Your score">
+          <Trophy className="h-3 w-3 text-[var(--stage-accent)]" aria-hidden />
+          <span className="tabular-nums text-white">{totals.score}</span>
+        </span>
+      </div>
+    </>
+  );
+
   if (loading && !question && !complete) {
     return (
-      <div className="min-h-screen bg-[var(--stage-bg)] p-6 text-sm text-white/70">
-        Loading your run...
-      </div>
+      <GameShell venueImageUrl={SOLO_BRAND_IMAGE} topBar={topBar}>
+        <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-3 py-16 text-center text-sm text-white/70">
+          <Loader2 className="size-5 animate-spin text-white/70" aria-hidden />
+          Loading your run...
+        </div>
+      </GameShell>
     );
   }
 
   if (complete) {
-    return <SoloCompleteCard sessionId={sessionId} totals={totals} />;
+    return (
+      <GameShell venueImageUrl={SOLO_BRAND_IMAGE} topBar={topBar}>
+        <SoloCompleteCard sessionId={sessionId} totals={totals} />
+      </GameShell>
+    );
   }
 
   if (!question) {
     return (
-      <div className="min-h-screen bg-[var(--stage-bg)] p-6 text-sm text-white/70">
-        Setting things up...
-      </div>
+      <GameShell venueImageUrl={SOLO_BRAND_IMAGE} topBar={topBar}>
+        <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-3 py-16 text-center text-sm text-white/70">
+          <Loader2 className="size-5 animate-spin text-white/70" aria-hidden />
+          Setting things up...
+        </div>
+      </GameShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[var(--stage-bg)] text-white">
-      <div className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-8">
-        <div className="flex items-center justify-between gap-3">
-          <Link
-            href="/play"
-            className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60 hover:text-white"
-          >
-            ← Play hub
-          </Link>
-          <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
-            <span>
-              Q{question.position + 1} / {question.totalQuestions}
-            </span>
-            <span className="tabular-nums text-white">Score {totals.score}</span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">
-          <span className="rounded-full bg-white/10 px-2 py-0.5 text-white/80">
+    <GameShell venueImageUrl={SOLO_BRAND_IMAGE} topBar={topBar}>
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+        <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/60">
+          <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-white/80">
             {question.category}
           </span>
-          <span className="rounded-full bg-white/5 px-2 py-0.5 text-white/60">
+          <span className="rounded-full bg-white/5 px-2.5 py-0.5 text-white/60">
             {question.subcategory}
           </span>
           <span className="ml-auto tabular-nums text-white/80">
@@ -224,71 +274,120 @@ export function SoloPlayClient({ sessionId }: { sessionId: string }) {
           />
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-[var(--shadow-card)] backdrop-blur">
-          <div className="text-xl font-semibold leading-tight tracking-tight md:text-2xl">
-            {question.body}
-          </div>
-        </div>
+        <section
+          className={cn(
+            "relative rounded-3xl bg-[var(--stage-glass)] p-8 md:p-10",
+            "ring-1 ring-white/10 backdrop-blur-xl",
+            "shadow-[var(--shadow-hero)]",
+          )}
+        >
+          <AnimatePresence mode="wait">
+            <motion.h1
+              key={question.id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
+              className="text-balance text-3xl font-semibold leading-[1.15] tracking-tight text-white md:text-4xl"
+            >
+              {question.body}
+            </motion.h1>
+          </AnimatePresence>
+        </section>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          {question.choices.map((choice) => {
-            const isSelected = selectedChoice === choice;
+        <div className="grid gap-3 md:grid-cols-2">
+          {question.choices.map((choice, i) => {
+            const style = ANSWER_STYLES[i % ANSWER_STYLES.length]!;
+            const isPicked = selectedChoice === choice;
             const revealing = !!lastResult;
             const isCorrect = revealing && lastResult?.correctAnswer === choice;
-            const isWrongPicked = revealing && isSelected && !lastResult?.correct;
+            const isWrongPick = revealing && isPicked && !lastResult?.correct;
+            const disabled = submitting || revealing;
+            const showSpinner = isPicked && submitting && !revealing;
             return (
-              <button
-                key={choice}
+              <motion.button
+                key={`${question.id}-${i}`}
                 type="button"
-                disabled={submitting || !!lastResult}
+                disabled={disabled}
                 onClick={() => void handleChoice(choice)}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.18, delay: i * 0.04, ease: "easeOut" }}
+                aria-pressed={isPicked}
                 className={cn(
-                  "flex items-center justify-between gap-3 rounded-xl border px-4 py-4 text-left text-base font-medium transition",
-                  !revealing && !isSelected &&
-                    "border-white/10 bg-white/[0.03] hover:border-[var(--stage-accent)]/40 hover:bg-white/[0.07]",
-                  !revealing && isSelected &&
-                    "border-[var(--stage-accent)] bg-[var(--stage-accent)]/15",
-                  isCorrect && "border-emerald-400 bg-emerald-500/15 text-white",
-                  isWrongPicked && "border-rose-400 bg-rose-500/15 text-white",
-                  revealing && !isCorrect && !isWrongPicked && "border-white/5 bg-white/[0.02] text-white/60"
+                  "group relative flex items-center gap-3 overflow-hidden rounded-2xl px-5 py-5 text-left text-lg font-semibold text-white",
+                  "ring-1 ring-white/15 shadow-[var(--shadow-card)]",
+                  "transition-all duration-200",
+                  style.bg,
+                  !disabled && "hover:scale-[1.015] hover:ring-white/30",
+                  isPicked &&
+                    "scale-[1.03] ring-2 ring-white/70 shadow-[var(--shadow-hero)]",
+                  isWrongPick && "opacity-50 saturate-50",
+                  revealing && !isCorrect && !isWrongPick && "opacity-80",
+                  "disabled:cursor-not-allowed",
                 )}
               >
-                <span className="truncate">{choice}</span>
-                {isCorrect ? <Check className="size-5 text-emerald-300" /> : null}
-                {isWrongPicked ? <X className="size-5 text-rose-300" /> : null}
-              </button>
+                {isCorrect ? (
+                  <motion.span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-white/90"
+                    animate={{ opacity: [0.4, 1, 0.4] }}
+                    transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+                  />
+                ) : null}
+                <span
+                  className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/20 ring-1 ring-white/20"
+                  aria-hidden
+                >
+                  <ChoiceShape shape={style.shape} />
+                </span>
+                <span className="flex-1 leading-snug">{choice}</span>
+                {showSpinner ? (
+                  <Loader2 className="h-5 w-5 animate-spin text-white/90" aria-hidden />
+                ) : (
+                  <span className="text-sm font-bold opacity-80">{style.label}</span>
+                )}
+              </motion.button>
             );
           })}
         </div>
 
         {lastResult ? (
-          <div
+          <motion.div
+            key="revealed"
+            initial={{ opacity: 0, y: 6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
             className={cn(
-              "flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm backdrop-blur",
-              lastResult.correct
-                ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-100"
-                : "border-rose-400/40 bg-rose-500/10 text-rose-100"
+              "mx-auto flex w-full max-w-md flex-col items-center gap-2 rounded-2xl px-6 py-4 text-center",
+              "bg-[var(--stage-glass)] ring-1 ring-white/10 backdrop-blur-md",
+              "shadow-[var(--shadow-card)]",
             )}
           >
-            <div className="flex items-center gap-2">
-              {lastResult.correct ? (
-                <Flame className="size-4" />
-              ) : (
-                <X className="size-4" />
-              )}
-              <span>
-                {lastResult.correct
-                  ? `+${lastResult.pointsAwarded} · streak ${lastResult.streak}`
-                  : `Answer: ${lastResult.correctAnswer}`}
-              </span>
-            </div>
-            <span className="tabular-nums text-white/80">
-              {lastResult.correctCount} / {lastResult.totalQuestions}
+            <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/60">
+              <CheckCircle2
+                className={cn(
+                  "h-3.5 w-3.5",
+                  lastResult.correct
+                    ? "text-[var(--answer-emerald)]"
+                    : "text-[var(--answer-rose)]",
+                )}
+                aria-hidden
+              />
+              Answer
             </span>
-          </div>
+            <div className="text-xl font-semibold text-white">
+              {lastResult.correctAnswer}
+            </div>
+            <div className="text-xs text-white/60">
+              {lastResult.correct
+                ? `+${lastResult.pointsAwarded} points · streak ${lastResult.streak}`
+                : `${lastResult.correctCount} / ${lastResult.totalQuestions} correct so far`}
+            </div>
+          </motion.div>
         ) : null}
       </div>
-    </div>
+    </GameShell>
   );
 }
 
@@ -300,47 +399,45 @@ function SoloCompleteCard({
   totals: { score: number; correct: number; total: number };
 }) {
   return (
-    <div className="min-h-screen bg-[var(--stage-bg)] text-white">
-      <div className="mx-auto flex max-w-2xl flex-col items-center gap-6 px-6 py-16 text-center">
-        <div className="flex size-16 items-center justify-center rounded-full bg-[var(--stage-accent)]/15 text-[var(--stage-accent)] ring-1 ring-[var(--stage-accent)]/30">
-          <Trophy className="size-8" />
-        </div>
-        <h1 className="text-4xl font-black tracking-tight">Run complete</h1>
-        <div className="text-sm text-white/70">
-          You answered {totals.correct} of {totals.total} correctly.
-        </div>
-        <div className="text-6xl font-black tabular-nums text-[var(--stage-accent)]">
-          {totals.score}
-        </div>
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          <Link
-            href={`/play/solo/${sessionId}/recap`}
-            className={cn(
-              buttonVariants({ size: "sm", variant: "outline" }),
-              "border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white"
-            )}
-          >
-            Review answers
-          </Link>
-          <Link
-            href="/play/solo"
-            className={cn(
-              buttonVariants({ size: "sm" }),
-              "bg-[var(--stage-accent)] text-slate-950 hover:bg-[var(--stage-accent)]/90"
-            )}
-          >
-            Play again
-          </Link>
-          <Link
-            href="/leaderboards"
-            className={cn(
-              buttonVariants({ size: "sm", variant: "ghost" }),
-              "text-white/80 hover:bg-white/10 hover:text-white"
-            )}
-          >
-            See leaderboard
-          </Link>
-        </div>
+    <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-6 py-12 text-center">
+      <div className="flex size-16 items-center justify-center rounded-full bg-[var(--stage-accent)]/15 text-[var(--stage-accent)] ring-1 ring-[var(--stage-accent)]/30">
+        <Trophy className="size-8" />
+      </div>
+      <h1 className="text-4xl font-black tracking-tight text-white">Run complete</h1>
+      <div className="text-sm text-white/70">
+        You answered {totals.correct} of {totals.total} correctly.
+      </div>
+      <div className="text-6xl font-black tabular-nums text-[var(--stage-accent)]">
+        {totals.score}
+      </div>
+      <div className="flex flex-wrap items-center justify-center gap-3">
+        <Link
+          href={`/play/solo/${sessionId}/recap`}
+          className={cn(
+            buttonVariants({ size: "sm", variant: "outline" }),
+            "border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white"
+          )}
+        >
+          Review answers
+        </Link>
+        <Link
+          href="/play/solo"
+          className={cn(
+            buttonVariants({ size: "sm" }),
+            "bg-[var(--stage-accent)] text-slate-950 hover:bg-[var(--stage-accent)]/90"
+          )}
+        >
+          Play again
+        </Link>
+        <Link
+          href="/leaderboards"
+          className={cn(
+            buttonVariants({ size: "sm", variant: "ghost" }),
+            "text-white/80 hover:bg-white/10 hover:text-white"
+          )}
+        >
+          See leaderboard
+        </Link>
       </div>
     </div>
   );

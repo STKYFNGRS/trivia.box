@@ -6,6 +6,11 @@ import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Loader2, Lock, Trophy, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  ANSWER_STYLES,
+  ChoiceShape,
+  PILL_CLASSES,
+} from "@/components/game/answerStyles";
 import { Countdown } from "@/components/game/Countdown";
 import { FinalStandings } from "@/components/game/FinalStandings";
 import { GameShell, buildVenueImageUrl } from "@/components/game/GameShell";
@@ -62,51 +67,6 @@ type AnswerErrorResponse = {
     | "SESSION_PAUSED";
 };
 
-/**
- * Four shape/color answer slots. Deterministic by choice index so the same
- * answer always lights up the same color across the play / display screens.
- */
-const ANSWER_STYLES: Array<{
-  bg: string;
-  label: string;
-  shape: "triangle" | "diamond" | "circle" | "square";
-}> = [
-  { bg: "bg-[var(--answer-rose)]", label: "A", shape: "triangle" },
-  { bg: "bg-[var(--answer-sky)]", label: "B", shape: "diamond" },
-  { bg: "bg-[var(--answer-amber)]", label: "C", shape: "circle" },
-  { bg: "bg-[var(--answer-emerald)]", label: "D", shape: "square" },
-];
-
-function ChoiceShape({ shape }: { shape: (typeof ANSWER_STYLES)[number]["shape"] }) {
-  const common = "h-6 w-6 shrink-0";
-  if (shape === "triangle") {
-    return (
-      <svg viewBox="0 0 24 24" className={common} aria-hidden>
-        <polygon points="12,3 22,21 2,21" fill="currentColor" />
-      </svg>
-    );
-  }
-  if (shape === "diamond") {
-    return (
-      <svg viewBox="0 0 24 24" className={common} aria-hidden>
-        <polygon points="12,2 22,12 12,22 2,12" fill="currentColor" />
-      </svg>
-    );
-  }
-  if (shape === "circle") {
-    return (
-      <svg viewBox="0 0 24 24" className={common} aria-hidden>
-        <circle cx="12" cy="12" r="10" fill="currentColor" />
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 24 24" className={common} aria-hidden>
-      <rect x="3" y="3" width="18" height="18" rx="2" fill="currentColor" />
-    </svg>
-  );
-}
-
 /** Event names that should trigger a re-bootstrap. */
 const INVALIDATING_EVENTS = new Set([
   "question_started",
@@ -118,9 +78,6 @@ const INVALIDATING_EVENTS = new Set([
   "game_completed",
   "game_launched",
 ]);
-
-const PILL_CLASSES =
-  "inline-flex items-center gap-1.5 rounded-full bg-[var(--stage-glass)] px-3 py-1 text-[11px] font-semibold uppercase tracking-widest text-white/80 ring-1 ring-white/10 backdrop-blur-md";
 
 export default function PlayPage() {
   const routeParams = useParams<{ joinCode: string }>();

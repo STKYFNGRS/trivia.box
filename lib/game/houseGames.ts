@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, notInArray, or, sql } from "drizzle-orm";
 import { customAlphabet } from "nanoid";
 import { db } from "@/lib/db/client";
 import {
@@ -51,9 +51,38 @@ function nextBoundaryMinutes(from: Date, intervalMin: number): Date {
   return d;
 }
 
+/**
+ * Accepts the env override as either:
+ *   - an `accounts.id` UUID (what the schema actually stores), OR
+ *   - a Clerk user id (`user_...`) — looked up via `accounts.clerk_user_id`.
+ *
+ * The second form exists because it's a real easy footgun: `user_...` ids are
+ * what you see in the Clerk dashboard and elsewhere in the app's own env
+ * (e.g. `SITE_ADMIN_CLERK_USER_IDS`), so dropping the same value into
+ * `TRIVIA_BOX_HOUSE_ACCOUNT_ID` feels natural — but then every session
+ * insert blows up with "invalid input syntax for type uuid". Auto-resolving
+ * the Clerk form into the corresponding account UUID keeps the cron working
+ * regardless of which form the operator used.
+ */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function resolveHouseAccountId(): Promise<string | null> {
   const fromEnv = process.env.TRIVIA_BOX_HOUSE_ACCOUNT_ID?.trim();
-  if (fromEnv) return fromEnv;
+  if (fromEnv) {
+    if (UUID_RE.test(fromEnv)) return fromEnv;
+    if (fromEnv.startsWith("user_")) {
+      const rows = await db
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(eq(accounts.clerkUserId, fromEnv))
+        .limit(1);
+      if (rows[0]) return rows[0].id;
+      // Fall through — env pointed at a Clerk id that doesn't have an
+      // `accounts` row yet, so we can still land on the site_admin fallback
+      // below instead of hard-failing.
+    }
+  }
 
   const rows = await db
     .select({ id: accounts.id })
@@ -137,7 +166,8 @@ export async function hasUpcomingHouseGame(
  * round of the house game. Returns the theme label (subcategory) along with
  * its parent category so `smartPullQuestions` can still apply its category
  * filter and round-appropriate bias. Returns `null` if no subcategory has
- * sufficient vetted questions — caller treats that as a skippable no-op.
+ * sufficient vetted questions — caller falls back to an untitled mixed-bag
+ * pull rather than skipping the house slot entirely.
  */
 async function pickHouseTheme(): Promise<{
   label: string;
@@ -161,35 +191,55 @@ async function pickHouseTheme(): Promise<{
 }
 
 /**
- * Create a single house game landing at the next boundary from `now`
- * (default grid is :00 / :30 UTC). Returns the new session id + chosen
- * theme. Throws if we can't find a platform account to own the game.
+ * Fallback pull used when no single subcategory has enough vetted questions
+ * to seed a themed house game. Grabs `count` random vetted/non-retired
+ * questions across every category so the scheduler can still produce a
+ * (untitled) house session instead of going dark on `/play`. Caller splits
+ * the flat list into the usual round-sized chunks.
  */
-export async function createHouseSession(now: Date): Promise<{
-  sessionId: string;
-  eventStartsAt: Date;
-  theme: string;
+async function pullMixedVettedQuestions(
+  count: number,
+  excludeIds: string[]
+): Promise<
+  Array<{ id: string; category: string; subcategory: string }>
+> {
+  const rows = await db
+    .select({
+      id: questions.id,
+      category: questions.category,
+      subcategory: questions.subcategory,
+    })
+    .from(questions)
+    .where(
+      and(
+        eq(questions.vetted, true),
+        eq(questions.retired, false),
+        excludeIds.length ? notInArray(questions.id, excludeIds) : undefined
+      )
+    )
+    .orderBy(sql`random()`)
+    .limit(count);
+  return rows;
+}
+
+/** Shape of one round's question plan, used by both themed and mixed paths. */
+type HouseRoundPlan = {
   category: string;
-}> {
-  const houseAccountId = await resolveHouseAccountId();
-  if (!houseAccountId) {
-    throw new Error(
-      "No TRIVIA_BOX_HOUSE_ACCOUNT_ID configured and no site_admin account found"
-    );
-  }
+  questions: { id: string }[];
+};
 
-  const eventStartsAt = nextBoundaryMinutes(now, HOUSE_INTERVAL_MIN);
-  const theme = await pickHouseTheme();
-  if (!theme) {
-    throw new Error(
-      `No vetted subcategory has ≥${HOUSE_MIN_QUESTIONS_PER_THEME} questions to seed a themed house game`
-    );
-  }
-
-  // Every round pulls from the same (category, subcategory) tuple so the
-  // session stays on-topic end-to-end.
+/**
+ * Build round plans for a themed house game — every round pulls from the
+ * same `(category, subcategory)` tuple so the session stays on-topic.
+ * Returns an empty array when `smartPullQuestions` can't produce a single
+ * round; caller treats that as a signal to fall back to mixed bag.
+ */
+async function buildThemedRoundPlans(
+  houseAccountId: string,
+  theme: { label: string; category: string }
+): Promise<HouseRoundPlan[]> {
   const chosen = new Set<string>();
-  const roundPlans: Array<{ questions: { id: string }[] }> = [];
+  const plans: HouseRoundPlan[] = [];
   for (let i = 0; i < HOUSE_ROUND_COUNT; i++) {
     const picked = await smartPullQuestions({
       venueAccountId: houseAccountId,
@@ -201,12 +251,88 @@ export async function createHouseSession(now: Date): Promise<{
     });
     for (const q of picked) chosen.add(q.id);
     if (picked.length === 0) continue;
-    roundPlans.push({ questions: picked });
+    plans.push({ category: theme.category, questions: picked });
+  }
+  return plans;
+}
+
+/**
+ * Build round plans for the mixed-bag fallback: one big `random()`-ordered
+ * pull across every vetted subcategory, chunked into fixed-size rounds.
+ * Each round's `category` label is derived from the dominant category
+ * within that chunk so the existing UI (round headers, per-round chips)
+ * has something meaningful to show — the session itself stays themed-less
+ * (`sessions.theme = null`).
+ */
+async function buildMixedRoundPlans(): Promise<HouseRoundPlan[]> {
+  const total = HOUSE_ROUND_COUNT * HOUSE_QUESTIONS_PER_ROUND;
+  const picks = await pullMixedVettedQuestions(total, []);
+  if (picks.length === 0) return [];
+
+  const plans: HouseRoundPlan[] = [];
+  for (let r = 0; r < HOUSE_ROUND_COUNT; r++) {
+    const chunk = picks.slice(
+      r * HOUSE_QUESTIONS_PER_ROUND,
+      (r + 1) * HOUSE_QUESTIONS_PER_ROUND
+    );
+    if (chunk.length === 0) continue;
+    const counts = new Map<string, number>();
+    for (const q of chunk) counts.set(q.category, (counts.get(q.category) ?? 0) + 1);
+    const dominantCategory =
+      [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Mixed";
+    plans.push({
+      category: dominantCategory,
+      questions: chunk.map((q) => ({ id: q.id })),
+    });
+  }
+  return plans;
+}
+
+/**
+ * Create a single house game landing at the next boundary from `now`
+ * (default grid is :00 / :30 UTC). Prefers a themed session (every round
+ * pulled from the same subcategory) when at least one subcategory has
+ * enough vetted questions; otherwise falls back to a mixed-bag untitled
+ * session so the `/play` hub is never empty while a fresh catalog is
+ * still filling up. Throws only when no platform account is available or
+ * the vetted bank is completely empty.
+ */
+export async function createHouseSession(now: Date): Promise<{
+  sessionId: string;
+  eventStartsAt: Date;
+  theme: string | null;
+  category: string;
+  mode: "themed" | "mixed";
+}> {
+  const houseAccountId = await resolveHouseAccountId();
+  if (!houseAccountId) {
+    throw new Error(
+      "No TRIVIA_BOX_HOUSE_ACCOUNT_ID configured and no site_admin account found"
+    );
+  }
+
+  const eventStartsAt = nextBoundaryMinutes(now, HOUSE_INTERVAL_MIN);
+
+  const theme = await pickHouseTheme();
+  let mode: "themed" | "mixed" = "themed";
+  let roundPlans: HouseRoundPlan[] = theme
+    ? await buildThemedRoundPlans(houseAccountId, theme)
+    : [];
+
+  if (roundPlans.length === 0) {
+    mode = "mixed";
+    roundPlans = await buildMixedRoundPlans();
   }
 
   if (roundPlans.length === 0) {
-    throw new Error("Could not pull any vetted questions for themed house game rounds");
+    throw new Error(
+      "No vetted questions available to seed a house game (themed or mixed)"
+    );
   }
+
+  const storedTheme = mode === "themed" ? theme!.label : null;
+  const primaryCategory =
+    mode === "themed" ? theme!.category : roundPlans[0]!.category;
 
   const pendingCode = `pending_${placeholder()}`;
 
@@ -227,7 +353,7 @@ export async function createHouseSession(now: Date): Promise<{
         prizeDescription: null,
         listedPublic: true,
         houseGame: true,
-        theme: theme.label,
+        theme: storedTheme,
       })
       .returning({ id: sessions.id });
 
@@ -240,7 +366,7 @@ export async function createHouseSession(now: Date): Promise<{
         .values({
           sessionId: session.id,
           roundNumber: i + 1,
-          category: theme.category,
+          category: plan.category,
           secondsPerQuestion: HOUSE_SECONDS_PER_QUESTION,
         })
         .returning({ id: rounds.id });
@@ -264,8 +390,9 @@ export async function createHouseSession(now: Date): Promise<{
   return {
     sessionId,
     eventStartsAt,
-    theme: theme.label,
-    category: theme.category,
+    theme: storedTheme,
+    category: primaryCategory,
+    mode,
   };
 }
 
@@ -279,8 +406,9 @@ export async function scheduleNextHouseGame(now: Date): Promise<
       created: true;
       sessionId: string;
       eventStartsAt: Date;
-      theme: string;
+      theme: string | null;
       category: string;
+      mode: "themed" | "mixed";
     }
 > {
   const houseAccountId = await resolveHouseAccountId();
