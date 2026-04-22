@@ -462,9 +462,13 @@ function HouseGameCard({
   const now = Date.now();
   const ms = eventStartsAt.getTime() - now;
   const live = status === "active";
-  // Route live games through /join so players enter a name / create an anon
-  // player row before landing on the play screen (which requires one).
-  const href = live && joinCode ? `/join?code=${encodeURIComponent(joinCode)}` : "/play";
+  // Always route through /join so the player lands in the join flow with
+  // their code pre-filled. If the game is already live they enter the play
+  // screen immediately; if it's still scheduled, JoinClient shows a lobby
+  // countdown and auto-advances them in the moment the game goes live.
+  const href = joinCode
+    ? `/join?code=${encodeURIComponent(joinCode)}`
+    : "/games/upcoming";
   return (
     <div className="mt-8 overflow-hidden rounded-2xl border border-[var(--stage-accent)]/30 bg-gradient-to-br from-[var(--stage-accent)]/15 via-white/[0.05] to-white/[0.02] p-6 shadow-[var(--shadow-card)] backdrop-blur">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -502,7 +506,7 @@ function HouseGameCard({
             "bg-[var(--stage-accent)] text-slate-950 hover:bg-[var(--stage-accent)]/90"
           )}
         >
-          {live ? "Join live" : "Wait on the lobby"}
+          {live ? "Join live" : "Enter Lobby"}
         </Link>
       </div>
     </div>

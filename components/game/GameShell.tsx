@@ -65,17 +65,18 @@ export function GameShell({
             }}
           />
           {/* Sharp `contain`-fit copy anchored to the bottom so the actual
-              logo/photo is visible without being cropped. Max height keeps
-              it from dominating the stage. */}
+              logo/photo is visible without being cropped. Sized generously
+              so house games (which swap in `logo.png`) feel like a
+              proper brand moment instead of a faint watermark. */}
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 flex h-[28vh] max-h-[260px] items-end justify-center"
+            className="pointer-events-none absolute inset-x-0 bottom-[3vh] flex h-[42vh] max-h-[420px] items-end justify-center"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={venueImageUrl}
               alt=""
-              className="h-full w-auto max-w-[60vw] object-contain opacity-25"
+              className="h-full w-auto max-w-[72vw] object-contain opacity-75 drop-shadow-[0_0_50px_color-mix(in_oklab,var(--neon-magenta)_45%,transparent)]"
             />
           </div>
           <div
@@ -83,7 +84,7 @@ export function GameShell({
             className="pointer-events-none absolute inset-0"
             style={{
               background:
-                "linear-gradient(to top, rgb(0 0 0 / 0.85) 0%, rgb(0 0 0 / 0.45) 35%, transparent 70%)",
+                "linear-gradient(to top, rgb(0 0 0 / 0.7) 0%, rgb(0 0 0 / 0.25) 40%, transparent 75%)",
             }}
           />
         </>

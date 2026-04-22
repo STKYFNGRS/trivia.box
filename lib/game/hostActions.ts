@@ -44,6 +44,9 @@ export type OrderedSessionQuestion = {
   roundSecondsPerQuestion: number | null;
   timerSeconds: number | null;
   timerStartedAtMs: number | null;
+  /** Wall-clock stamp from `lockActive`. Drives the deterministic
+   *  lock → reveal → advance cadence in autopilot mode. */
+  timeLocked: Date | null;
 };
 
 export async function loadOrderedQuestions(
@@ -58,6 +61,7 @@ export async function loadOrderedQuestions(
       roundSecondsPerQuestion: rounds.secondsPerQuestion,
       timerSeconds: sessionQuestions.timerSeconds,
       timerStartedAtMs: sessionQuestions.timerStartedAtMs,
+      timeLocked: sessionQuestions.timeLocked,
     })
     .from(sessionQuestions)
     .innerJoin(rounds, eq(rounds.id, sessionQuestions.roundId))
@@ -410,6 +414,20 @@ export type SweptStaleSession = {
  * and bails out if there's nothing to do. Returns a small result object
  * used by callers for logging / debug inspection.
  */
+/**
+ * Autopilot pause between `locked` → `revealed` transition. This is the
+ * "answers are in, here's what was right" beat.
+ */
+export const AUTOPILOT_POST_LOCK_MS = 1000;
+/**
+ * Autopilot pause after the answer is revealed, before we advance to the
+ * next question. The reveal happens ~`AUTOPILOT_POST_LOCK_MS` after lock,
+ * so the full reveal-on-screen duration is approximately this constant.
+ * Kept at 3 s so players have a beat to read the correct answer before
+ * the screen flips.
+ */
+export const AUTOPILOT_POST_REVEAL_MS = 3000;
+
 export async function advanceAutopilotSession(
   session: SessionForHost,
   opts: { nowMs?: number; graceMs?: number } = {},
@@ -431,12 +449,34 @@ export async function advanceAutopilotSession(
 
   if (revealed) {
     if (session.timerMode === "hybrid") return { reason: "waiting_for_host_next" };
+    // Honour the reveal-to-advance pause so players can actually read the
+    // correct answer before the screen flips to the next question. We
+    // gate off `timeLocked` (the one timestamp we persist) rather than
+    // polling cadence, so the delay is deterministic regardless of how
+    // many viewers are poking the tick endpoint.
+    if (revealed.timeLocked) {
+      const revealEndMs =
+        revealed.timeLocked.getTime() +
+        AUTOPILOT_POST_LOCK_MS +
+        AUTOPILOT_POST_REVEAL_MS;
+      if (nowMs < revealEndMs) {
+        return { reason: `waiting_reveal_${revealEndMs - nowMs}ms` };
+      }
+    }
     const res = await advanceOrComplete(session);
     return { action: res.kind === "completed" ? "completed" : "advanced" };
   }
 
   if (locked) {
     if (session.timerMode === "hybrid") return { reason: "waiting_for_host_reveal" };
+    // Small pause between "answers locked" and "here's the right one" so
+    // the lock chip has a moment to register on screen.
+    if (locked.timeLocked) {
+      const revealAtMs = locked.timeLocked.getTime() + AUTOPILOT_POST_LOCK_MS;
+      if (nowMs < revealAtMs) {
+        return { reason: `waiting_lock_${revealAtMs - nowMs}ms` };
+      }
+    }
     const res = await revealActive(session);
     return { action: `revealed:${res.sessionQuestionId}` };
   }

@@ -48,6 +48,7 @@ export async function GET(req: Request) {
       pausedAt: sessions.pausedAt,
       onlineMeetingUrl: sessions.onlineMeetingUrl,
       houseGame: sessions.houseGame,
+      eventStartsAt: sessions.eventStartsAt,
     })
     .from(sessions)
     .where(eq(sessions.joinCode, code.toUpperCase()))
@@ -188,6 +189,7 @@ export async function GET(req: Request) {
     // intentionally keep it off the upcoming-games listings.
     onlineMeetingUrl: session.onlineMeetingUrl ?? null,
     houseGame: session.houseGame === true,
+    eventStartsAt: session.eventStartsAt ? session.eventStartsAt.toISOString() : null,
     currentQuestion,
     totalQuestions,
     completedCount,

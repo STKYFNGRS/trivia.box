@@ -8,6 +8,9 @@ import { CheckCircle2, Loader2, Lock, Trophy, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   ANSWER_STYLES,
+  answerCardStyle,
+  answerIconChipStyle,
+  answerTopStripeStyle,
   ChoiceShape,
   PILL_CLASSES,
 } from "@/components/game/answerStyles";
@@ -532,11 +535,18 @@ export default function PlayPage() {
           // bottom row when one answer is 3 lines and its neighbour is 1.
           <div className="grid auto-rows-fr gap-3 md:grid-cols-2">
             {current!.choices.map((c, i) => {
-              const style = ANSWER_STYLES[i % ANSWER_STYLES.length];
+              const style = ANSWER_STYLES[i % ANSWER_STYLES.length]!;
               const isPicked = picked === c;
               const isCorrect = correctChoice != null && correctChoice === c;
               const isWrongPick = correctChoice != null && isPicked && correctChoice !== c;
               const showSpinner = isPicked && submitting && !revealedForActive;
+              const state = isCorrect
+                ? "correct"
+                : isWrongPick
+                  ? "wrong"
+                  : isPicked
+                    ? "picked"
+                    : "default";
               return (
                 <motion.button
                   key={`${activeQid ?? "q"}-${i}`}
@@ -547,38 +557,49 @@ export default function PlayPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.18, delay: i * 0.04, ease: "easeOut" }}
                   aria-pressed={isPicked}
+                  style={answerCardStyle({ tone: style.tone, state })}
                   className={cn(
-                    "group relative flex h-full min-h-[4.5rem] items-center gap-3 overflow-hidden rounded-2xl px-5 py-4 text-left text-base font-semibold text-white md:text-lg",
-                    "ring-1 ring-white/15 shadow-[var(--shadow-card)]",
+                    "group relative flex h-full min-h-[4.5rem] items-center gap-3 overflow-hidden rounded-2xl border px-5 py-4 text-left text-base font-semibold text-white md:text-lg",
                     "transition-all duration-200",
-                    style.bg,
-                    !disabled && "hover:scale-[1.015] hover:ring-white/30",
-                    isPicked &&
-                      "scale-[1.03] ring-2 ring-white/70 shadow-[var(--shadow-hero)]",
-                    isWrongPick && "opacity-50 saturate-50",
+                    !disabled && "hover:-translate-y-0.5",
+                    isPicked && "scale-[1.02]",
                     disabled && !isPicked && !isCorrect && "opacity-80",
                     "disabled:cursor-not-allowed",
                   )}
                 >
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-0 top-0 h-px"
+                    style={answerTopStripeStyle({ tone: style.tone })}
+                  />
                   {isCorrect ? (
                     <motion.span
                       aria-hidden
-                      className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-white/90"
-                      animate={{ opacity: [0.4, 1, 0.4] }}
+                      className="pointer-events-none absolute inset-0 rounded-2xl"
+                      style={{
+                        boxShadow: `inset 0 0 0 2px color-mix(in oklab, ${style.tone} 90%, transparent)`,
+                      }}
+                      animate={{ opacity: [0.55, 1, 0.55] }}
                       transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
                     />
                   ) : null}
                   <span
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/20 ring-1 ring-white/20"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border"
+                    style={answerIconChipStyle({ tone: style.tone })}
                     aria-hidden
                   >
-                    <ChoiceShape shape={style.shape} />
+                    <ChoiceShape shape={style.shape} className="h-5 w-5" />
                   </span>
                   <span className="flex-1 leading-snug">{c}</span>
                   {showSpinner ? (
                     <Loader2 className="h-5 w-5 shrink-0 animate-spin text-white/90" aria-hidden />
                   ) : (
-                    <span className="shrink-0 text-sm font-bold opacity-80">{style.label}</span>
+                    <span
+                      className="shrink-0 text-sm font-bold tracking-[0.2em]"
+                      style={{ color: `color-mix(in oklab, ${style.tone} 80%, white)` }}
+                    >
+                      {style.label}
+                    </span>
                   )}
                 </motion.button>
               );

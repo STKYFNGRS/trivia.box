@@ -7,6 +7,13 @@ import { useParams } from "next/navigation";
 import { Countdown } from "@/components/game/Countdown";
 import { FinalStandings } from "@/components/game/FinalStandings";
 import { GameShell, buildVenueImageUrl } from "@/components/game/GameShell";
+import {
+  ANSWER_STYLES,
+  answerCardStyle,
+  answerIconChipStyle,
+  answerTopStripeStyle,
+  ChoiceShape,
+} from "@/components/game/answerStyles";
 import { useGameChannel } from "@/lib/ably/useGameChannel";
 
 type BootstrapQuestion = {
@@ -36,47 +43,6 @@ type BootstrapResponse = {
   completedCount?: number;
   error?: string;
 };
-
-type AnswerShape = "triangle" | "diamond" | "circle" | "square";
-
-// Kahoot-style answer tile identity — kept aligned with the play page so the
-// same index always means the same color + shape on every screen.
-const ANSWER_STYLES: ReadonlyArray<{ bg: string; shape: AnswerShape }> = [
-  { bg: "bg-[var(--answer-rose)]", shape: "triangle" },
-  { bg: "bg-[var(--answer-sky)]", shape: "diamond" },
-  { bg: "bg-[var(--answer-amber)]", shape: "circle" },
-  { bg: "bg-[var(--answer-emerald)]", shape: "square" },
-];
-
-function ChoiceShape({ shape }: { shape: AnswerShape }) {
-  const common = "h-16 w-16 shrink-0 text-white drop-shadow-[0_2px_6px_rgb(0_0_0_/_0.35)]";
-  if (shape === "triangle") {
-    return (
-      <svg viewBox="0 0 24 24" className={common} aria-hidden>
-        <polygon points="12,3 22,21 2,21" fill="currentColor" />
-      </svg>
-    );
-  }
-  if (shape === "diamond") {
-    return (
-      <svg viewBox="0 0 24 24" className={common} aria-hidden>
-        <polygon points="12,2 22,12 12,22 2,12" fill="currentColor" />
-      </svg>
-    );
-  }
-  if (shape === "circle") {
-    return (
-      <svg viewBox="0 0 24 24" className={common} aria-hidden>
-        <circle cx="12" cy="12" r="10" fill="currentColor" />
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 24 24" className={common} aria-hidden>
-      <rect x="3" y="3" width="18" height="18" rx="3" fill="currentColor" />
-    </svg>
-  );
-}
 
 const INVALIDATING_EVENTS = new Set([
   "question_started",
@@ -389,33 +355,43 @@ export default function DisplayPage() {
                     const style = ANSWER_STYLES[idx % ANSWER_STYLES.length]!;
                     const isCorrect = revealedForActive && current.correctAnswer === c;
                     const isWrongRevealed = revealedForActive && !isCorrect;
+                    const state = isCorrect
+                      ? "correct"
+                      : isWrongRevealed
+                        ? "wrong"
+                        : "default";
                     return (
                       <div key={`${c}-${idx}`} className="relative">
-                        {isCorrect ? (
-                          <motion.div
-                            aria-hidden
-                            initial={{ opacity: 0 }}
-                            animate={{
-                              opacity: [0, 1, 0.6, 1, 0.7],
-                              boxShadow: [
-                                "0 0 0px 0px rgb(255 255 255 / 0)",
-                                "0 0 60px 12px rgb(255 255 255 / 0.85)",
-                                "0 0 40px 6px rgb(255 255 255 / 0.5)",
-                                "0 0 70px 14px rgb(255 255 255 / 0.8)",
-                                "0 0 50px 10px rgb(255 255 255 / 0.6)",
-                              ],
-                            }}
-                            transition={{ duration: 1.1, ease: "easeOut" }}
-                            className="pointer-events-none absolute inset-0 rounded-3xl"
-                          />
-                        ) : null}
                         <div
-                          className={`relative flex items-center gap-8 overflow-hidden rounded-3xl px-10 py-10 shadow-[var(--shadow-hero)] ring-1 ring-white/20 transition-[filter,opacity] duration-500 md:py-12 ${style.bg} ${
-                            isCorrect ? "ring-4 ring-white" : ""
-                          } ${isWrongRevealed ? "opacity-40 saturate-50" : ""}`}
+                          style={answerCardStyle({ tone: style.tone, state })}
+                          className={`relative flex items-center gap-8 overflow-hidden rounded-3xl border px-10 py-10 transition-[filter,opacity,transform] duration-500 md:py-12 ${
+                            isCorrect ? "scale-[1.02]" : ""
+                          } ${isWrongRevealed ? "opacity-40" : ""}`}
                         >
-                          <ChoiceShape shape={style.shape} />
-                          <span className="flex-1 text-4xl font-bold leading-tight text-white drop-shadow">
+                          <span
+                            aria-hidden
+                            className="pointer-events-none absolute inset-x-0 top-0 h-px"
+                            style={answerTopStripeStyle({ tone: style.tone })}
+                          />
+                          {isCorrect ? (
+                            <motion.span
+                              aria-hidden
+                              className="pointer-events-none absolute inset-0 rounded-3xl"
+                              style={{
+                                boxShadow: `inset 0 0 0 3px color-mix(in oklab, ${style.tone} 95%, transparent)`,
+                              }}
+                              animate={{ opacity: [0.55, 1, 0.7, 1, 0.6] }}
+                              transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+                            />
+                          ) : null}
+                          <span
+                            className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border"
+                            style={answerIconChipStyle({ tone: style.tone })}
+                            aria-hidden
+                          >
+                            <ChoiceShape shape={style.shape} className="h-12 w-12" />
+                          </span>
+                          <span className="flex-1 text-4xl font-bold leading-tight text-white drop-shadow md:text-5xl">
                             {c}
                           </span>
                         </div>

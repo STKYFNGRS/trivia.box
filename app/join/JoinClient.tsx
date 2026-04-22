@@ -1,23 +1,48 @@
 "use client";
 
 import { SignedIn, SignedOut, SignInButton, useAuth } from "@clerk/nextjs";
-import { Sparkles } from "lucide-react";
+import { Loader2, Sparkles, Timer } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+
+type SessionProbe = {
+  status: "pending" | "active" | "paused" | "completed" | "cancelled" | "draft";
+  houseGame: boolean;
+  venueDisplayName: string | null;
+  /** ISO string — present on the public session endpoint. */
+  eventStartsAt?: string | null;
+};
+
+type LobbyState =
+  | { kind: "idle" }
+  | { kind: "checking" }
+  | { kind: "waiting"; session: SessionProbe; startsAt: Date | null }
+  | { kind: "ready"; session: SessionProbe }
+  | { kind: "ended"; reason: string }
+  | { kind: "missing" };
+
+const POLL_MS = 3000;
 
 export function JoinClient() {
   const router = useRouter();
   const { isLoaded, userId } = useAuth();
   const searchParams = useSearchParams();
-  const initialCode = useMemo(() => (searchParams.get("code") ?? "").toUpperCase(), [searchParams]);
+  const initialCode = useMemo(
+    () => (searchParams.get("code") ?? "").toUpperCase(),
+    [searchParams],
+  );
 
   const [joinCode, setJoinCode] = useState(initialCode);
   const [loading, setLoading] = useState(false);
   const [profileReady, setProfileReady] = useState<boolean | null>(null);
+  const [lobby, setLobby] = useState<LobbyState>(
+    initialCode.length === 6 ? { kind: "checking" } : { kind: "idle" },
+  );
+  const autoJoinedRef = useRef(false);
 
   useEffect(() => {
     if (!isLoaded || !userId) {
@@ -30,32 +55,134 @@ export function JoinClient() {
     })();
   }, [isLoaded, userId]);
 
+  const performJoin = useCallback(
+    async (codeToJoin: string) => {
+      setLoading(true);
+      try {
+        const res = await fetch("/api/players/join", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ joinCode: codeToJoin.trim().toUpperCase() }),
+        });
+        const data = (await res.json()) as { playerId?: string; error?: unknown };
+        if (!res.ok) {
+          throw new Error(typeof data.error === "string" ? data.error : "Could not join");
+        }
+        if (!data.playerId) {
+          throw new Error("Missing player id");
+        }
+        const code = codeToJoin.trim().toUpperCase();
+        router.push(
+          `/game/${code}/play?playerId=${encodeURIComponent(data.playerId)}`,
+        );
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not join");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [router],
+  );
+
+  // Poll the public session endpoint whenever a full code is loaded. This
+  // makes the "Enter Lobby" experience work for house games that haven't
+  // started yet — the page shows a countdown while `status = pending`, then
+  // auto-forwards the player into the live game the instant it flips to
+  // `active`. Cancels cleanly on unmount / code change.
+  const code6 = joinCode.trim().toUpperCase();
+  useEffect(() => {
+    if (code6.length !== 6) {
+      setLobby({ kind: "idle" });
+      autoJoinedRef.current = false;
+      return;
+    }
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const probe = async () => {
+      if (cancelled) return;
+      setLobby((prev) => (prev.kind === "idle" ? { kind: "checking" } : prev));
+      try {
+        const res = await fetch(
+          `/api/game/public/session?code=${encodeURIComponent(code6)}`,
+          { cache: "no-store" },
+        );
+        if (cancelled) return;
+        if (res.status === 404) {
+          setLobby({ kind: "missing" });
+          return;
+        }
+        if (!res.ok) {
+          // Transient / rate-limit — keep the previous state and retry.
+          timer = setTimeout(probe, POLL_MS);
+          return;
+        }
+        const raw = (await res.json()) as Partial<SessionProbe> & {
+          status?: string;
+          eventStartsAt?: string | null;
+        };
+        const status = (raw.status ?? "pending") as SessionProbe["status"];
+        const session: SessionProbe = {
+          status,
+          houseGame: raw.houseGame === true,
+          venueDisplayName: raw.venueDisplayName ?? null,
+          eventStartsAt: raw.eventStartsAt ?? null,
+        };
+        if (status === "completed" || status === "cancelled") {
+          setLobby({
+            kind: "ended",
+            reason:
+              status === "completed"
+                ? "This game has already wrapped up."
+                : "This game was cancelled.",
+          });
+          return;
+        }
+        if (status === "active" || status === "paused") {
+          setLobby({ kind: "ready", session });
+          // If the user arrived with a pre-filled code and is already
+          // signed in, auto-join so the CTA feels as immediate as
+          // "Enter Lobby" → play. We only fire this once per mount.
+          if (
+            !autoJoinedRef.current &&
+            profileReady === true &&
+            initialCode === code6
+          ) {
+            autoJoinedRef.current = true;
+            void performJoin(code6);
+          }
+          return;
+        }
+        // pending / draft: show lobby countdown, keep polling.
+        const startsAt = session.eventStartsAt
+          ? new Date(session.eventStartsAt)
+          : null;
+        setLobby({ kind: "waiting", session, startsAt });
+        timer = setTimeout(probe, POLL_MS);
+      } catch {
+        if (cancelled) return;
+        timer = setTimeout(probe, POLL_MS);
+      }
+    };
+
+    void probe();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [code6, initialCode, performJoin, profileReady]);
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
-    try {
-      const res = await fetch("/api/players/join", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ joinCode: joinCode.trim().toUpperCase() }),
-      });
-      const data = (await res.json()) as { playerId?: string; error?: unknown };
-      if (!res.ok) {
-        throw new Error(typeof data.error === "string" ? data.error : "Could not join");
-      }
-      if (!data.playerId) {
-        throw new Error("Missing player id");
-      }
-      const code = joinCode.trim().toUpperCase();
-      router.push(`/game/${code}/play?playerId=${encodeURIComponent(data.playerId)}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not join");
-    } finally {
-      setLoading(false);
-    }
+    await performJoin(joinCode);
   }
 
   const padded = joinCode.padEnd(6, "·");
+  const isLobbyWaiting = lobby.kind === "waiting";
+  const isLobbyReady = lobby.kind === "ready";
+  const isLobbyEnded = lobby.kind === "ended";
+  const isLobbyMissing = lobby.kind === "missing";
 
   return (
     <div className="relative flex min-h-[calc(100vh-14rem)] items-center justify-center overflow-hidden px-6 py-12 text-white">
@@ -80,16 +207,20 @@ export function JoinClient() {
             }}
           >
             <Sparkles className="h-3.5 w-3.5" style={{ color: "var(--neon-lime)" }} />
-            Ready to play
+            {isLobbyWaiting ? "In the lobby" : "Ready to play"}
           </span>
           <h1
             className="mt-4 font-[family-name:var(--font-display)] font-extrabold tracking-[-0.03em] text-white"
             style={{ fontSize: "clamp(2.25rem, 6vw, 4rem)", lineHeight: 1 }}
           >
-            Enter the join code
+            {isLobbyWaiting
+              ? "Hold tight — the game starts soon"
+              : "Enter the join code"}
           </h1>
           <p className="mt-3 text-sm text-white/70 md:text-base">
-            Grab the six-character code from the host&rsquo;s display and type it in.
+            {isLobbyWaiting
+              ? "We'll drop you straight into the game the instant it goes live."
+              : "Grab the six-character code from the host's display and type it in."}
           </p>
         </div>
 
@@ -136,6 +267,36 @@ export function JoinClient() {
           ) : profileReady === null ? (
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 text-sm text-white/70 shadow-[var(--shadow-card)] backdrop-blur">
               Checking your profile…
+            </div>
+          ) : isLobbyWaiting ? (
+            <LobbyWaitingCard
+              startsAt={lobby.startsAt}
+              onJoin={() => performJoin(code6)}
+              venueDisplayName={lobby.session.venueDisplayName}
+              isHouseGame={lobby.session.houseGame}
+              manualJoining={loading}
+            />
+          ) : isLobbyEnded ? (
+            <div className="rounded-2xl border border-amber-300/30 bg-amber-400/[0.05] p-6 text-sm text-amber-100/90 shadow-[var(--shadow-card)] backdrop-blur">
+              {lobby.reason}{" "}
+              <Link
+                href="/games/upcoming"
+                className="font-semibold text-white underline underline-offset-4"
+              >
+                See upcoming games
+              </Link>
+              .
+            </div>
+          ) : isLobbyMissing ? (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 text-sm text-white/80 shadow-[var(--shadow-card)] backdrop-blur">
+              That code doesn't match any game. Double-check with the host, or{" "}
+              <Link
+                href="/games/upcoming"
+                className="font-semibold text-white underline underline-offset-4"
+              >
+                browse upcoming games
+              </Link>
+              .
             </div>
           ) : (
             <form
@@ -201,7 +362,7 @@ export function JoinClient() {
 
               <Button
                 type="submit"
-                disabled={loading || joinCode.length !== 6}
+                disabled={loading || joinCode.length !== 6 || !isLobbyReady}
                 className="mt-6 h-12 w-full text-base font-bold uppercase tracking-[0.12em]"
                 style={{
                   background:
@@ -226,4 +387,119 @@ export function JoinClient() {
       </div>
     </div>
   );
+}
+
+/**
+ * Visible lobby while the game hasn't started yet. Renders a live
+ * countdown (updating once per second), the venue label, and a manual
+ * "Enter now" button that becomes active the moment the session flips
+ * to `active`. The auto-advance happens transparently via the parent's
+ * polling loop — this button is just a fallback so an impatient player
+ * can mash it after the countdown hits zero without waiting for the
+ * next poll cycle.
+ */
+function LobbyWaitingCard({
+  startsAt,
+  onJoin,
+  venueDisplayName,
+  isHouseGame,
+  manualJoining,
+}: {
+  startsAt: Date | null;
+  onJoin: () => void;
+  venueDisplayName: string | null;
+  isHouseGame: boolean;
+  manualJoining: boolean;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const h = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(h);
+  }, []);
+
+  const msLeft = startsAt ? Math.max(0, startsAt.getTime() - now) : null;
+  const countdown = formatCountdown(msLeft);
+
+  return (
+    <div
+      className="relative overflow-hidden rounded-2xl border p-6 text-center shadow-[var(--shadow-hero)] backdrop-blur"
+      style={{
+        background:
+          "linear-gradient(180deg, color-mix(in oklab, var(--stage-surface) 96%, transparent), color-mix(in oklab, var(--stage-bg) 92%, transparent))",
+        borderColor:
+          "color-mix(in oklab, var(--neon-cyan) 40%, transparent)",
+        boxShadow:
+          "inset 0 1px 0 0 color-mix(in oklab, var(--neon-cyan) 22%, transparent), 0 16px 50px -16px color-mix(in oklab, var(--neon-cyan) 55%, transparent)",
+      }}
+    >
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-px"
+        style={{
+          background:
+            "linear-gradient(90deg, transparent, var(--neon-cyan), transparent)",
+        }}
+      />
+      <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-[var(--neon-cyan)]/15 text-[var(--neon-cyan)] ring-1 ring-[var(--neon-cyan)]/40">
+        <Timer className="size-7" aria-hidden />
+      </div>
+      <div className="mt-4 text-xs font-semibold uppercase tracking-[0.3em] text-white/60">
+        {isHouseGame ? "Trivia.Box house game" : "Scheduled game"}
+      </div>
+      <div className="mt-1 text-lg font-semibold text-white">
+        {venueDisplayName ?? "Next round"}
+      </div>
+      <div className="mt-6 font-mono text-5xl font-black tracking-tight text-white tabular-nums md:text-6xl">
+        {countdown.label}
+      </div>
+      <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/50">
+        {countdown.sublabel}
+      </div>
+      <Button
+        type="button"
+        onClick={onJoin}
+        disabled={manualJoining}
+        className="mt-6 h-11 w-full text-sm font-bold uppercase tracking-[0.12em]"
+        style={{
+          background:
+            "linear-gradient(135deg, var(--neon-cyan), var(--neon-violet))",
+          color: "oklch(0.1 0.02 270)",
+          boxShadow:
+            "0 0 0 1px color-mix(in oklab, var(--neon-cyan) 40%, transparent), 0 14px 40px -14px color-mix(in oklab, var(--neon-cyan) 55%, transparent)",
+        }}
+      >
+        {manualJoining ? (
+          <span className="inline-flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            Joining…
+          </span>
+        ) : (
+          "Enter now"
+        )}
+      </Button>
+      <p className="mt-3 text-[11px] text-white/50">
+        You&rsquo;ll be forwarded automatically the moment the game goes live.
+      </p>
+    </div>
+  );
+}
+
+function formatCountdown(ms: number | null): { label: string; sublabel: string } {
+  if (ms === null) return { label: "Soon", sublabel: "Waiting for the host" };
+  if (ms <= 0) return { label: "Starting…", sublabel: "Dropping you in any second" };
+  const totalSec = Math.floor(ms / 1000);
+  const mins = Math.floor(totalSec / 60);
+  const secs = totalSec % 60;
+  if (mins >= 60) {
+    const hrs = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    return {
+      label: `${hrs}h ${String(remMins).padStart(2, "0")}m`,
+      sublabel: "Until the game begins",
+    };
+  }
+  return {
+    label: `${mins}:${String(secs).padStart(2, "0")}`,
+    sublabel: mins > 0 ? "Minutes until start" : "Seconds until start",
+  };
 }

@@ -23,11 +23,13 @@ import { useGameChannel } from "@/lib/ably/useGameChannel";
 import type { GameChannelMessage } from "@/lib/ably/useGameChannel";
 import { cn } from "@/lib/utils";
 
-const POST_LOCK_MS = 900;
-// Keep in sync with the server-side autopilot tick -- 2s between reveal
-// and the next question start. Host-paced games advance manually, so this
-// only affects the client-side hybrid auto-advance preview.
-const POST_REVEAL_MS = 2000;
+const POST_LOCK_MS = 1000;
+// Keep in sync with `AUTOPILOT_POST_REVEAL_MS` in `lib/game/hostActions.ts`.
+// 3s gives players enough of a beat to actually read the revealed answer
+// before the screen flips to the next question. Host-paced games advance
+// manually, so this only affects the client-side hybrid auto-advance
+// preview.
+const POST_REVEAL_MS = 3000;
 
 const TIMELINE_MAX = 20;
 

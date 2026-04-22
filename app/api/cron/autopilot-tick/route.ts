@@ -7,6 +7,8 @@ import { db } from "@/lib/db/client";
 import { sessions } from "@/lib/db/schema";
 import {
   advanceAutopilotSession,
+  AUTOPILOT_POST_LOCK_MS,
+  AUTOPILOT_POST_REVEAL_MS,
   sweepStaleSessions,
   type SessionForHost,
 } from "@/lib/game/hostActions";
@@ -27,15 +29,6 @@ const bodySchema = z.object({
  * double events waste realtime bandwidth.
  */
 const GRACE_MS = 1200;
-/**
- * How long to wait between `revealed` and auto-advance. Kept deliberately
- * tight (2s) so autopilot games don't drag; any longer and players stop
- * staring at the reveal and start scrolling elsewhere. The length
- * estimator in `lib/game/sessionEndTime.ts` assumes this same value.
- */
-const POST_REVEAL_MS = 2000;
-/** How long to wait between `locked` and reveal. */
-const POST_LOCK_MS = 1000;
 
 /**
  * Vercel cron / worker: tick ~every 10-60 seconds. For each active autopilot
@@ -119,7 +112,11 @@ async function runTick(req: Request, input: unknown) {
     actions: results.filter((r) => r.action).length,
     results,
     swept: swept.map((s) => ({ sessionId: s.sessionId, joinCode: s.joinCode })),
-    tuning: { GRACE_MS, POST_LOCK_MS, POST_REVEAL_MS },
+    tuning: {
+      GRACE_MS,
+      POST_LOCK_MS: AUTOPILOT_POST_LOCK_MS,
+      POST_REVEAL_MS: AUTOPILOT_POST_REVEAL_MS,
+    },
   });
 }
 

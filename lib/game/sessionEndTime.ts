@@ -16,11 +16,11 @@
 
 /**
  * Seconds we budget between the end of one question and the start of the
- * next: ~1s lock grace + ~2s reveal display + 2s post-reveal pause. Keep
- * this in sync with `POST_LOCK_MS` + `POST_REVEAL_MS` in
- * `app/api/cron/autopilot-tick/route.ts`.
+ * next: ~1s lock grace + ~1s lock → reveal + 3s post-reveal pause. Keep
+ * this in sync with `AUTOPILOT_POST_LOCK_MS` + `AUTOPILOT_POST_REVEAL_MS`
+ * in `lib/game/hostActions.ts`.
  */
-export const SESSION_REVEAL_BUFFER_SECONDS = 5;
+export const SESSION_REVEAL_BUFFER_SECONDS = 6;
 
 /** One-shot warm-up buffer (intro screen, waiting for first question). */
 export const SESSION_WARMUP_SECONDS = 60;
