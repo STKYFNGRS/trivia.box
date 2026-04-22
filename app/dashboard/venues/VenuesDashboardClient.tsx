@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, ExternalLink, Pencil, BarChart3, MapPin } from "lucide-react";
+import { Camera, ExternalLink, Pencil, MapPin } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { VenueProfileDialog } from "@/components/dashboard/venue/VenueProfileDialog";
@@ -157,16 +157,6 @@ export function VenuesDashboardClient({ venues }: { venues: VenueListItem[] }) {
                       View public page
                     </a>
                   ) : null}
-                  <Link
-                    href={`/dashboard/stats?venueId=${encodeURIComponent(v.accountId)}`}
-                    className={cn(
-                      buttonVariants({ variant: "ghost", size: "sm" }),
-                      "text-white/75 hover:bg-white/5 hover:text-white"
-                    )}
-                  >
-                    <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
-                    View stats
-                  </Link>
                 </div>
               </li>
             );
