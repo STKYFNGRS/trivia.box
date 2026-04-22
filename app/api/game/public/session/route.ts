@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { apiErrorResponse } from "@/lib/apiError";
 import { db } from "@/lib/db/client";
@@ -67,12 +67,17 @@ export async function GET(req: Request) {
     .from(accounts)
     .where(eq(accounts.id, session.venueAccountId))
     .limit(1);
+  // NOTE: we deliberately project `image_bytes IS NOT NULL` as a boolean here
+  // instead of selecting `venueProfiles.imageBytes`. Otherwise every public
+  // session fetch would (a) ship the full venue image blob over the wire and
+  // (b) trigger Neon's `parseBytea` codepath which still uses the legacy
+  // `new Buffer()` constructor, emitting a noisy DEP0005 warning.
   const venueProfile = await db
     .select({
       slug: venueProfiles.slug,
       displayName: venueProfiles.displayName,
       imageUpdatedAt: venueProfiles.imageUpdatedAt,
-      hasImage: venueProfiles.imageBytes,
+      hasImage: sql<boolean>`${venueProfiles.imageBytes} is not null`,
     })
     .from(venueProfiles)
     .where(eq(venueProfiles.accountId, session.venueAccountId))
@@ -176,7 +181,7 @@ export async function GET(req: Request) {
     venueSlug: profile?.slug ?? null,
     venueDisplayName: profile?.displayName ?? venue[0]?.name ?? "Venue",
     venueImageUpdatedAt: profile?.imageUpdatedAt ?? null,
-    venueHasImage: Boolean(profile?.hasImage),
+    venueHasImage: profile?.hasImage === true,
     // Only surface the meeting URL once the caller has reached the
     // public session endpoint with a valid join code — we still
     // intentionally keep it off the upcoming-games listings.

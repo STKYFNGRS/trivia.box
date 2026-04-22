@@ -19,6 +19,14 @@ export function useGameChannel(joinCode: string | null) {
   useEffect(() => {
     if (!code) return;
 
+    // `cancelled` lets us swallow late promise resolutions from the auth
+    // callback, channel subscribe, and connection-state listener after the
+    // effect is torn down (unmount, `code` change, StrictMode re-run). Without
+    // this, closing the Ably client while an auth fetch or initial connect is
+    // still in flight surfaces an "Connection closed" ErrorInfo through the
+    // Next.js dev overlay as an unhandled runtime error.
+    let cancelled = false;
+
     const realtime = new Ably.Realtime({
       authCallback: async (_tokenParams, callback) => {
         try {
@@ -27,19 +35,32 @@ export function useGameChannel(joinCode: string | null) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ joinCode: code }),
           });
+          if (cancelled) {
+            callback("cancelled", null);
+            return;
+          }
           const tokenRequest = await res.json();
+          if (cancelled) {
+            callback("cancelled", null);
+            return;
+          }
           if (!res.ok) {
             callback(res.statusText, null);
             return;
           }
           callback(null, tokenRequest);
         } catch (e) {
+          if (cancelled) {
+            callback("cancelled", null);
+            return;
+          }
           callback(e instanceof Error ? e.message : "Auth error", null);
         }
       },
     });
 
     realtime.connection.on((stateChange) => {
+      if (cancelled) return;
       setConnectionState(stateChange.current);
     });
 
@@ -51,6 +72,7 @@ export function useGameChannel(joinCode: string | null) {
       params: { rewind: "2m" },
     });
     const handler = (msg: Ably.Message) => {
+      if (cancelled) return;
       counter.current += 1;
       const name = msg.name ?? "message";
       setMessages((prev) => [
@@ -59,11 +81,29 @@ export function useGameChannel(joinCode: string | null) {
       ]);
     };
 
-    channel.subscribe(handler);
+    // `channel.subscribe` returns a promise in newer Ably SDKs. If we unmount
+    // before the initial attach resolves, that promise rejects with
+    // "Connection closed" / "Channel detached" — harmless here, but Next.js
+    // surfaces unhandled rejections in the dev overlay.
+    void Promise.resolve(channel.subscribe(handler)).catch(() => {});
 
     return () => {
-      channel.unsubscribe(handler);
-      realtime.close();
+      cancelled = true;
+      try {
+        channel.unsubscribe(handler);
+      } catch {
+        // Unsubscribing a channel that's already detached is benign.
+      }
+      // `close()` can reject in-flight internal promises (e.g. the initial
+      // token auth or connect) with an ErrorInfo whose message is
+      // "Connection closed". Those rejections are safe to ignore — we're
+      // deliberately tearing the connection down — but if they leak to
+      // `window` they trigger Next.js' runtime-error overlay in dev.
+      try {
+        realtime.close();
+      } catch {
+        // no-op: already closed / in a terminal state
+      }
     };
   }, [code]);
 

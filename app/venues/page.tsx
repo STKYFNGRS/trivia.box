@@ -35,13 +35,16 @@ async function loadVenues(sort: Sort): Promise<VenueRow[]> {
   // per-venue session counts and a "has-live-or-upcoming" flag. Running
   // this as two round-trips keeps the SQL readable vs. a single window-
   // function join, and venues is a bounded set anyway.
+  // Project image presence as a boolean in SQL instead of selecting the raw
+  // bytea. This avoids shipping every venue's logo blob to the server on each
+  // page render and dodges Neon's legacy-Buffer `parseBytea` path entirely.
   const rows = await db
     .select({
       slug: venueProfiles.slug,
       displayName: venueProfiles.displayName,
       tagline: venueProfiles.tagline,
       city: accounts.city,
-      imageBytes: venueProfiles.imageBytes,
+      hasImage: sql<boolean>`${venueProfiles.imageBytes} is not null`,
       imageUpdatedAt: venueProfiles.imageUpdatedAt,
       accountId: venueProfiles.accountId,
     })
@@ -77,7 +80,7 @@ async function loadVenues(sort: Sort): Promise<VenueRow[]> {
       displayName: r.displayName,
       tagline: r.tagline,
       city: r.city ?? null,
-      hasImage: !!r.imageBytes,
+      hasImage: r.hasImage === true,
       imageUpdatedAt: r.imageUpdatedAt,
       gamesCompleted: c.completed,
       liveOrUpcoming: c.live > 0,
