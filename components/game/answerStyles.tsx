@@ -56,12 +56,16 @@ export function answerCardStyle(opts: {
   state?: AnswerState;
 }): CSSProperties {
   const { tone, state = "default" } = opts;
+  // Softer mixes bring the answer cards in line with the marketing
+  // `NeonCard` (quiet by default, tone only asserts itself on pick /
+  // reveal). Prior values pushed border and glow too hard and the grid
+  // read as four competing beacons instead of a cohesive board.
   const borderMix =
-    state === "correct" ? 85 : state === "picked" ? 60 : state === "wrong" ? 25 : 40;
+    state === "correct" ? 70 : state === "picked" ? 48 : state === "wrong" ? 18 : 30;
   const glowAlpha =
-    state === "correct" ? 90 : state === "picked" ? 70 : state === "wrong" ? 20 : 45;
+    state === "correct" ? 75 : state === "picked" ? 55 : state === "wrong" ? 14 : 30;
   const innerMix =
-    state === "correct" ? 45 : state === "picked" ? 32 : state === "wrong" ? 10 : 22;
+    state === "correct" ? 38 : state === "picked" ? 24 : state === "wrong" ? 8 : 16;
   return {
     background:
       "linear-gradient(180deg, color-mix(in oklab, var(--stage-surface) 96%, transparent), color-mix(in oklab, var(--stage-bg) 92%, transparent))",

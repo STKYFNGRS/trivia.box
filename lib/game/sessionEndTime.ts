@@ -15,12 +15,12 @@
  */
 
 /**
- * Seconds we budget between the end of one question and the start of the
- * next: ~1s lock grace + ~1s lock → reveal + 3s post-reveal pause. Keep
- * this in sync with `AUTOPILOT_POST_LOCK_MS` + `AUTOPILOT_POST_REVEAL_MS`
- * in `lib/game/hostActions.ts`.
+ * Seconds we budget between the end of one question and the start of
+ * the next. With the new reveal pipeline (instant flip to revealed at
+ * clock-zero + 3 s hold) this collapses back to the reveal hold alone.
+ * Keep in sync with `AUTOPILOT_POST_REVEAL_MS` in `lib/game/hostActions.ts`.
  */
-export const SESSION_REVEAL_BUFFER_SECONDS = 6;
+export const SESSION_REVEAL_BUFFER_SECONDS = 3;
 
 /** One-shot warm-up buffer (intro screen, waiting for first question). */
 export const SESSION_WARMUP_SECONDS = 60;

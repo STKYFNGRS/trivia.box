@@ -28,6 +28,11 @@ export type SessionRow = {
   runMode?: string;
   timerMode?: string;
   secondsPerQuestion?: number | null;
+  /** Existing code stored on the session row. House games now allocate
+   *  a real 6-char code at creation time; launch reuses it. Legacy rows
+   *  may carry a `pending_<id>` placeholder, in which case we mint a
+   *  fresh code here. Omitted for callers that never pre-assign. */
+  joinCode?: string | null;
 };
 
 export type LaunchBlockedReason =
@@ -89,7 +94,13 @@ export async function launchSession(input: {
     }
   }
 
-  const joinCode = await generateUniqueJoinCode();
+  // Preserve a real pre-assigned code so pre-launch lobby URLs stay
+  // valid. Anything still carrying the legacy `pending_…` placeholder,
+  // or rows created before we started pre-assigning, gets a fresh
+  // 6-char code here.
+  const existing = typeof session.joinCode === "string" ? session.joinCode : "";
+  const isUsableExisting = /^[0-9A-Z]{6}$/.test(existing);
+  const joinCode = isUsableExisting ? existing : await generateUniqueJoinCode();
 
   const deckIdsUsed = new Set<string>();
 

@@ -10,9 +10,7 @@ import { toast } from "sonner";
 import {
   ANSWER_STYLES,
   answerCardStyle,
-  answerIconChipStyle,
   answerTopStripeStyle,
-  ChoiceShape,
   PILL_CLASSES,
 } from "@/components/game/answerStyles";
 import { GameShell } from "@/components/game/GameShell";
@@ -352,13 +350,6 @@ export function SoloPlayClient({ sessionId }: { sessionId: string }) {
                     transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
                   />
                 ) : null}
-                <span
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border"
-                  style={answerIconChipStyle({ tone: style.tone })}
-                  aria-hidden
-                >
-                  <ChoiceShape shape={style.shape} className="h-5 w-5" />
-                </span>
                 <span className="flex-1 leading-snug">{choice}</span>
                 {showSpinner ? (
                   <Loader2 className="h-5 w-5 shrink-0 animate-spin text-white/90" aria-hidden />

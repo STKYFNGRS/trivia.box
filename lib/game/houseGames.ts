@@ -1,5 +1,4 @@
 import { and, asc, desc, eq, gte, inArray, lte, notInArray, or, sql } from "drizzle-orm";
-import { customAlphabet } from "nanoid";
 import { db } from "@/lib/db/client";
 import {
   accounts,
@@ -8,6 +7,7 @@ import {
   sessionQuestions,
   sessions,
 } from "@/lib/db/schema";
+import { generateUniqueJoinCode } from "@/lib/game/joinCode";
 import { smartPullQuestions } from "@/lib/game/questionPull";
 
 /**
@@ -38,8 +38,6 @@ const HOUSE_SECONDS_PER_QUESTION = 15;
 /** Grid the cron schedules house games on. `30` → games at :00 and :30. */
 const HOUSE_INTERVAL_MIN = 30;
 const HOUSE_MIN_QUESTIONS_PER_THEME = HOUSE_ROUND_COUNT * HOUSE_QUESTIONS_PER_ROUND;
-
-const placeholder = customAlphabet("abcdefghijklmnopqrstuvwxyz0123456789", 18);
 
 /** Minutes until the next `:00 / :15 / :30 / :45` boundary from `from`. */
 function nextBoundaryMinutes(from: Date, intervalMin: number): Date {
@@ -353,7 +351,13 @@ export async function createHouseSession(
   const primaryCategory =
     mode === "themed" ? theme!.category : roundPlans[0]!.category;
 
-  const pendingCode = `pending_${placeholder()}`;
+  // Assign a real 6-char join code up front so the lobby URL on /play
+  // (and any email / deep link) is resolvable before launch. Previously
+  // we stored a `pending_<nanoid>` placeholder here, which meant the
+  // "Enter Lobby" button couldn't open a lobby page until the session
+  // auto-launched — a needless UX gap. `launchSession` detects an
+  // already-allocated code and re-uses it, so this is safe end-to-end.
+  const prelaunchJoinCode = await generateUniqueJoinCode();
 
   const sessionId = await db.transaction(async (tx) => {
     const [session] = await tx
@@ -365,7 +369,7 @@ export async function createHouseSession(
         timerMode: "auto",
         runMode: "autopilot",
         secondsPerQuestion: HOUSE_SECONDS_PER_QUESTION,
-        joinCode: pendingCode,
+        joinCode: prelaunchJoinCode,
         eventStartsAt,
         eventTimezone: "UTC",
         hasPrize: false,

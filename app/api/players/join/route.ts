@@ -1,5 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, gt } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAccountByClerkUserId } from "@/lib/accounts";
@@ -9,6 +9,16 @@ import { db } from "@/lib/db/client";
 import { accounts, playerSessions, playerVenues, sessions } from "@/lib/db/schema";
 import { getPlayerByAccountId } from "@/lib/players";
 import { clientIpFromRequest, enforceRateLimit } from "@/lib/rateLimit";
+
+/**
+ * Cooldown window between completed Trivia.Box house games. Intentionally
+ * only enforced against the free platform-hosted games — venue-run
+ * games are part of a paid / ticketed experience and should never be
+ * gated this way. The 30 minutes matches the house-game schedule grid
+ * (`HOUSE_INTERVAL_MIN`), so a player is always eligible for the next
+ * scheduled game without any extra wait.
+ */
+const HOUSE_GAME_COOLDOWN_MINUTES = 30;
 
 const schema = z.object({
   joinCode: z.string().length(6),
@@ -46,6 +56,7 @@ export async function POST(req: Request) {
       id: sessions.id,
       status: sessions.status,
       venueAccountId: sessions.venueAccountId,
+      houseGame: sessions.houseGame,
     })
     .from(sessions)
     .where(eq(sessions.joinCode, code))
@@ -61,6 +72,47 @@ export async function POST(req: Request) {
   }
   const playerId = playerRow.id;
   const username = playerRow.username;
+
+  // House-game-only replay cooldown. Achievements + leaderboard XP are
+  // only granted in hosted games, so unlimited back-to-back house plays
+  // would let a single user mine them for free. The gate only fires when
+  // the *incoming* session is itself a house game, so paid venue-run
+  // games are never affected.
+  if (session.houseGame) {
+    const cutoff = new Date(Date.now() - HOUSE_GAME_COOLDOWN_MINUTES * 60_000);
+    const recentCompletedHouse = await db
+      .select({
+        sessionId: sessions.id,
+        estimatedEndAt: sessions.estimatedEndAt,
+      })
+      .from(playerSessions)
+      .innerJoin(sessions, eq(sessions.id, playerSessions.sessionId))
+      .where(
+        and(
+          eq(playerSessions.playerId, playerId),
+          eq(sessions.houseGame, true),
+          eq(sessions.status, "completed"),
+          gt(sessions.estimatedEndAt, cutoff),
+        ),
+      )
+      .orderBy(desc(sessions.estimatedEndAt))
+      .limit(1);
+
+    const last = recentCompletedHouse[0];
+    if (last && last.estimatedEndAt && last.sessionId !== session.id) {
+      const retryAtMs =
+        last.estimatedEndAt.getTime() + HOUSE_GAME_COOLDOWN_MINUTES * 60_000;
+      return NextResponse.json(
+        {
+          error: "Take a breather — your next Trivia.Box game unlocks soon.",
+          code: "cooldown",
+          retryAt: new Date(retryAtMs).toISOString(),
+          cooldownMinutes: HOUSE_GAME_COOLDOWN_MINUTES,
+        },
+        { status: 409 },
+      );
+    }
+  }
 
   const existingJoin = await db
     .select({ id: playerSessions.id })

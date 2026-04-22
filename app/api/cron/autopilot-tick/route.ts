@@ -23,12 +23,13 @@ const bodySchema = z.object({
 });
 
 /**
- * Grace window in ms. After a deadline we wait this long before firing the
- * action, so the host tab's local `setTimeout` chain (if present) gets to go
- * first and we don't double-fire. The server state machine is idempotent, but
- * double events waste realtime bandwidth.
+ * Grace window in ms. With client-side tick pokes firing at clock-zero,
+ * the cron is now a fallback that only runs when no viewers are
+ * connected — so we keep a small grace to avoid racing a just-fired
+ * viewer poke. Set to 600ms (half of the prior 1200ms) to shorten the
+ * "tab-closed autopilot" worst case.
  */
-const GRACE_MS = 1200;
+const GRACE_MS = 600;
 
 /**
  * Vercel cron / worker: tick ~every 10-60 seconds. For each active autopilot

@@ -23,7 +23,8 @@ type LobbyState =
   | { kind: "waiting"; session: SessionProbe; startsAt: Date | null }
   | { kind: "ready"; session: SessionProbe }
   | { kind: "ended"; reason: string }
-  | { kind: "missing" };
+  | { kind: "missing" }
+  | { kind: "cooldown"; retryAt: Date };
 
 const POLL_MS = 3000;
 
@@ -64,7 +65,23 @@ export function JoinClient() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ joinCode: codeToJoin.trim().toUpperCase() }),
         });
-        const data = (await res.json()) as { playerId?: string; error?: unknown };
+        const data = (await res.json()) as {
+          playerId?: string;
+          error?: unknown;
+          code?: string;
+          retryAt?: string;
+        };
+        // 409 + `code: "cooldown"` = user finished a house game in the
+        // last 30 min. Swap the card into a friendly countdown + subscribe
+        // upsell rather than toast-and-forget. This also prevents the
+        // auto-join loop from retrying every poll tick.
+        if (res.status === 409 && data.code === "cooldown" && data.retryAt) {
+          const retryAt = new Date(data.retryAt);
+          if (!Number.isNaN(retryAt.getTime())) {
+            setLobby({ kind: "cooldown", retryAt });
+            return;
+          }
+        }
         if (!res.ok) {
           throw new Error(typeof data.error === "string" ? data.error : "Could not join");
         }
@@ -139,7 +156,12 @@ export function JoinClient() {
           return;
         }
         if (status === "active" || status === "paused") {
-          setLobby({ kind: "ready", session });
+          // Don't stomp the cooldown card — once the join API has told
+          // us the player has to wait, the probe loop just keeps the
+          // lobby state alive so the countdown can tick down.
+          setLobby((prev) =>
+            prev.kind === "cooldown" ? prev : { kind: "ready", session },
+          );
           // If the user arrived with a pre-filled code and is already
           // signed in, auto-join so the CTA feels as immediate as
           // "Enter Lobby" → play. We only fire this once per mount.
@@ -183,6 +205,7 @@ export function JoinClient() {
   const isLobbyReady = lobby.kind === "ready";
   const isLobbyEnded = lobby.kind === "ended";
   const isLobbyMissing = lobby.kind === "missing";
+  const isLobbyCooldown = lobby.kind === "cooldown";
 
   return (
     <div className="relative flex min-h-[calc(100vh-14rem)] items-center justify-center overflow-hidden px-6 py-12 text-white">
@@ -268,6 +291,12 @@ export function JoinClient() {
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 text-sm text-white/70 shadow-[var(--shadow-card)] backdrop-blur">
               Checking your profile…
             </div>
+          ) : isLobbyCooldown ? (
+            <LobbyCooldownCard
+              retryAt={lobby.retryAt}
+              onRetry={() => performJoin(code6)}
+              manualJoining={loading}
+            />
           ) : isLobbyWaiting ? (
             <LobbyWaitingCard
               startsAt={lobby.startsAt}
@@ -479,6 +508,123 @@ function LobbyWaitingCard({
       </Button>
       <p className="mt-3 text-[11px] text-white/50">
         You&rsquo;ll be forwarded automatically the moment the game goes live.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Rendered when the join API returns `409 { code: "cooldown" }` for a
+ * player who finished a free Trivia.Box house game in the last 30
+ * minutes. Shows the countdown until their next eligible play plus a
+ * subtle "subscribe for hosting / achievements" nudge — the cooldown
+ * exists specifically to steer heavy players toward the paid tier.
+ */
+function LobbyCooldownCard({
+  retryAt,
+  onRetry,
+  manualJoining,
+}: {
+  retryAt: Date;
+  onRetry: () => void;
+  manualJoining: boolean;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const h = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(h);
+  }, []);
+
+  const msLeft = Math.max(0, retryAt.getTime() - now);
+  const countdown = formatCountdown(msLeft);
+  const canRetry = msLeft <= 0;
+
+  return (
+    <div
+      className="relative overflow-hidden rounded-2xl border p-6 text-center shadow-[var(--shadow-hero)] backdrop-blur"
+      style={{
+        background:
+          "linear-gradient(180deg, color-mix(in oklab, var(--stage-surface) 96%, transparent), color-mix(in oklab, var(--stage-bg) 92%, transparent))",
+        borderColor:
+          "color-mix(in oklab, var(--neon-amber) 40%, transparent)",
+        boxShadow:
+          "inset 0 1px 0 0 color-mix(in oklab, var(--neon-amber) 22%, transparent), 0 16px 50px -16px color-mix(in oklab, var(--neon-amber) 55%, transparent)",
+      }}
+    >
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-px"
+        style={{
+          background:
+            "linear-gradient(90deg, transparent, var(--neon-amber), transparent)",
+        }}
+      />
+      <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-[var(--neon-amber)]/15 text-[var(--neon-amber)] ring-1 ring-[var(--neon-amber)]/40">
+        <Timer className="size-7" aria-hidden />
+      </div>
+      <div className="mt-4 text-xs font-semibold uppercase tracking-[0.3em] text-white/60">
+        Nice run
+      </div>
+      <div className="mt-1 text-lg font-semibold text-white">
+        You can play another Trivia.Box game in
+      </div>
+      <div className="mt-6 font-mono text-5xl font-black tracking-tight text-white tabular-nums md:text-6xl">
+        {canRetry ? "Ready" : countdown.label}
+      </div>
+      <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/50">
+        {canRetry ? "Tap to rejoin" : "Cooldown"}
+      </div>
+      <Button
+        type="button"
+        onClick={onRetry}
+        disabled={!canRetry || manualJoining}
+        className="mt-6 h-11 w-full text-sm font-bold uppercase tracking-[0.12em]"
+        style={{
+          background: canRetry
+            ? "linear-gradient(135deg, var(--neon-cyan), var(--neon-violet))"
+            : "color-mix(in oklab, white 8%, transparent)",
+          color: canRetry ? "oklch(0.1 0.02 270)" : "color-mix(in oklab, white 45%, transparent)",
+          boxShadow: canRetry
+            ? "0 0 0 1px color-mix(in oklab, var(--neon-cyan) 40%, transparent), 0 14px 40px -14px color-mix(in oklab, var(--neon-cyan) 55%, transparent)"
+            : undefined,
+        }}
+      >
+        {manualJoining ? (
+          <span className="inline-flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            Joining…
+          </span>
+        ) : canRetry ? (
+          "Rejoin now"
+        ) : (
+          "Waiting…"
+        )}
+      </Button>
+      <p className="mt-4 text-xs text-white/60">
+        Want to host your own games and earn achievements without the wait?{" "}
+        <button
+          type="button"
+          onClick={() => {
+            void (async () => {
+              try {
+                const res = await fetch("/api/billing/checkout", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ returnPath: "/dashboard" }),
+                });
+                const data = (await res.json()) as { url?: string; error?: string };
+                if (!res.ok || !data.url) throw new Error(data.error ?? "Checkout failed");
+                window.location.href = data.url;
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "Checkout failed");
+              }
+            })();
+          }}
+          className="cursor-pointer font-semibold text-white underline underline-offset-4 hover:text-[var(--neon-cyan)]"
+        >
+          Subscribe
+        </button>
+        .
       </p>
     </div>
   );

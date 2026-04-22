@@ -72,6 +72,7 @@ async function run(req: Request) {
       runMode: sessions.runMode,
       timerMode: sessions.timerMode,
       secondsPerQuestion: sessions.secondsPerQuestion,
+      joinCode: sessions.joinCode,
     })
     .from(sessions)
     .where(
@@ -112,6 +113,7 @@ async function run(req: Request) {
           runMode: row.runMode,
           timerMode: row.timerMode,
           secondsPerQuestion: row.secondsPerQuestion ?? null,
+          joinCode: row.joinCode,
         },
       });
       // Tag hosted auto-launches so ops can distinguish host-driven

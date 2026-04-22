@@ -9,9 +9,7 @@ import { cn } from "@/lib/utils";
 import {
   ANSWER_STYLES,
   answerCardStyle,
-  answerIconChipStyle,
   answerTopStripeStyle,
-  ChoiceShape,
   PILL_CLASSES,
 } from "@/components/game/answerStyles";
 import { Countdown } from "@/components/game/Countdown";
@@ -155,6 +153,52 @@ export default function PlayPage() {
       clearInterval(h);
     };
   }, [joinCode, isAutopilot, sessionActive]);
+
+  // Proactive tick poke at countdown zero. The 2 s interval above is fine
+  // for the "advance after 3 s hold" transition, but it meant reveals
+  // could lag up to ~2 s behind the user's visible countdown. This
+  // schedules a single immediate poke + bootstrap refresh at the moment
+  // the question deadline elapses so the reveal feels instant — the
+  // server action is idempotent, so overlapping pokes are harmless.
+  const activeQuestionStartMs = boot?.currentQuestion?.status === "active"
+    ? boot?.currentQuestion?.timerStartedAtMs ?? null
+    : null;
+  const activeQuestionSeconds = boot?.currentQuestion?.status === "active"
+    ? boot?.currentQuestion?.timerSeconds ?? null
+    : null;
+  useEffect(() => {
+    if (!joinCode || !isAutopilot || !sessionActive) return;
+    if (!activeQuestionStartMs || !activeQuestionSeconds) return;
+    const deadlineMs = activeQuestionStartMs + activeQuestionSeconds * 1000;
+    const waitMs = deadlineMs - Date.now();
+    if (waitMs < -5000) return;
+    const fire = async () => {
+      try {
+        await fetch("/api/game/public/autopilot-tick", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ joinCode }),
+          cache: "no-store",
+        });
+      } catch {
+        /* swallow */
+      }
+      void refreshBootstrap();
+    };
+    if (waitMs <= 0) {
+      void fire();
+      return;
+    }
+    const h = setTimeout(() => void fire(), waitMs);
+    return () => clearTimeout(h);
+  }, [
+    joinCode,
+    isAutopilot,
+    sessionActive,
+    activeQuestionStartMs,
+    activeQuestionSeconds,
+    refreshBootstrap,
+  ]);
 
   // Ably events are treated as invalidation signals. We debounce slightly so a
   // burst of messages (answers_locked → answer_revealed → leaderboard_updated)
@@ -583,13 +627,6 @@ export default function PlayPage() {
                       transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
                     />
                   ) : null}
-                  <span
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border"
-                    style={answerIconChipStyle({ tone: style.tone })}
-                    aria-hidden
-                  >
-                    <ChoiceShape shape={style.shape} className="h-5 w-5" />
-                  </span>
                   <span className="flex-1 leading-snug">{c}</span>
                   {showSpinner ? (
                     <Loader2 className="h-5 w-5 shrink-0 animate-spin text-white/90" aria-hidden />

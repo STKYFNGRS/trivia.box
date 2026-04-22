@@ -10,9 +10,7 @@ import { GameShell, buildVenueImageUrl } from "@/components/game/GameShell";
 import {
   ANSWER_STYLES,
   answerCardStyle,
-  answerIconChipStyle,
   answerTopStripeStyle,
-  ChoiceShape,
 } from "@/components/game/answerStyles";
 import { useGameChannel } from "@/lib/ably/useGameChannel";
 
@@ -125,6 +123,50 @@ export default function DisplayPage() {
       clearInterval(h);
     };
   }, [joinCode, isAutopilot, sessionActive]);
+
+  // Proactive tick poke at countdown zero (display mirror of the
+  // hosted play page). Collapses the otherwise ~0–2 s poll jitter so
+  // the reveal flashes up on the big screen the instant the timer
+  // hits 0 instead of on the next heartbeat.
+  const activeQuestionStartMs = boot?.currentQuestion?.status === "active"
+    ? boot?.currentQuestion?.timerStartedAtMs ?? null
+    : null;
+  const activeQuestionSeconds = boot?.currentQuestion?.status === "active"
+    ? boot?.currentQuestion?.timerSeconds ?? null
+    : null;
+  useEffect(() => {
+    if (!joinCode || !isAutopilot || !sessionActive) return;
+    if (!activeQuestionStartMs || !activeQuestionSeconds) return;
+    const deadlineMs = activeQuestionStartMs + activeQuestionSeconds * 1000;
+    const waitMs = deadlineMs - Date.now();
+    if (waitMs < -5000) return;
+    const fire = async () => {
+      try {
+        await fetch("/api/game/public/autopilot-tick", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ joinCode }),
+          cache: "no-store",
+        });
+      } catch {
+        /* swallow */
+      }
+      void refreshBootstrap();
+    };
+    if (waitMs <= 0) {
+      void fire();
+      return;
+    }
+    const h = setTimeout(() => void fire(), waitMs);
+    return () => clearTimeout(h);
+  }, [
+    joinCode,
+    isAutopilot,
+    sessionActive,
+    activeQuestionStartMs,
+    activeQuestionSeconds,
+    refreshBootstrap,
+  ]);
 
   const lastProcessedRef = useRef(0);
   useEffect(() => {
@@ -384,13 +426,6 @@ export default function DisplayPage() {
                               transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
                             />
                           ) : null}
-                          <span
-                            className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border"
-                            style={answerIconChipStyle({ tone: style.tone })}
-                            aria-hidden
-                          >
-                            <ChoiceShape shape={style.shape} className="h-12 w-12" />
-                          </span>
                           <span className="flex-1 text-4xl font-bold leading-tight text-white drop-shadow md:text-5xl">
                             {c}
                           </span>

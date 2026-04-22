@@ -179,7 +179,7 @@ export default async function PlayHubPage() {
         {houseGame ? (
           <HouseGameCard
             status={houseGame.status}
-            joinCode={houseGame.joinCode.startsWith("pending_") ? null : houseGame.joinCode}
+            joinCode={houseGame.joinCode}
             eventStartsAt={houseGame.eventStartsAt}
           />
         ) : null}

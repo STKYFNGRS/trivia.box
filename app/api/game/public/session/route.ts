@@ -171,6 +171,21 @@ export async function GET(req: Request) {
     }
   }
 
+  // Platform-hosted "house" games share the site-operator account as both
+  // host and venue — that account's own `name` would otherwise leak
+  // through ("dude", "alex", etc.). Every player-facing surface should
+  // attribute the game to Trivia.Box instead, and suppress the
+  // venue-image path so the brand logo is rendered in its place.
+  const isHouse = session.houseGame === true;
+  const hostName = isHouse ? "Trivia.Box" : host[0]?.name ?? "Host";
+  const venueName = isHouse ? "Trivia.Box" : venue[0]?.name ?? "Venue";
+  const venueDisplayName = isHouse
+    ? "Trivia.Box"
+    : profile?.displayName ?? venue[0]?.name ?? "Venue";
+  const venueSlug = isHouse ? null : profile?.slug ?? null;
+  const venueHasImage = isHouse ? false : profile?.hasImage === true;
+  const venueImageUpdatedAt = isHouse ? null : profile?.imageUpdatedAt ?? null;
+
   return NextResponse.json({
     sessionId: session.id,
     status: session.status,
@@ -178,12 +193,12 @@ export async function GET(req: Request) {
     runMode: session.runMode,
     secondsPerQuestion: session.secondsPerQuestion,
     pausedAt: session.pausedAt ? session.pausedAt.toISOString() : null,
-    hostName: host[0]?.name ?? "Host",
-    venueName: venue[0]?.name ?? "Venue",
-    venueSlug: profile?.slug ?? null,
-    venueDisplayName: profile?.displayName ?? venue[0]?.name ?? "Venue",
-    venueImageUpdatedAt: profile?.imageUpdatedAt ?? null,
-    venueHasImage: profile?.hasImage === true,
+    hostName,
+    venueName,
+    venueSlug,
+    venueDisplayName,
+    venueImageUpdatedAt,
+    venueHasImage,
     // Only surface the meeting URL once the caller has reached the
     // public session endpoint with a valid join code — we still
     // intentionally keep it off the upcoming-games listings.

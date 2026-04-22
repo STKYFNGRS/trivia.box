@@ -415,16 +415,19 @@ export type SweptStaleSession = {
  * used by callers for logging / debug inspection.
  */
 /**
- * Autopilot pause between `locked` → `revealed` transition. This is the
- * "answers are in, here's what was right" beat.
+ * Legacy autopilot pause between `locked` → `revealed`. Collapsed to
+ * zero so that the reveal fires the instant the countdown hits zero
+ * rather than going through a visible "Answers locked" beat first.
+ * Kept as an exported constant so callers that used to import it
+ * continue to compile; any residual `locked` rows (e.g. from a hosted
+ * game that fell through to autopilot) are revealed immediately.
  */
-export const AUTOPILOT_POST_LOCK_MS = 1000;
+export const AUTOPILOT_POST_LOCK_MS = 0;
 /**
- * Autopilot pause after the answer is revealed, before we advance to the
- * next question. The reveal happens ~`AUTOPILOT_POST_LOCK_MS` after lock,
- * so the full reveal-on-screen duration is approximately this constant.
- * Kept at 3 s so players have a beat to read the correct answer before
- * the screen flips.
+ * Autopilot hold-time on the revealed answer before advancing to the
+ * next question. The player needs a beat to actually read the correct
+ * answer; longer than ~3 s and the pacing drags, shorter and people
+ * miss it.
  */
 export const AUTOPILOT_POST_REVEAL_MS = 3000;
 
@@ -433,7 +436,11 @@ export async function advanceAutopilotSession(
   opts: { nowMs?: number; graceMs?: number } = {},
 ): Promise<{ action?: string; reason?: string }> {
   const nowMs = opts.nowMs ?? Date.now();
-  const graceMs = opts.graceMs ?? 1200;
+  // Zero grace by default — we want the reveal to fire the instant the
+  // client-visible countdown hits 0, not 1.2 s later. Callers that need
+  // a safety margin (e.g. the cron's "sweep late tickers" case) can
+  // still override.
+  const graceMs = opts.graceMs ?? 0;
 
   if (session.status !== "active" || session.pausedAt) {
     return { reason: "not_active_or_paused" };
@@ -449,16 +456,12 @@ export async function advanceAutopilotSession(
 
   if (revealed) {
     if (session.timerMode === "hybrid") return { reason: "waiting_for_host_next" };
-    // Honour the reveal-to-advance pause so players can actually read the
-    // correct answer before the screen flips to the next question. We
-    // gate off `timeLocked` (the one timestamp we persist) rather than
-    // polling cadence, so the delay is deterministic regardless of how
-    // many viewers are poking the tick endpoint.
+    // Hold the reveal for exactly `AUTOPILOT_POST_REVEAL_MS` so players
+    // can read the correct answer before we flip. Gating off the
+    // persisted `timeLocked` keeps the delay deterministic no matter
+    // how many viewers are poking the tick endpoint.
     if (revealed.timeLocked) {
-      const revealEndMs =
-        revealed.timeLocked.getTime() +
-        AUTOPILOT_POST_LOCK_MS +
-        AUTOPILOT_POST_REVEAL_MS;
+      const revealEndMs = revealed.timeLocked.getTime() + AUTOPILOT_POST_REVEAL_MS;
       if (nowMs < revealEndMs) {
         return { reason: `waiting_reveal_${revealEndMs - nowMs}ms` };
       }
@@ -469,14 +472,9 @@ export async function advanceAutopilotSession(
 
   if (locked) {
     if (session.timerMode === "hybrid") return { reason: "waiting_for_host_reveal" };
-    // Small pause between "answers locked" and "here's the right one" so
-    // the lock chip has a moment to register on screen.
-    if (locked.timeLocked) {
-      const revealAtMs = locked.timeLocked.getTime() + AUTOPILOT_POST_LOCK_MS;
-      if (nowMs < revealAtMs) {
-        return { reason: `waiting_lock_${revealAtMs - nowMs}ms` };
-      }
-    }
+    // `AUTOPILOT_POST_LOCK_MS` is now zero — reveal immediately on any
+    // stray locked row. Retained as a dedicated branch so manual →
+    // autopilot handoffs don't get stuck.
     const res = await revealActive(session);
     return { action: `revealed:${res.sessionQuestionId}` };
   }
@@ -492,8 +490,14 @@ export async function advanceAutopilotSession(
     if (!startedAt || !seconds) return { reason: "no_timer_info" };
     const deadlineMs = startedAt + seconds * 1000 + graceMs;
     if (nowMs >= deadlineMs) {
-      const res = await lockActive(session);
-      return { action: `locked:${res.sessionQuestionId}` };
+      // Collapse the `active → locked → revealed` chain into a single
+      // pass: stamp the lock, publish `answers_locked`, and immediately
+      // flip the row to `revealed` + publish `answer_revealed`. This
+      // makes the reveal feel instant at clock-zero rather than
+      // requiring a second poll cycle to promote the row.
+      const lockRes = await lockActive(session);
+      const revealRes = await revealActive(session);
+      return { action: `revealed:${revealRes.sessionQuestionId}:from:${lockRes.sessionQuestionId}` };
     }
     return { reason: `waiting_${deadlineMs - nowMs}ms` };
   }
