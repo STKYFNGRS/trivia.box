@@ -136,6 +136,25 @@ const createSchema = z
      * (validated by the computation clamp).
      */
     hostEndsAtOverride: z.string().datetime().optional(),
+    /**
+     * Scheduled between-round breaks. Each `afterRound` must be strictly
+     * less than `rounds.length` (breaks only sit between rounds, not
+     * after the final one) and must be unique.
+     */
+    breaks: z
+      .array(
+        z.object({
+          afterRound: z.number().int().min(1).max(12),
+          minutes: z.number().int().min(1).max(120),
+        })
+      )
+      .max(12)
+      .optional(),
+    /**
+     * Optional Zoom / Teams / Meet URL for online game nights. Only
+     * surfaced to joined players, never on public listings.
+     */
+    onlineMeetingUrl: z.string().url().max(500).optional(),
   })
   .superRefine((data, ctx) => {
     if (!isValidIanaTimeZone(data.eventTimezone)) {
@@ -144,6 +163,28 @@ const createSchema = z
         message: "Invalid IANA time zone",
         path: ["eventTimezone"],
       });
+    }
+    if (data.breaks && data.breaks.length > 0) {
+      const seen = new Set<number>();
+      for (const [i, b] of data.breaks.entries()) {
+        if (b.afterRound >= data.rounds.length) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Break after round ${b.afterRound} is invalid — only ${data.rounds.length} round${
+              data.rounds.length === 1 ? "" : "s"
+            } configured.`,
+            path: ["breaks", i, "afterRound"],
+          });
+        }
+        if (seen.has(b.afterRound)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Two breaks scheduled after round ${b.afterRound}.`,
+            path: ["breaks", i, "afterRound"],
+          });
+        }
+        seen.add(b.afterRound);
+      }
     }
     const t = normalizeHHmm(data.eventLocalTime);
     if (!t) {
@@ -491,6 +532,7 @@ export async function POST(req: Request) {
   const joinCode = `pending_${nanoid(18)}`;
 
   const totalQuestionCount = planned.reduce((sum, p) => sum + p.questions.length, 0);
+  const breaksConfig = body.breaks && body.breaks.length > 0 ? body.breaks : null;
   const estimatedEndAt = computeEstimatedEndAt({
     eventStartsAt,
     questionCount: totalQuestionCount,
@@ -498,6 +540,7 @@ export async function POST(req: Request) {
     runMode: body.runMode,
     hostDurationMinutes: body.hostDurationMinutes ?? null,
     hostOverrideEndsAt: body.hostEndsAtOverride ? new Date(body.hostEndsAtOverride) : null,
+    breaks: breaksConfig,
   });
 
   const sessionId = await db.transaction(async (tx) => {
@@ -517,6 +560,8 @@ export async function POST(req: Request) {
         hasPrize: body.hasPrize,
         prizeDescription: body.hasPrize ? (body.prizeDescription ?? "").trim() : null,
         listedPublic: body.listedPublic ?? true,
+        breaksConfig,
+        onlineMeetingUrl: body.onlineMeetingUrl?.trim() || null,
       })
       .returning({ id: sessions.id });
 

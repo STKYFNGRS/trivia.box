@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { ArrowLeft, CalendarClock, Gift, MapPin, Pencil, Sparkles } from "lucide-react";
+import { ArrowLeft, CalendarClock, Gift, MapPin, Pencil, Sparkles, Video } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -64,6 +64,7 @@ export default async function VenueEventDetailPage({
       prizeInstructions: sessions.prizeInstructions,
       prizeExpiresAt: sessions.prizeExpiresAt,
       hostNotes: sessions.hostNotes,
+      onlineMeetingUrl: sessions.onlineMeetingUrl,
       venueAccountId: sessions.venueAccountId,
       listedPublic: sessions.listedPublic,
     })
@@ -140,6 +141,31 @@ export default async function VenueEventDetailPage({
             </span>
           </div>
         </header>
+
+        {session.onlineMeetingUrl ? (
+          <section className="rounded-2xl border border-sky-400/30 bg-sky-500/10 p-6 text-sky-50">
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-sky-200/80">
+              <Video className="h-3.5 w-3.5" />
+              Online game
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-sky-100/90">
+              This is an online trivia night. Join the host&apos;s meeting
+              room when game time hits.
+            </p>
+            <a
+              href={session.onlineMeetingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                buttonVariants({ size: "sm" }),
+                "mt-3 inline-flex gap-1.5 bg-sky-400 text-sky-950 hover:bg-sky-300"
+              )}
+            >
+              <Video className="h-3.5 w-3.5" />
+              Join meeting
+            </a>
+          </section>
+        ) : null}
 
         {session.hostNotes ? (
           <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-6">

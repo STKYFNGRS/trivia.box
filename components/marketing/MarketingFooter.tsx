@@ -53,9 +53,7 @@ export function MarketingFooter() {
               />
             </div>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-white/60">
-              Built for the bars that take their quiz night seriously. Free house
-              games every 30 minutes, live venue nights, and solo runs for the days
-              nothing else is on.
+              Built for the bars that take their quiz night seriously.
             </p>
             <div
               className="mt-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-white/70"
@@ -101,7 +99,7 @@ export function MarketingFooter() {
             (no second border-t sub-row below) so the footer ends on this
             single legal statement rather than a second row of auth links. */}
         <div className="mt-10 text-center text-xs text-white/55">
-          © {year} dude.box LLC — all rights reserved.
+          © {year} dude dot box LLC — all rights reserved.
         </div>
       </div>
     </footer>

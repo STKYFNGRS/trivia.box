@@ -31,8 +31,13 @@ const bodySchema = z.object({
  * double events waste realtime bandwidth.
  */
 const GRACE_MS = 1200;
-/** How long to wait between `revealed` and auto-advance. */
-const POST_REVEAL_MS = 4000;
+/**
+ * How long to wait between `revealed` and auto-advance. Kept deliberately
+ * tight (2s) so autopilot games don't drag; any longer and players stop
+ * staring at the reveal and start scrolling elsewhere. The length
+ * estimator in `lib/game/sessionEndTime.ts` assumes this same value.
+ */
+const POST_REVEAL_MS = 2000;
 /** How long to wait between `locked` and reveal. */
 const POST_LOCK_MS = 1000;
 

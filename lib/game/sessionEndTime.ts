@@ -14,14 +14,21 @@
  * Autopilot always uses the per-question estimator.
  */
 
-/** Seconds of reveal / leaderboard time we assume between questions. */
-export const SESSION_REVEAL_BUFFER_SECONDS = 15;
+/**
+ * Seconds we budget between the end of one question and the start of the
+ * next: ~1s lock grace + ~2s reveal display + 2s post-reveal pause. Keep
+ * this in sync with `POST_LOCK_MS` + `POST_REVEAL_MS` in
+ * `app/api/cron/autopilot-tick/route.ts`.
+ */
+export const SESSION_REVEAL_BUFFER_SECONDS = 5;
 
 /** One-shot warm-up buffer (intro screen, waiting for first question). */
 export const SESSION_WARMUP_SECONDS = 60;
 
 /** Fallback per-question seconds if the session didn't pin one. */
 export const DEFAULT_SECONDS_PER_QUESTION = 25;
+
+export type SessionBreakInput = { afterRound: number; minutes: number };
 
 export type SessionEndTimeInput = {
   eventStartsAt: Date;
@@ -30,7 +37,28 @@ export type SessionEndTimeInput = {
   runMode: "autopilot" | "hosted";
   hostOverrideEndsAt?: Date | null;
   hostDurationMinutes?: number | null;
+  /**
+   * Scheduled between-round breaks. Their total minutes are added to
+   * the autopilot estimate so the dashboard's "ends approx." label
+   * accounts for both play time and break time.
+   */
+  breaks?: SessionBreakInput[] | null;
 };
+
+/**
+ * Total seconds of break time across `breaks`. Shared between the
+ * setup form (for the live preview) and the server route (for
+ * persistence) so the two agree on the math.
+ */
+export function totalBreakSeconds(breaks?: SessionBreakInput[] | null): number {
+  if (!breaks || breaks.length === 0) return 0;
+  let total = 0;
+  for (const b of breaks) {
+    const mins = Math.max(0, Math.floor(b.minutes));
+    total += mins * 60;
+  }
+  return total;
+}
 
 /**
  * Returns the best-effort end time for a session. Never returns a value
@@ -60,7 +88,9 @@ export function computeEstimatedEndAt(input: SessionEndTimeInput): Date {
 export function autopilotEstimate(input: SessionEndTimeInput): Date {
   const seconds = input.secondsPerQuestion ?? DEFAULT_SECONDS_PER_QUESTION;
   const perQ = Math.max(1, seconds) + SESSION_REVEAL_BUFFER_SECONDS;
-  const totalSeconds = Math.max(1, input.questionCount) * perQ + SESSION_WARMUP_SECONDS;
+  const playSeconds = Math.max(1, input.questionCount) * perQ;
+  const breakSeconds = totalBreakSeconds(input.breaks);
+  const totalSeconds = playSeconds + breakSeconds + SESSION_WARMUP_SECONDS;
   return clampToMinimum(
     input.eventStartsAt,
     new Date(input.eventStartsAt.getTime() + totalSeconds * 1000),

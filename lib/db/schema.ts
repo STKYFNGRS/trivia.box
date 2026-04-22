@@ -380,6 +380,20 @@ export const sessions = pgTable(
      * edit-session page.
      */
     hostNotes: text("host_notes"),
+    /**
+     * Scheduled breaks between rounds. Stored as a tiny JSON array so we
+     * don't need a separate table for what is always <= 12 entries. Read
+     * by the session end-time estimator (break minutes are added on top
+     * of question time) and rendered on the event detail page.
+     * `afterRound` is 1-based and must be < total rounds.
+     */
+    breaksConfig: jsonb("breaks_config").$type<SessionBreak[]>(),
+    /**
+     * Optional Zoom / Teams / Meet URL for online game nights. Only
+     * revealed to players once they've joined the session — we
+     * intentionally don't leak this on public listings.
+     */
+    onlineMeetingUrl: text("online_meeting_url"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -388,6 +402,13 @@ export const sessions = pgTable(
     index("sessions_estimated_end_idx").on(t.status, t.estimatedEndAt),
   ]
 );
+
+/**
+ * Shape persisted in `sessions.breaks_config`. `afterRound` is 1-indexed
+ * (a break with `afterRound: 2` sits *between* round 2 and round 3); the
+ * API rejects anything `>= rounds.length` on create.
+ */
+export type SessionBreak = { afterRound: number; minutes: number };
 
 export const rounds = pgTable(
   "rounds",

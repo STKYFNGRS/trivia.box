@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle2, Loader2, Lock, Trophy } from "lucide-react";
+import { CheckCircle2, Loader2, Lock, Trophy, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Countdown } from "@/components/game/Countdown";
 import { FinalStandings } from "@/components/game/FinalStandings";
@@ -38,6 +38,12 @@ type BootstrapResponse = {
   venueDisplayName?: string | null;
   venueImageUpdatedAt?: string | null;
   venueHasImage?: boolean;
+  /**
+   * Optional Zoom / Teams / Meet link for online games. Only present
+   * once the player has joined (the upcoming-games listing never
+   * surfaces it).
+   */
+  onlineMeetingUrl?: string | null;
   currentQuestion?: BootstrapQuestion | null;
   totalQuestions?: number;
   completedCount?: number;
@@ -376,6 +382,21 @@ export default function PlayPage() {
         </span>
       </div>
       <div className="flex items-center gap-2">
+        {boot?.onlineMeetingUrl ? (
+          <a
+            href={boot.onlineMeetingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              PILL_CLASSES,
+              "text-sky-200 hover:text-sky-100 hover:ring-sky-400/60"
+            )}
+            aria-label="Open online meeting"
+          >
+            <Video className="h-3 w-3" aria-hidden />
+            Meeting
+          </a>
+        ) : null}
         {connectionPillLabel ? (
           <span className={cn(PILL_CLASSES, "text-amber-200")}>{connectionPillLabel}</span>
         ) : null}

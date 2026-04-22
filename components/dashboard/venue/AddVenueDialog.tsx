@@ -27,7 +27,11 @@ export function AddVenueDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreated?: () => void;
+  /**
+   * Fires after a successful create. Receives the new venue's account id
+   * so callers like `/dashboard/games/new` can auto-select it.
+   */
+  onCreated?: (venueAccountId: string | null) => void;
 }) {
   const [displayName, setDisplayName] = useState("");
   const [slug, setSlug] = useState("");
@@ -54,9 +58,17 @@ export function AddVenueDialog({
       // Guard against non-JSON (e.g. 502 HTML from a crashed route) — otherwise
       // `response.json()` throws an opaque "Unexpected end of JSON input".
       const text = await res.text();
-      let data: { error?: unknown } = {};
+      let data: {
+        error?: unknown;
+        venue?: { venueAccountId?: string };
+      } = {};
       try {
-        data = text ? (JSON.parse(text) as { error?: unknown }) : {};
+        data = text
+          ? (JSON.parse(text) as {
+              error?: unknown;
+              venue?: { venueAccountId?: string };
+            })
+          : {};
       } catch {
         data = {};
       }
@@ -71,7 +83,7 @@ export function AddVenueDialog({
       setSlug("");
       setCity("");
       onOpenChange(false);
-      onCreated?.();
+      onCreated?.(data.venue?.venueAccountId ?? null);
     } finally {
       setSaving(false);
     }

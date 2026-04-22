@@ -23,9 +23,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { QuestionPreview, type PreviewRow } from "@/components/dashboard/QuestionPreview";
-import { QuestionSearchPick } from "@/components/dashboard/QuestionSearchPick";
+import { AddVenueDialog } from "@/components/dashboard/venue/AddVenueDialog";
 import {
   VenueProfileDialog,
   type VenueProfileSummary,
@@ -35,6 +34,7 @@ import {
   autopilotEstimate,
   computeEstimatedEndAt,
   estimatedDurationMinutes,
+  totalBreakSeconds,
   DEFAULT_SECONDS_PER_QUESTION,
   SESSION_REVEAL_BUFFER_SECONDS,
   SESSION_WARMUP_SECONDS,
@@ -82,43 +82,22 @@ type CategoryOption = {
 /** Minimum vetted pool size we require before a category is a candidate for the random default. */
 const MIN_POOL_FOR_RANDOM_DEFAULT = 10;
 
-type RoundSource = "random" | "myDeck" | "communityDeck" | "custom" | "pinned";
-
-type CustomQ = {
-  body: string;
-  correctAnswer: string;
-  wrongAnswers: [string, string, string];
-  difficulty: number;
-};
+/**
+ * Per-round content source options we expose in the setup UI. The
+ * server's `createSchema` still accepts the legacy `custom` and
+ * `pinned` values so external scripts / in-flight drafts keep working,
+ * but the UI no longer produces them.
+ */
+type RoundSource = "random" | "myDeck" | "communityDeck";
 
 type RoundLine = {
   category: string;
   source: RoundSource;
   myDeckId: string;
   communityDeckId: string;
-  pinnedText: string;
-  randomFillText: string;
-  customQuestions: CustomQ[];
-  /**
-   * When true on a custom round, any short-fall is filled from the vetted
-   * pool (category-matched smart pull). Lets hosts mix a few signature
-   * questions with platform content without writing a full round.
-   */
-  customFillWithRandom: boolean;
   /** Empty string means "inherit session default"; otherwise 5..60 step 5. */
   secondsPerQuestion: "" | TimerSeconds;
 };
-
-function parseUuidList(raw: string): string[] {
-  return raw
-    .split(/[\s,]+/)
-    .map((s) => s.trim())
-    .filter((s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s));
-}
-
-function emptyCustom(): CustomQ {
-  return { body: "", correctAnswer: "", wrongAnswers: ["", "", ""], difficulty: 2 };
-}
 
 function makeRoundLine(category: string): RoundLine {
   return {
@@ -126,10 +105,6 @@ function makeRoundLine(category: string): RoundLine {
     source: "random",
     myDeckId: "",
     communityDeckId: "",
-    pinnedText: "",
-    randomFillText: "",
-    customQuestions: [],
-    customFillWithRandom: false,
     secondsPerQuestion: "",
   };
 }
@@ -420,6 +395,26 @@ export function GameSetup() {
    * `YYYY-MM-DDTHH:mm` format, interpreted in the caller's browser TZ.
    */
   const [hostEndsAtOverride, setHostEndsAtOverride] = useState<string>("");
+  /**
+   * Between-round breaks the host scheduled. `afterRound` is 1-indexed
+   * and must be strictly less than `rounds` (a break after the last
+   * round would just be "session over"). Break minutes are added to the
+   * end-time preview and, in duration mode, eat into the usable
+   * question budget.
+   */
+  const [breaks, setBreaks] = useState<
+    Array<{ afterRound: number; minutes: number }>
+  >([]);
+  /**
+   * Online-only game link (Zoom / Teams / Meet). Only revealed to
+   * joined players — never on public listings.
+   */
+  const [onlineMeetingUrl, setOnlineMeetingUrl] = useState<string>("");
+  /**
+   * Add-venue dialog visibility for the inline "New venue" shortcut on
+   * the Location card.
+   */
+  const [addVenueOpen, setAddVenueOpen] = useState(false);
 
   const timezoneOptions = useMemo(() => {
     const set = new Set<string>([...COMMON_IANA_TIMEZONES]);
@@ -444,6 +439,12 @@ export function GameSetup() {
       hostDurationMinutes && runMode === "hosted"
         ? Math.max(0, Number(hostDurationMinutes) || 0)
         : null;
+    // Only feed valid, within-range breaks to the estimator — an
+    // in-progress edit (e.g. `afterRound = rounds + 1`) shouldn't
+    // flicker the preview into weird values.
+    const validBreaks = breaks.filter(
+      (b) => b.afterRound >= 1 && b.afterRound < rounds && b.minutes > 0
+    );
     const end = computeEstimatedEndAt({
       eventStartsAt,
       questionCount,
@@ -451,20 +452,28 @@ export function GameSetup() {
       runMode,
       hostDurationMinutes: durationMinutes,
       hostOverrideEndsAt: overrideDate && !Number.isNaN(overrideDate.getTime()) ? overrideDate : null,
+      breaks: validBreaks,
     });
     const autopilotEnd = autopilotEstimate({
       eventStartsAt,
       questionCount,
       secondsPerQuestion: timerMode === "manual" ? null : seconds,
       runMode: "autopilot",
+      breaks: validBreaks,
     });
     const defaultDuration = estimatedDurationMinutes({
       eventStartsAt,
       questionCount,
       secondsPerQuestion: timerMode === "manual" ? null : seconds,
       runMode: "autopilot",
+      breaks: validBreaks,
     });
-    return { end, autopilotEnd, defaultDuration };
+    const breakMinutes = Math.round(totalBreakSeconds(validBreaks) / 60);
+    const totalMinutes = Math.max(
+      1,
+      Math.round((autopilotEnd.getTime() - eventStartsAt.getTime()) / 60_000)
+    );
+    return { end, autopilotEnd, defaultDuration, breakMinutes, totalMinutes };
   }, [
     eventLocalDate,
     eventLocalTime,
@@ -475,6 +484,7 @@ export function GameSetup() {
     runMode,
     hostDurationMinutes,
     hostEndsAtOverride,
+    breaks,
   ]);
 
   const endTimePreviewLabel = useMemo(() => {
@@ -507,11 +517,18 @@ export function GameSetup() {
     if (!hostDurationMinutes || !Number.isFinite(mins) || mins <= 0) return null;
     const secs = timerMode === "manual" ? DEFAULT_SECONDS_PER_QUESTION : seconds;
     const perQ = Math.max(1, secs) + SESSION_REVEAL_BUFFER_SECONDS;
-    const usable = Math.max(perQ, mins * 60 - SESSION_WARMUP_SECONDS);
+    // Breaks and warmup don't produce questions, so they shrink the
+    // usable budget 1:1. An oversized break config can drive this to
+    // `perQ` (which floors to 1 question/round) — that's fine, the UI
+    // preview will make the cause obvious.
+    const breakSec = totalBreakSeconds(
+      breaks.filter((b) => b.afterRound >= 1 && b.afterRound < rounds && b.minutes > 0)
+    );
+    const usable = Math.max(perQ, mins * 60 - SESSION_WARMUP_SECONDS - breakSec);
     const totalQuestions = Math.max(1, Math.floor(usable / perQ));
     const rounded = Math.max(1, Math.floor(totalQuestions / Math.max(1, rounds)));
     return Math.min(50, rounded);
-  }, [hostDurationMinutes, timerMode, seconds, rounds]);
+  }, [hostDurationMinutes, timerMode, seconds, rounds, breaks]);
 
   useEffect(() => {
     if (derivedPerRound !== null && derivedPerRound !== perRound) {
@@ -529,55 +546,6 @@ export function GameSetup() {
       const cur = copy[idx];
       if (!cur) return prev;
       copy[idx] = { ...cur, ...patch };
-      return copy;
-    });
-  }
-
-  function appendPinnedId(roundIdx: number, id: string) {
-    setRoundLines((prev) => {
-      const copy = [...prev];
-      const line = copy[roundIdx];
-      if (!line) return prev;
-      const existing = parseUuidList(line.pinnedText);
-      if (existing.includes(id)) return prev;
-      const merged = [...existing, id].join(", ");
-      copy[roundIdx] = { ...line, pinnedText: merged, source: "pinned" };
-      return copy;
-    });
-  }
-
-  function addCustomQuestion(idx: number) {
-    setRoundLines((prev) => {
-      const copy = [...prev];
-      const cur = copy[idx];
-      if (!cur) return prev;
-      if (cur.customQuestions.length >= perRound) return prev;
-      copy[idx] = { ...cur, customQuestions: [...cur.customQuestions, emptyCustom()] };
-      return copy;
-    });
-  }
-
-  function updateCustomQuestion(idx: number, qIdx: number, patch: Partial<CustomQ>) {
-    setRoundLines((prev) => {
-      const copy = [...prev];
-      const cur = copy[idx];
-      if (!cur) return prev;
-      const next = [...cur.customQuestions];
-      const target = next[qIdx];
-      if (!target) return prev;
-      next[qIdx] = { ...target, ...patch };
-      copy[idx] = { ...cur, customQuestions: next };
-      return copy;
-    });
-  }
-
-  function removeCustomQuestion(idx: number, qIdx: number) {
-    setRoundLines((prev) => {
-      const copy = [...prev];
-      const cur = copy[idx];
-      if (!cur) return prev;
-      const next = cur.customQuestions.filter((_, i) => i !== qIdx);
-      copy[idx] = { ...cur, customQuestions: next };
       return copy;
     });
   }
@@ -608,69 +576,6 @@ export function GameSetup() {
           if (!deckId) throw new Error(`Round ${idx + 1}: pick a deck or choose a different source.`);
           return { ...base, deckId };
         }
-        if (line.source === "custom") {
-          const filledCount = line.customQuestions.length;
-          if (filledCount === 0) {
-            throw new Error(
-              `Round ${idx + 1}: add at least one custom question or change the source.`
-            );
-          }
-          if (!line.customFillWithRandom && filledCount !== perRound) {
-            throw new Error(
-              `Round ${idx + 1}: you wrote ${filledCount} of ${perRound} custom questions. Either add ${
-                perRound - filledCount
-              } more or enable "Fill rest from vetted pool".`
-            );
-          }
-          if (line.customFillWithRandom && filledCount > perRound) {
-            throw new Error(
-              `Round ${idx + 1}: you wrote ${filledCount} custom questions but the round is only ${perRound} long.`
-            );
-          }
-          for (const [qIdx, q] of line.customQuestions.entries()) {
-            const wrongs = q.wrongAnswers.filter((s) => s.trim().length > 0);
-            if (q.body.trim().length < 5 || q.correctAnswer.trim().length === 0 || wrongs.length !== 3) {
-              throw new Error(
-                `Round ${idx + 1}, question ${qIdx + 1}: fill the body, correct answer, and exactly 3 wrong answers.`
-              );
-            }
-          }
-          const customPayload = line.customQuestions.map((q) => ({
-            body: q.body.trim(),
-            correctAnswer: q.correctAnswer.trim(),
-            wrongAnswers: q.wrongAnswers.map((w) => w.trim()) as [string, string, string],
-            difficulty: q.difficulty,
-          }));
-          const fillCount = line.customFillWithRandom ? perRound - filledCount : 0;
-          return {
-            ...base,
-            customQuestions: customPayload,
-            ...(fillCount > 0 ? { randomFillCount: fillCount } : {}),
-          };
-        }
-        if (line.source === "pinned") {
-          const pins = parseUuidList(line.pinnedText).slice(0, perRound);
-          const rfRaw = line.randomFillText.trim();
-          const randomFillCount =
-            rfRaw === "" ? undefined : Math.max(0, Math.min(perRound, Number(rfRaw) || 0));
-          if (randomFillCount !== undefined && pins.length + randomFillCount !== perRound) {
-            throw new Error(
-              `Round ${idx + 1}: pinned count (${pins.length}) + random fill (${randomFillCount}) must equal questions per round (${perRound}), or clear "random fill" to auto-fill the rest.`
-            );
-          }
-          const spec: {
-            roundNumber: number;
-            category: string;
-            questionsPerRound: number;
-            questionIds?: string[];
-            randomFillCount?: number;
-          } = {
-            ...base,
-            questionIds: pins.length > 0 ? pins : undefined,
-          };
-          if (randomFillCount !== undefined) spec.randomFillCount = randomFillCount;
-          return spec;
-        }
         return base;
       });
 
@@ -695,6 +600,26 @@ export function GameSetup() {
             : {}),
           ...(runMode === "hosted" && hostDurationMinutes && !hostEndsAtOverride
             ? { hostDurationMinutes: Math.max(5, Math.min(480, Number(hostDurationMinutes) || 0)) }
+            : {}),
+          // Only send valid breaks — `afterRound` has to be strictly
+          // less than rounds count, otherwise the server rejects.
+          ...(breaks.length > 0
+            ? {
+                breaks: breaks
+                  .filter(
+                    (b) =>
+                      b.afterRound >= 1 &&
+                      b.afterRound < roundSpecs.length &&
+                      b.minutes > 0
+                  )
+                  .map((b) => ({
+                    afterRound: b.afterRound,
+                    minutes: Math.max(1, Math.min(120, Math.floor(b.minutes))),
+                  })),
+              }
+            : {}),
+          ...(onlineMeetingUrl.trim()
+            ? { onlineMeetingUrl: onlineMeetingUrl.trim() }
             : {}),
         }),
       });
@@ -725,31 +650,6 @@ export function GameSetup() {
       toast.success("Session drafted");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Create failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function swapFirst() {
-    if (!sessionId || preview.length === 0) return;
-    setBusy(true);
-    try {
-      const target = preview[0]!;
-      const res = await fetch(`/api/game/sessions/${sessionId}/swap`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionQuestionId: target.sessionQuestionId }),
-      });
-      const data = (await res.json()) as { error?: unknown };
-      if (!res.ok) {
-        throw new Error(typeof data.error === "string" ? data.error : "Swap failed");
-      }
-      const prevRes = await fetch(`/api/game/sessions/${sessionId}/preview`);
-      const prevData = (await prevRes.json()) as { questions?: PreviewRow[] };
-      if (prevRes.ok) setPreview(prevData.questions ?? []);
-      toast.success("Swapped a question");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Swap failed");
     } finally {
       setBusy(false);
     }
@@ -872,6 +772,13 @@ export function GameSetup() {
                 >
                   Edit venue
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setAddVenueOpen(true)}
+                >
+                  New venue
+                </Button>
               </div>
             ) : null}
             {venues.length > 0 ? (
@@ -886,11 +793,33 @@ export function GameSetup() {
             ) : venues.length === 0 ? (
               <div className="text-muted-foreground space-y-2 text-sm">
                 <p>We could not find a venue for your account. Create one to continue.</p>
-                <Button type="button" variant="outline" onClick={() => setVenueDialogOpen(true)}>
-                  Create venue
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" onClick={() => setVenueDialogOpen(true)}>
+                    Edit default venue
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => setAddVenueOpen(true)}>
+                    Create new venue
+                  </Button>
+                </div>
               </div>
             ) : null}
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="online-meeting-url">Online meeting link (optional)</Label>
+            <Input
+              id="online-meeting-url"
+              type="url"
+              inputMode="url"
+              placeholder="https://zoom.us/j/..."
+              value={onlineMeetingUrl}
+              maxLength={500}
+              onChange={(e) => setOnlineMeetingUrl(e.target.value)}
+            />
+            <p className="text-muted-foreground text-xs">
+              Paste a Zoom / Teams / Meet link if this game runs online.
+              Players only see it after joining — we never expose it on
+              public listings.
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -899,6 +828,16 @@ export function GameSetup() {
         open={venueDialogOpen}
         onOpenChange={setVenueDialogOpen}
         onSaved={handleVenueSaved}
+      />
+      <AddVenueDialog
+        open={addVenueOpen}
+        onOpenChange={setAddVenueOpen}
+        // Refresh the picker and preselect the new venue so the host
+        // can keep filling out the rest of the setup without hunting
+        // for it in the dropdown.
+        onCreated={(newId) => {
+          void refreshVenues(newId ?? undefined);
+        }}
       />
 
       <Card className="shadow-[var(--shadow-card)]">
@@ -1095,55 +1034,60 @@ export function GameSetup() {
             <CardTitle className="tracking-tight">Questions</CardTitle>
           </div>
           <CardDescription>
-            Set the game length (we work out the question count for you) or
-            leave it blank to hand-pick rounds and questions-per-round. Each
-            round pulls from its own source below.
+            {runMode === "autopilot"
+              ? "Set the total game length — we work out how many questions fit, accounting for scheduled breaks. Each round below picks its own source."
+              : "Pick the rounds and questions per round. Hosted games advance when you tap Next, so the estimated length below is advisory only."}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
-          <div className="grid gap-2 md:col-span-2">
-            <Label htmlFor="duration-minutes">Game length (minutes)</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                id="duration-minutes"
-                type="number"
-                inputMode="numeric"
-                min={5}
-                max={480}
-                step={5}
-                value={hostDurationMinutes}
-                placeholder={
-                  endTimePreview ? String(endTimePreview.defaultDuration) : "60"
-                }
-                disabled={!!hostEndsAtOverride}
-                onChange={(e) => setHostDurationMinutes(e.target.value)}
-                className="max-w-[12rem] tabular-nums"
-              />
-              {hostDurationMinutes ? (
-                <button
-                  type="button"
-                  onClick={() => setHostDurationMinutes("")}
-                  className="text-muted-foreground hover:text-foreground text-xs underline underline-offset-2"
-                >
-                  Clear
-                </button>
-              ) : null}
+          {runMode === "autopilot" ? (
+            <div className="grid gap-2 md:col-span-2">
+              <Label htmlFor="duration-minutes">Game length (minutes)</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="duration-minutes"
+                  type="number"
+                  inputMode="numeric"
+                  min={5}
+                  max={480}
+                  step={5}
+                  value={hostDurationMinutes}
+                  placeholder={
+                    endTimePreview ? String(endTimePreview.defaultDuration) : "60"
+                  }
+                  onChange={(e) => setHostDurationMinutes(e.target.value)}
+                  className="max-w-[12rem] tabular-nums"
+                />
+                {hostDurationMinutes ? (
+                  <button
+                    type="button"
+                    onClick={() => setHostDurationMinutes("")}
+                    className="text-muted-foreground hover:text-foreground text-xs underline underline-offset-2"
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </div>
+              <p className="text-muted-foreground text-xs">
+                {derivedTotalQuestions !== null
+                  ? `We'll run ${derivedTotalQuestions} questions total (${derivedPerRound} per round × ${rounds} round${
+                      rounds === 1 ? "" : "s"
+                    }) at ${
+                      timerMode === "manual" ? DEFAULT_SECONDS_PER_QUESTION : seconds
+                    }s per question with a ~2s pause between each${
+                      endTimePreview && endTimePreview.breakMinutes > 0
+                        ? `, plus ${endTimePreview.breakMinutes} min of breaks`
+                        : ""
+                    }.`
+                  : `Leave blank to pick rounds and questions-per-round directly. Setting a length derives the question count from length ÷ seconds-per-question.`}
+                {endTimePreviewLabel ? (
+                  <>
+                    {" "}Ends approx. <strong>{endTimePreviewLabel}</strong>.
+                  </>
+                ) : null}
+              </p>
             </div>
-            <p className="text-muted-foreground text-xs">
-              {derivedTotalQuestions !== null
-                ? `We'll run ${derivedTotalQuestions} questions total (${derivedPerRound} per round × ${rounds} round${
-                    rounds === 1 ? "" : "s"
-                  }) at ${
-                    timerMode === "manual" ? DEFAULT_SECONDS_PER_QUESTION : seconds
-                  }s per question + ~${SESSION_REVEAL_BUFFER_SECONDS}s reveal.`
-                : `Leave blank to pick rounds and questions-per-round directly. Setting a length derives the question count from length ÷ seconds-per-question.`}
-              {endTimePreviewLabel ? (
-                <>
-                  {" "}Ends approx. <strong>{endTimePreviewLabel}</strong>.
-                </>
-              ) : null}
-            </p>
-          </div>
+          ) : null}
           <div className="grid gap-2">
             <Label>Rounds</Label>
             <Input
@@ -1156,10 +1100,10 @@ export function GameSetup() {
             />
             <p className="text-muted-foreground text-xs">
               Split the game across rounds so each can pull from a different
-              category, deck, or custom source below.
+              category or deck below.
             </p>
           </div>
-          {derivedPerRound !== null ? (
+          {runMode === "autopilot" && derivedPerRound !== null ? (
             <div className="grid gap-2">
               <Label>Questions per round</Label>
               <div className="bg-muted/30 flex h-10 items-center rounded-md border px-3 text-sm tabular-nums">
@@ -1181,14 +1125,138 @@ export function GameSetup() {
                 onChange={(e) => setPerRound(Number(e.target.value))}
                 className="tabular-nums"
               />
-              <p className="text-muted-foreground text-xs">
-                Each round uses the source you pick below. For <em>Random</em>,
-                you need enough vetted questions in the category; for a deck or
-                custom questions, the source itself must cover the round
-                length.
-              </p>
+              {runMode === "hosted" && endTimePreview ? (
+                <p className="text-muted-foreground text-xs">
+                  Estimated length: ~{endTimePreview.totalMinutes} min
+                  {endTimePreview.breakMinutes > 0
+                    ? ` (~${Math.max(
+                        1,
+                        endTimePreview.totalMinutes - endTimePreview.breakMinutes
+                      )} min play + ${endTimePreview.breakMinutes} min breaks)`
+                    : ""}
+                  . You control the pace; this is just for scheduling.
+                </p>
+              ) : (
+                <p className="text-muted-foreground text-xs">
+                  Each round uses the source you pick below. Round source can
+                  be Trivia.Box&apos;s vetted pool, one of your decks, or a
+                  community deck.
+                </p>
+              )}
             </div>
           )}
+          {/* Positional break planner — kept compact so it doesn't dwarf the
+              rest of the setup. Breaks only make sense between rounds, so
+              the "after round" options cap at `rounds - 1`. */}
+          <div className="grid gap-2 md:col-span-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label>Breaks (optional)</Label>
+              <button
+                type="button"
+                onClick={() =>
+                  setBreaks((prev) => {
+                    const usedAfter = new Set(prev.map((b) => b.afterRound));
+                    let firstFree = 1;
+                    while (firstFree < rounds && usedAfter.has(firstFree)) {
+                      firstFree += 1;
+                    }
+                    const afterRound =
+                      firstFree < rounds
+                        ? firstFree
+                        : Math.min(Math.max(1, rounds - 1), Math.ceil(rounds / 2));
+                    return [...prev, { afterRound, minutes: 10 }];
+                  })
+                }
+                disabled={rounds <= 1 || breaks.length >= Math.max(0, rounds - 1)}
+                className="text-primary hover:text-primary/80 text-xs font-semibold underline underline-offset-2 disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
+              >
+                + Add break
+              </button>
+            </div>
+            {breaks.length === 0 ? (
+              <p className="text-muted-foreground text-xs">
+                Schedule a break between rounds (e.g. a 10 min intermission
+                after round 2). Break minutes get added to the estimated end
+                time
+                {runMode === "autopilot"
+                  ? " and trimmed from the derived question count above."
+                  : "."}
+                {rounds <= 1 ? " Add a second round to enable breaks." : ""}
+              </p>
+            ) : (
+              <div className="grid gap-2">
+                {breaks.map((b, idx) => {
+                  const options: number[] = [];
+                  for (let r = 1; r < rounds; r += 1) options.push(r);
+                  const valid = b.afterRound >= 1 && b.afterRound < rounds;
+                  return (
+                    <div
+                      key={idx}
+                      className="bg-muted/30 grid grid-cols-[1fr_1fr_auto] items-end gap-3 rounded-md border p-3"
+                    >
+                      <div className="grid gap-1.5">
+                        <Label className="text-xs">After round</Label>
+                        <Select
+                          value={valid ? String(b.afterRound) : ""}
+                          onValueChange={(v) => {
+                            if (!v) return;
+                            const next = Number(v);
+                            if (!Number.isFinite(next)) return;
+                            setBreaks((prev) =>
+                              prev.map((row, i) =>
+                                i === idx ? { ...row, afterRound: next } : row
+                              )
+                            );
+                          }}
+                        >
+                          <SelectTrigger className="h-9 text-sm">
+                            <SelectValue
+                              placeholder={valid ? undefined : `1–${Math.max(1, rounds - 1)}`}
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {options.map((n) => (
+                              <SelectItem key={n} value={String(n)}>
+                                Round {n}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid gap-1.5">
+                        <Label className="text-xs">Minutes</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={120}
+                          value={b.minutes}
+                          onChange={(e) =>
+                            setBreaks((prev) =>
+                              prev.map((row, i) =>
+                                i === idx
+                                  ? { ...row, minutes: Number(e.target.value) || 0 }
+                                  : row
+                              )
+                            )
+                          }
+                          className="h-9 tabular-nums text-sm"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setBreaks((prev) => prev.filter((_, i) => i !== idx))
+                        }
+                        className="text-muted-foreground hover:text-foreground text-xs underline underline-offset-2"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           <div className="grid gap-2 md:col-span-2">
             <Label>Question package (optional)</Label>
             <Select
@@ -1292,11 +1360,9 @@ export function GameSetup() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="random">Random from vetted pool</SelectItem>
-                        <SelectItem value="myDeck">From one of my decks</SelectItem>
-                        <SelectItem value="communityDeck">From an approved community deck</SelectItem>
-                        <SelectItem value="custom">Write custom questions for this game</SelectItem>
-                        <SelectItem value="pinned">Advanced: pinned question IDs</SelectItem>
+                        <SelectItem value="random">Trivia.Box random</SelectItem>
+                        <SelectItem value="myDeck">My decks</SelectItem>
+                        <SelectItem value="communityDeck">Community decks</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1392,142 +1458,6 @@ export function GameSetup() {
                   </div>
                 ) : null}
 
-                {line.source === "custom" ? (
-                  <div className="flex flex-col gap-3">
-                    <div className="text-muted-foreground text-xs">
-                      Write up to <strong>{perRound}</strong> question(s) for this round. They are stored as a hidden
-                      deck tied to this game — they never enter the public pool unless you publish the deck later.
-                      Enable <em>Fill rest from vetted pool</em> to mix custom writes with smart-pulled trivia.
-                    </div>
-                    <label className="flex items-start gap-2 text-xs">
-                      <input
-                        type="checkbox"
-                        className="mt-0.5 size-4 accent-foreground"
-                        checked={line.customFillWithRandom}
-                        onChange={(e) =>
-                          updateLine(idx, { customFillWithRandom: e.target.checked })
-                        }
-                      />
-                      <span>
-                        Fill the remaining{" "}
-                        <strong>{Math.max(0, perRound - line.customQuestions.length)}</strong>{" "}
-                        from the vetted pool (category: <em>{line.category}</em>).
-                      </span>
-                    </label>
-                    {line.customQuestions.map((q, qIdx) => (
-                      <div key={qIdx} className="bg-background flex flex-col gap-2 rounded-md border p-3">
-                        <div className="flex items-center justify-between">
-                          <div className="text-xs font-medium">Question {qIdx + 1}</div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => removeCustomQuestion(idx, qIdx)}
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                        <Textarea
-                          placeholder="Question body"
-                          value={q.body}
-                          maxLength={500}
-                          onChange={(e) => updateCustomQuestion(idx, qIdx, { body: e.target.value })}
-                          className="min-h-[60px]"
-                        />
-                        <Input
-                          placeholder="Correct answer"
-                          value={q.correctAnswer}
-                          maxLength={160}
-                          onChange={(e) =>
-                            updateCustomQuestion(idx, qIdx, { correctAnswer: e.target.value })
-                          }
-                        />
-                        <div className="grid gap-2 md:grid-cols-3">
-                          {q.wrongAnswers.map((w, wi) => (
-                            <Input
-                              key={wi}
-                              placeholder={`Wrong answer ${wi + 1}`}
-                              value={w}
-                              maxLength={160}
-                              onChange={(e) => {
-                                const copy: [string, string, string] = [...q.wrongAnswers] as [
-                                  string,
-                                  string,
-                                  string,
-                                ];
-                                copy[wi] = e.target.value;
-                                updateCustomQuestion(idx, qIdx, { wrongAnswers: copy });
-                              }}
-                            />
-                          ))}
-                        </div>
-                        <div>
-                          <select
-                            className="bg-background h-9 rounded-md border px-3 text-sm"
-                            value={q.difficulty}
-                            onChange={(e) =>
-                              updateCustomQuestion(idx, qIdx, { difficulty: Number(e.target.value) })
-                            }
-                          >
-                            <option value={1}>Easy</option>
-                            <option value={2}>Medium</option>
-                            <option value={3}>Hard</option>
-                          </select>
-                        </div>
-                      </div>
-                    ))}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={line.customQuestions.length >= perRound}
-                        onClick={() => addCustomQuestion(idx)}
-                      >
-                        Add custom question ({line.customQuestions.length}/{perRound})
-                      </Button>
-                      {line.customFillWithRandom && line.customQuestions.length < perRound ? (
-                        <span className="text-muted-foreground text-xs">
-                          +{perRound - line.customQuestions.length} from vetted pool
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-
-                {line.source === "pinned" ? (
-                  <div className="grid gap-3">
-                    <div className="grid gap-2 md:grid-cols-2">
-                      <div className="grid gap-2">
-                        <Label className="text-xs">Random fill count (optional)</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={perRound}
-                          placeholder={`Auto (${Math.max(0, perRound - parseUuidList(line.pinnedText).length)} if pins set)`}
-                          value={line.randomFillText}
-                          onChange={(e) => updateLine(idx, { randomFillText: e.target.value })}
-                        />
-                        <p className="text-muted-foreground text-xs">
-                          If set, pinned + this number must equal questions per round.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label className="text-xs">Pinned vetted question IDs</Label>
-                      <Input
-                        value={line.pinnedText}
-                        onChange={(e) => updateLine(idx, { pinnedText: e.target.value })}
-                        placeholder="UUIDs separated by commas or spaces"
-                      />
-                    </div>
-                    <QuestionSearchPick
-                      category={line.category}
-                      onAppendId={(id) => appendPinnedId(idx, id)}
-                    />
-                  </div>
-                ) : null}
-
                 {line.source === "random" ? (
                   <p className="text-muted-foreground text-xs">
                     Questions are pulled automatically from the vetted pool for <em>{line.category}</em> at this venue,
@@ -1597,14 +1527,6 @@ export function GameSetup() {
               : "Draft a session to preview the pulled questions."}
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={busy || !sessionId || preview.length === 0}
-              onClick={swapFirst}
-            >
-              Swap first question
-            </Button>
             <Button
               type="button"
               variant="outline"

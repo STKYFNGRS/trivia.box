@@ -162,6 +162,13 @@
       "when": 1788500000000,
       "tag": "0022_venue_address",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1789000000000,
+      "tag": "0023_session_breaks_and_meeting",
+      "breakpoints": true
     }
   ]
 }

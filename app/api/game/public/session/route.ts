@@ -46,6 +46,7 @@ export async function GET(req: Request) {
       hostAccountId: sessions.hostAccountId,
       venueAccountId: sessions.venueAccountId,
       pausedAt: sessions.pausedAt,
+      onlineMeetingUrl: sessions.onlineMeetingUrl,
     })
     .from(sessions)
     .where(eq(sessions.joinCode, code.toUpperCase()))
@@ -176,6 +177,10 @@ export async function GET(req: Request) {
     venueDisplayName: profile?.displayName ?? venue[0]?.name ?? "Venue",
     venueImageUpdatedAt: profile?.imageUpdatedAt ?? null,
     venueHasImage: Boolean(profile?.hasImage),
+    // Only surface the meeting URL once the caller has reached the
+    // public session endpoint with a valid join code — we still
+    // intentionally keep it off the upcoming-games listings.
+    onlineMeetingUrl: session.onlineMeetingUrl ?? null,
     currentQuestion,
     totalQuestions,
     completedCount,
