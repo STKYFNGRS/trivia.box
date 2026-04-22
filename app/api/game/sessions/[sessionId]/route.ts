@@ -8,21 +8,29 @@ import { sessions } from "@/lib/db/schema";
 import { assertHostControlsSession } from "@/lib/game/sessionPermissions";
 
 /**
- * Soft-hide a past session from the host's dashboard.
+ * Remove a session from the host's dashboard.
  *
- * Wired to the **Remove** button on the Recent games list at
- * `/dashboard/games`. Only completed, cancelled, or draft sessions are
- * eligible so a host can't accidentally hide a pending / active game mid-
- * stream. Active or paused sessions reply 409 to surface the guard in the
- * UI.
+ * Wired to both the **Remove** button on Recent games *and* the **Cancel**
+ * button on Active & upcoming at `/dashboard/games`. Semantics depend on the
+ * session's current status:
  *
- * This is a *soft* delete by design — we only stamp `host_hidden_at` and
- * let the dashboard query filter by it. Everything downstream
- * (`player_sessions`, `answers`, `player_xp_events`, `prize_claims`, the
- * leaderboards, `/u/[username]` history) still references the row, so the
- * action is invisible to players. If we ever need a hard delete it should
- * be a separate admin-only tool that cascades through the history tables
- * explicitly.
+ *   - `completed` / `cancelled` / `draft` → soft-hide via `host_hidden_at`.
+ *     Player history (leaderboards, `/u/[username]`, recap links) is kept
+ *     intact; only the host's own dashboard forgets about it.
+ *   - `pending` → cancel: flip `status` to `cancelled` *and* soft-hide the
+ *     row in the same statement so it drops out of "Active & upcoming"
+ *     immediately. This also takes the session out of the auto-launch
+ *     cron's query (which only picks up `pending` rows), so the scheduled
+ *     start is effectively undone.
+ *   - `active` / `paused` → 409; the host has to end the game first. Killing
+ *     a live session mid-question would leave connected players stranded
+ *     and is intentionally not a dashboard action.
+ *
+ * The soft-hide is by design. Everything downstream (`player_sessions`,
+ * `answers`, `player_xp_events`, `prize_claims`, the leaderboards,
+ * `/u/[username]` history) still references the row, so the action is
+ * invisible to players. A hard delete would need to be a separate admin
+ * tool that cascades through history explicitly.
  */
 export async function DELETE(
   _req: Request,
@@ -43,17 +51,26 @@ export async function DELETE(
   try {
     const session = await assertHostControlsSession(account, sessionId);
 
-    const hidable = new Set(["completed", "cancelled", "draft"]);
-    if (!hidable.has(session.status)) {
+    if (session.status === "active" || session.status === "paused") {
       return NextResponse.json(
         {
           error:
-            "Only completed, cancelled, or draft sessions can be removed. End the game first.",
+            "End the game first — active or paused sessions can't be removed from the dashboard.",
           code: "SESSION_NOT_HIDABLE",
           status: session.status,
         },
         { status: 409 }
       );
+    }
+
+    if (session.status === "pending") {
+      // Cancel + hide in one write so the dashboard drops the card and the
+      // auto-launch cron stops picking it up on the next tick.
+      await db
+        .update(sessions)
+        .set({ status: "cancelled", hostHiddenAt: sql`now()` })
+        .where(eq(sessions.id, sessionId));
+      return NextResponse.json({ ok: true, cancelled: true });
     }
 
     await db

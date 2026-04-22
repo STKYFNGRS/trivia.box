@@ -7,6 +7,7 @@ import {
   gt,
   inArray,
   isNull,
+  ne,
   or,
   sql,
 } from "drizzle-orm";
@@ -18,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusPill } from "@/components/ui/status-pill";
+import { CancelSessionButton } from "@/components/dashboard/CancelSessionButton";
 import { HostClaimsCard } from "@/components/dashboard/HostClaimsCard";
 import { LaunchNowButton } from "@/components/dashboard/LaunchNowButton";
 import { RemoveSessionButton } from "@/components/dashboard/RemoveSessionButton";
@@ -82,6 +84,13 @@ export default async function GamesPage() {
 
   const hostOwned = eq(sessions.hostAccountId, account.id);
   const notHidden = isNull(sessions.hostHiddenAt);
+  // Platform-owned "house" games share the same host account (the site admin
+  // used as the Trivia.Box house identity) but are scheduled by the cron and
+  // run in autopilot — they aren't something a host manages. Filtering them
+  // out keeps the dashboard focused on the operator's own sessions and
+  // prevents confusing Host/Display controls from appearing for games they
+  // didn't create.
+  const notHouseGame = ne(sessions.houseGame, true);
 
   // Active / Upcoming — same filter as before, now also exclude hidden rows.
   // Hosts rarely "hide" upcoming games (the API rejects that anyway), but
@@ -101,6 +110,7 @@ export default async function GamesPage() {
       and(
         hostOwned,
         notHidden,
+        notHouseGame,
         inArray(sessions.status, ["pending", "active", "paused", "draft"]),
         or(
           isNull(sessions.estimatedEndAt),
@@ -134,6 +144,7 @@ export default async function GamesPage() {
       and(
         hostOwned,
         notHidden,
+        notHouseGame,
         inArray(sessions.status, ["completed", "cancelled"]),
       ),
     )
@@ -201,7 +212,7 @@ export default async function GamesPage() {
                       {statusPillFor(s.status as SessionStatus, s.runMode)}
                     </div>
                   </CardHeader>
-                  <CardContent className="flex flex-wrap gap-2 text-sm">
+                  <CardContent className="flex flex-wrap items-center gap-2 text-sm">
                     {isActive ? (
                       <>
                         <Link
@@ -224,7 +235,23 @@ export default async function GamesPage() {
                         </Link>
                       </>
                     ) : null}
-                    {isPending ? <LaunchNowButton sessionId={s.id} size="sm" /> : null}
+                    {isPending ? (
+                      <>
+                        <LaunchNowButton sessionId={s.id} size="sm" />
+                        <Link
+                          href={`/dashboard/games/${s.id}/edit`}
+                          className={cn(
+                            buttonVariants({ size: "sm", variant: "secondary" }),
+                          )}
+                        >
+                          Edit
+                        </Link>
+                        <CancelSessionButton
+                          sessionId={s.id}
+                          joinCode={s.joinCode}
+                        />
+                      </>
+                    ) : null}
                   </CardContent>
                 </Card>
               );

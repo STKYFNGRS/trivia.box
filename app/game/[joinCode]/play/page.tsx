@@ -387,10 +387,10 @@ export default function PlayPage() {
 
   return (
     <GameShell venueImageUrl={venueImageUrl} topBar={topBar}>
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 md:gap-5">
         <section
           className={cn(
-            "relative rounded-3xl bg-[var(--stage-glass)] p-8 md:p-10",
+            "relative rounded-3xl bg-[var(--stage-glass)] px-6 py-5 md:px-8 md:py-6",
             "ring-1 ring-white/10 backdrop-blur-xl",
             "shadow-[var(--shadow-hero)]",
           )}
@@ -403,7 +403,7 @@ export default function PlayPage() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.18 }}
-                className="flex flex-col items-center gap-3 py-8 text-center"
+                className="flex flex-col items-center gap-3 py-6 text-center"
               >
                 <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-amber-200/90">
                   <span className="relative flex h-2 w-2">
@@ -423,7 +423,12 @@ export default function PlayPage() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.22, ease: "easeOut" }}
-                className="text-balance text-3xl font-semibold leading-[1.15] tracking-tight text-white md:text-4xl"
+                // Fluid clamp keeps the question readable on phones while
+                // preventing a long prompt from eating the whole viewport on
+                // a typical laptop (≈1024x768/900). 1.2 → 2 rem maps to
+                // 19px → 32px without hitting the old 3xl/4xl breakpoints
+                // that were pushing answer buttons below the fold.
+                className="text-balance font-semibold leading-[1.2] tracking-tight text-white [font-size:clamp(1.2rem,1.6vw+0.8rem,2rem)]"
               >
                 {current.body}
               </motion.h1>
@@ -479,7 +484,12 @@ export default function PlayPage() {
         </section>
 
         {showChoices ? (
-          <div className="grid gap-3 md:grid-cols-2">
+          // `auto-rows-fr` forces both grid rows to the same track size so
+          // the taller of A/B/C/D pushes every other cell up to match. Paired
+          // with `h-full` on the buttons this gives four perfectly
+          // symmetrical tiles regardless of text length — no more lopsided
+          // bottom row when one answer is 3 lines and its neighbour is 1.
+          <div className="grid auto-rows-fr gap-3 md:grid-cols-2">
             {current!.choices.map((c, i) => {
               const style = ANSWER_STYLES[i % ANSWER_STYLES.length];
               const isPicked = picked === c;
@@ -497,7 +507,7 @@ export default function PlayPage() {
                   transition={{ duration: 0.18, delay: i * 0.04, ease: "easeOut" }}
                   aria-pressed={isPicked}
                   className={cn(
-                    "group relative flex items-center gap-3 overflow-hidden rounded-2xl px-5 py-5 text-left text-lg font-semibold text-white",
+                    "group relative flex h-full min-h-[4.5rem] items-center gap-3 overflow-hidden rounded-2xl px-5 py-4 text-left text-base font-semibold text-white md:text-lg",
                     "ring-1 ring-white/15 shadow-[var(--shadow-card)]",
                     "transition-all duration-200",
                     style.bg,
@@ -518,16 +528,16 @@ export default function PlayPage() {
                     />
                   ) : null}
                   <span
-                    className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/20 ring-1 ring-white/20"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/20 ring-1 ring-white/20"
                     aria-hidden
                   >
                     <ChoiceShape shape={style.shape} />
                   </span>
                   <span className="flex-1 leading-snug">{c}</span>
                   {showSpinner ? (
-                    <Loader2 className="h-5 w-5 animate-spin text-white/90" aria-hidden />
+                    <Loader2 className="h-5 w-5 shrink-0 animate-spin text-white/90" aria-hidden />
                   ) : (
-                    <span className="text-sm font-bold opacity-80">{style.label}</span>
+                    <span className="shrink-0 text-sm font-bold opacity-80">{style.label}</span>
                   )}
                 </motion.button>
               );
