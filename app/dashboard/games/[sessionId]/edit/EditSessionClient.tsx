@@ -170,7 +170,7 @@ export function EditSessionClient({ initial }: { initial: EditSessionInitial }) 
             <Label>Time zone</Label>
             <Select
               value={timezone || "UTC"}
-              onValueChange={(v) => setTimezone(v)}
+              onValueChange={(v) => setTimezone(v ?? "")}
               disabled={readonly}
             >
               <SelectTrigger>
