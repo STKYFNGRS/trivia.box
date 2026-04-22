@@ -3,6 +3,7 @@ import {
   BarChart3,
   Flag,
   FolderTree,
+  Gamepad2,
   Inbox,
   Library,
   ListChecks,
@@ -55,6 +56,13 @@ const TILES: SectionTile[] = [
     title: "Deck submissions",
     description: "Approve or reject host-submitted public decks.",
     icon: Inbox,
+    operatorOnly: true,
+  },
+  {
+    href: "/admin/house-games",
+    title: "House games",
+    description: "Schedule, pre-book, or cancel the free platform-hosted games.",
+    icon: Gamepad2,
     operatorOnly: true,
   },
   {

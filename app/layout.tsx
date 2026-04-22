@@ -55,17 +55,14 @@ export const metadata: Metadata = {
     "trivia for hosts",
     "trivia venue",
   ],
-  icons: {
-    icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
-      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
-    ],
-    apple: [
-      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
-    ],
-    shortcut: ["/favicon.ico"],
-  },
+  // Favicons are handled by Next's file-based icon convention:
+  //   - app/favicon.ico    → <link rel="icon" href="/favicon.ico">
+  //   - app/icon.svg       → <link rel="icon" type="image/svg+xml" ...>
+  //   - app/apple-icon.png → <link rel="apple-touch-icon" ...>
+  // Keeping them as convention files (rather than under `metadata.icons`)
+  // means Next injects the tags even for dynamically rendered routes and
+  // sidesteps a known issue where `dynamic = "force-dynamic"` on the root
+  // layout can drop the manually-listed icon <link>s from the initial HTML.
   openGraph: {
     type: "website",
     url: SITE_URL,

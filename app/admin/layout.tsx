@@ -39,6 +39,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                   Deck submissions
                 </Link>
               ) : null}
+              {siteOperator ? (
+                <Link href="/admin/house-games" className={navLinkClass}>
+                  House games
+                </Link>
+              ) : null}
               <Link href="/admin/flags" className={navLinkClass}>
                 Flags
               </Link>

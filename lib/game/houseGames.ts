@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, notInArray, or, sql } from "drizzle-orm";
 import { customAlphabet } from "nanoid";
 import { db } from "@/lib/db/client";
 import {
@@ -297,7 +297,10 @@ async function buildMixedRoundPlans(): Promise<HouseRoundPlan[]> {
  * still filling up. Throws only when no platform account is available or
  * the vetted bank is completely empty.
  */
-export async function createHouseSession(now: Date): Promise<{
+export async function createHouseSession(
+  now: Date,
+  options: { eventStartsAt?: Date } = {}
+): Promise<{
   sessionId: string;
   eventStartsAt: Date;
   theme: string | null;
@@ -311,7 +314,23 @@ export async function createHouseSession(now: Date): Promise<{
     );
   }
 
-  const eventStartsAt = nextBoundaryMinutes(now, HOUSE_INTERVAL_MIN);
+  // The cron always lands on the next :00/:30 boundary, but the admin UI
+  // can pre-schedule a house game at an explicit moment (e.g. 8pm Friday
+  // for a feature night). We still snap to whole seconds so the autopilot
+  // launcher's `<= now()` check isn't racing sub-second drift.
+  let eventStartsAt: Date;
+  if (options.eventStartsAt) {
+    eventStartsAt = new Date(options.eventStartsAt);
+    eventStartsAt.setUTCMilliseconds(0);
+    if (Number.isNaN(eventStartsAt.getTime())) {
+      throw new Error("Invalid eventStartsAt");
+    }
+    if (eventStartsAt.getTime() <= now.getTime()) {
+      throw new Error("eventStartsAt must be in the future");
+    }
+  } else {
+    eventStartsAt = nextBoundaryMinutes(now, HOUSE_INTERVAL_MIN);
+  }
 
   const theme = await pickHouseTheme();
   let mode: "themed" | "mixed" = "themed";
@@ -425,6 +444,112 @@ export async function scheduleNextHouseGame(now: Date): Promise<
   }
   const result = await createHouseSession(now);
   return { created: true, ...result };
+}
+
+/**
+ * List house games for the admin panel. Returns upcoming (pending / active
+ * / paused, start time in the near past or future) and recent completed
+ * / cancelled rows — split by status so the UI can render two sections.
+ * Kept here rather than in a route handler because the filter logic and
+ * the `houseGame = true` invariant belong next to the other house-game
+ * queries.
+ */
+export async function listHouseGames(
+  now: Date,
+  limit = 20
+): Promise<{
+  upcoming: Array<{
+    id: string;
+    joinCode: string;
+    status: string;
+    eventStartsAt: Date;
+    theme: string | null;
+  }>;
+  recent: Array<{
+    id: string;
+    joinCode: string;
+    status: string;
+    eventStartsAt: Date;
+    estimatedEndAt: Date | null;
+    theme: string | null;
+  }>;
+}> {
+  // Anything whose start time is still within the last hour and flagged
+  // active/pending/paused counts as "current" — mirrors `hasUpcomingHouseGame`.
+  const recentWindow = new Date(now.getTime() - 60 * 60 * 1000);
+
+  const upcomingRows = await db
+    .select({
+      id: sessions.id,
+      joinCode: sessions.joinCode,
+      status: sessions.status,
+      eventStartsAt: sessions.eventStartsAt,
+      theme: sessions.theme,
+    })
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.houseGame, true),
+        inArray(sessions.status, ["pending", "active", "paused"]),
+        gte(sessions.eventStartsAt, recentWindow)
+      )
+    )
+    .orderBy(asc(sessions.eventStartsAt))
+    .limit(limit);
+
+  const recentRows = await db
+    .select({
+      id: sessions.id,
+      joinCode: sessions.joinCode,
+      status: sessions.status,
+      eventStartsAt: sessions.eventStartsAt,
+      estimatedEndAt: sessions.estimatedEndAt,
+      theme: sessions.theme,
+    })
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.houseGame, true),
+        inArray(sessions.status, ["completed", "cancelled"]),
+        // Scoped to the last 7 days so the admin view stays focused. Older
+        // history is still accessible via the recap/session URLs.
+        gte(
+          sessions.eventStartsAt,
+          new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        ),
+        lte(sessions.eventStartsAt, now)
+      )
+    )
+    .orderBy(desc(sessions.eventStartsAt))
+    .limit(limit);
+
+  return { upcoming: upcomingRows, recent: recentRows };
+}
+
+/**
+ * Cancel a pending house game. Sets `status = cancelled` so the
+ * auto-launch cron stops picking it up, and clears the player-facing
+ * "Next house game in X min" chip. Returns `false` if the session isn't
+ * a pending house game (already started, wrong id, or not flagged).
+ */
+export async function cancelHouseGame(sessionId: string): Promise<boolean> {
+  const rows = await db
+    .select({
+      id: sessions.id,
+      houseGame: sessions.houseGame,
+      status: sessions.status,
+    })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
+  const row = rows[0];
+  if (!row || !row.houseGame) return false;
+  if (row.status !== "pending") return false;
+  await db
+    .update(sessions)
+    .set({ status: "cancelled" })
+    .where(eq(sessions.id, sessionId));
+  return true;
 }
 
 /** Public lookup: the next upcoming or currently-live house game, if any. */
