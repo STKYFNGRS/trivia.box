@@ -51,7 +51,10 @@ type AnswerResult = {
  *  looks identical across hosted and solo play. */
 const SOLO_BRAND_IMAGE = "/logo.png";
 
-const REVEAL_MS = 1400;
+// Matches `AUTOPILOT_POST_REVEAL_MS` in `lib/game/hostActions.ts` so solo
+// and hosted games share the exact same 3-second "here's the right
+// answer" beat before advancing to the next question.
+const REVEAL_MS = 3000;
 
 export function SoloPlayClient({ sessionId }: { sessionId: string }) {
   const router = useRouter();

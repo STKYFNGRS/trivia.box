@@ -12,7 +12,6 @@ import {
   answerTopStripeStyle,
   PILL_CLASSES,
 } from "@/components/game/answerStyles";
-import { Countdown } from "@/components/game/Countdown";
 import { FinalStandings } from "@/components/game/FinalStandings";
 import { GameShell, buildVenueImageUrl } from "@/components/game/GameShell";
 import { useGameChannel } from "@/lib/ably/useGameChannel";
@@ -282,14 +281,24 @@ export default function PlayPage() {
 
   const [picked, setPicked] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [lastIsCorrect, setLastIsCorrect] = useState<boolean | null>(null);
 
   // Client-side fallback marker for manual timer mode.
   const clientStartedAtMsRef = useRef<number>(Date.now());
   useEffect(() => {
     setPicked(null);
     setSubmitting(false);
+    setLastIsCorrect(null);
     clientStartedAtMsRef.current = Date.now();
   }, [activeQid]);
+
+  // Local clock tick driving the horizontal timer bar below. Server is
+  // still the source of truth for `timerStartedAtMs` — this just paints.
+  const [now, setNow] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 200);
+    return () => clearInterval(id);
+  }, []);
 
   const disabled = submitting || lockedForActive || revealedForActive || !!pausedAt;
   const timerSeconds = current?.timerSeconds ?? null;
@@ -364,7 +373,10 @@ export default function PlayPage() {
     try {
       let attempt = await postAnswer(activeQid, choice);
       if (attempt.res.ok && attempt.data.ok) {
-        toast.message(attempt.data.isCorrect ? "Correct!" : "Nice try");
+        // Stash correctness so the inline reveal card below the choices
+        // can say "Correct!" / "Nice try" without needing another API
+        // roundtrip. Solo already does the same thing via `lastResult`.
+        setLastIsCorrect(attempt.data.isCorrect ?? null);
         return;
       }
 
@@ -381,7 +393,7 @@ export default function PlayPage() {
           if (freshQid && freshQid !== activeQid && freshStatus === "active") {
             attempt = await postAnswer(freshQid, choice);
             if (attempt.res.ok && attempt.data.ok) {
-              toast.message(attempt.data.isCorrect ? "Correct!" : "Nice try");
+              setLastIsCorrect(attempt.data.isCorrect ?? null);
               return;
             }
           }
@@ -459,23 +471,56 @@ export default function PlayPage() {
             <span className="tabular-nums text-white">{myLeaderboard.score}</span>
           </span>
         ) : null}
-        {current?.body ? (
-          <Countdown
-            timerSeconds={timerSeconds}
-            timerStartedAtMs={timerStartedAtMs}
-            locked={lockedForActive}
-            size="md"
-          />
-        ) : null}
       </div>
     </>
   );
 
   const showChoices = !!current?.choices?.length && !pausedAt && !completed;
 
+  // Solo-style horizontal timer bar. Replaces the old circular Countdown
+  // ring in the top bar so hosted play and solo play read the same at a
+  // glance. `now` is ticked locally (~5 Hz) so the bar animates smoothly,
+  // but `remainingMs` is derived off the server's `timerStartedAtMs` so
+  // every screen agrees on "how much time is left" regardless of tab
+  // latency. Frozen when the question is locked, revealed, paused, or
+  // the session has completed — in those states the bar drops to 0 rather
+  // than lying about remaining time.
+  const timerFrozen =
+    lockedForActive || revealedForActive || !!pausedAt || completed;
+  const totalTimerMs = (timerSeconds ?? 0) * 1000;
+  const remainingTimerMs =
+    timerStartedAtMs && totalTimerMs > 0
+      ? Math.max(0, totalTimerMs - (now - timerStartedAtMs))
+      : 0;
+  const timerPct =
+    totalTimerMs > 0
+      ? Math.max(0, Math.min(100, (remainingTimerMs / totalTimerMs) * 100))
+      : 0;
+
   return (
     <GameShell venueImageUrl={venueImageUrl} topBar={topBar}>
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 md:gap-5">
+        {current?.body && !completed ? (
+          <>
+            <div className="flex items-center justify-end text-[11px] font-semibold uppercase tracking-[0.22em] text-white/60">
+              <span className="tabular-nums text-white/80">
+                {timerFrozen
+                  ? "--"
+                  : `${(remainingTimerMs / 1000).toFixed(1)}s`}
+              </span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full bg-[var(--stage-accent)] transition-[width]"
+                style={{
+                  width: `${timerFrozen ? 0 : timerPct}%`,
+                  transitionDuration: "180ms",
+                }}
+              />
+            </div>
+          </>
+        ) : null}
+
         <section
           className={cn(
             "relative rounded-3xl bg-[var(--stage-glass)] px-6 py-5 md:px-8 md:py-6",
@@ -642,6 +687,43 @@ export default function PlayPage() {
               );
             })}
           </div>
+        ) : null}
+
+        {revealedForActive && correctChoice ? (
+          <motion.div
+            key="revealed"
+            initial={{ opacity: 0, y: 6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            className={cn(
+              "mx-auto flex w-full max-w-md flex-col items-center gap-2 rounded-2xl px-6 py-4 text-center",
+              "bg-[var(--stage-glass)] ring-1 ring-white/10 backdrop-blur-md",
+              "shadow-[var(--shadow-card)]",
+            )}
+          >
+            <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/60">
+              <CheckCircle2
+                className={cn(
+                  "h-3.5 w-3.5",
+                  lastIsCorrect === true
+                    ? "text-[var(--answer-emerald)]"
+                    : "text-[var(--answer-rose)]",
+                )}
+                aria-hidden
+              />
+              Answer
+            </span>
+            <div className="text-xl font-semibold text-white">
+              {correctChoice}
+            </div>
+            <div className="text-xs text-white/60">
+              {picked == null
+                ? "Time's up"
+                : lastIsCorrect === true
+                ? "Correct!"
+                : "Nice try"}
+            </div>
+          </motion.div>
         ) : null}
 
         <div aria-live="polite" className="flex flex-col items-center gap-2">
