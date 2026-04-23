@@ -318,7 +318,7 @@ export function JoinClient() {
             </div>
           ) : isLobbyMissing ? (
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 text-sm text-white/80 shadow-[var(--shadow-card)] backdrop-blur">
-              That code doesn't match any game. Double-check with the host, or{" "}
+              That code doesn&rsquo;t match any game. Double-check with the host, or{" "}
               <Link
                 href="/games/upcoming"
                 className="font-semibold text-white underline underline-offset-4"
