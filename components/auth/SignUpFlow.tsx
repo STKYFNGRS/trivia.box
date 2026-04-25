@@ -13,33 +13,49 @@ import { cn } from "@/lib/utils";
 
 type Step = "profile" | "clerk";
 
-const USERNAME_RE = /^[a-zA-Z0-9_-]{2,24}$/;
+/**
+ * Mirrors `sanitizeUsername` in `lib/players.ts` so the live preview matches
+ * what the server will actually allocate. The server still owns uniqueness
+ * (it appends `_2`, `_3`, ... on collision via `uniqueUsername`); the preview
+ * just shows the base shape so the auto-derive isn't a surprise.
+ */
+function previewHandle(raw: string): string {
+  const s = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "")
+    .slice(0, 20);
+  return s.length >= 2 ? s : "";
+}
 
 export function SignUpFlow() {
   const [step, setStep] = useState<Step>("profile");
 
   const [displayName, setDisplayName] = useState("");
-  const [username, setUsername] = useState("");
   const [city, setCity] = useState("");
-  const [touched, setTouched] = useState<{ username?: boolean; displayName?: boolean; city?: boolean }>({});
+  const [touched, setTouched] = useState<{ displayName?: boolean; city?: boolean }>({});
 
-  const usernameValue = username.trim();
   const displayNameValue = displayName.trim();
   const cityValue = city.trim();
+  const handlePreview = previewHandle(displayNameValue);
 
-  const usernameOk = USERNAME_RE.test(usernameValue);
-  const displayNameOk = displayNameValue.length > 1;
+  const displayNameOk = displayNameValue.length > 1 && handlePreview.length >= 2;
   const cityOk = cityValue.length > 1;
-  const canContinue = usernameOk && displayNameOk && cityOk;
+  const canContinue = displayNameOk && cityOk;
 
   const unsafeMetadata = useMemo(
     () => ({
       account_type: "player" as const,
       name: displayNameValue,
       city: cityValue,
-      player_username: usernameValue.toLowerCase(),
+      // Server-side `sanitizeUsername` + `uniqueUsername` reshape this into the
+      // final `players.username`. We send the raw display name so the server
+      // does the canonical sanitization and collision-suffix work.
+      player_username: displayNameValue,
     }),
-    [displayNameValue, cityValue, usernameValue]
+    [displayNameValue, cityValue]
   );
 
   const currentStep = step === "profile" ? 1 : 2;
@@ -64,34 +80,8 @@ export function SignUpFlow() {
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="username" className="text-white/80">
-                  Username
-                </Label>
-                <Input
-                  id="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  onBlur={() => setTouched((t) => ({ ...t, username: true }))}
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  placeholder="letters, numbers, _ or -"
-                  aria-invalid={touched.username && !usernameOk ? true : undefined}
-                  className="border-white/15 bg-white/[0.06] text-white placeholder:text-white/40"
-                />
-                {touched.username && !usernameOk ? (
-                  <p className="text-xs font-medium text-rose-300">
-                    Use 2–24 characters: letters, numbers, underscores, or hyphens.
-                  </p>
-                ) : (
-                  <p className="text-xs text-white/60">
-                    2–24 characters. Shown on leaderboards and your public profile.
-                  </p>
-                )}
-              </div>
-
-              <div className="grid gap-2">
                 <Label htmlFor="display" className="text-white/80">
-                  Display name
+                  Player name
                 </Label>
                 <Input
                   id="display"
@@ -99,15 +89,24 @@ export function SignUpFlow() {
                   onChange={(e) => setDisplayName(e.target.value)}
                   onBlur={() => setTouched((t) => ({ ...t, displayName: true }))}
                   autoComplete="nickname"
-                  placeholder="Shown on the big screen during games"
+                  placeholder="Shown on leaderboards and the big screen during games"
                   aria-invalid={touched.displayName && !displayNameOk ? true : undefined}
                   className="border-white/15 bg-white/[0.06] text-white placeholder:text-white/40"
                 />
                 {touched.displayName && !displayNameOk ? (
                   <p className="text-xs font-medium text-rose-300">
-                    Pick a display name at least 2 characters long.
+                    Pick a name at least 2 characters long, with at least 2 letters or numbers.
                   </p>
-                ) : null}
+                ) : handlePreview ? (
+                  <p className="text-xs text-white/60">
+                    Your profile will live at{" "}
+                    <span className="font-mono text-white/85">trivia.box/u/{handlePreview}</span>.
+                  </p>
+                ) : (
+                  <p className="text-xs text-white/60">
+                    We&rsquo;ll auto-generate a public profile URL from this name.
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -165,7 +164,7 @@ export function SignUpFlow() {
               type="button"
               disabled={!canContinue}
               onClick={() => {
-                setTouched({ username: true, displayName: true, city: true });
+                setTouched({ displayName: true, city: true });
                 if (canContinue) setStep("clerk");
               }}
               className="h-11 bg-[var(--stage-accent)] px-5 text-slate-950 hover:bg-[var(--stage-accent)]/90"
@@ -182,7 +181,7 @@ export function SignUpFlow() {
             <h1 className="text-3xl font-black tracking-tight">Verify your email</h1>
             <p className="mt-2 text-sm text-white/70">
               We&rsquo;ll send a one-time code to finish setting up{" "}
-              <span className="font-semibold text-white">@{usernameValue.toLowerCase()}</span>.
+              <span className="font-semibold text-white">@{handlePreview}</span>.
             </p>
           </div>
 
