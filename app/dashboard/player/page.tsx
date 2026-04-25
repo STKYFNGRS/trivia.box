@@ -19,20 +19,7 @@ import { getPublicPlayerStats } from "@/lib/game/publicPlayerStats";
 import { getPlayerByAccountId } from "@/lib/players";
 import { getScopedPlayerRank } from "@/lib/stats/aggregate";
 import { xpToLevel } from "@/lib/xp";
-
-function formatMs(ms: number | null | undefined): string | null {
-  if (ms == null) return null;
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
-}
-
-function formatRank(rank: number | null | undefined): string | null {
-  if (rank == null) return null;
-  if (rank === 1) return "1st";
-  if (rank === 2) return "2nd";
-  if (rank === 3) return "3rd";
-  return `${rank}th`;
-}
+import { formatMs, formatRank } from "@/lib/format";
 
 export default async function PlayerDashboardPage() {
   const account = await getCurrentAccount();

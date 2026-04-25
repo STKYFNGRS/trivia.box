@@ -4,8 +4,15 @@ import { db } from "@/lib/db/client";
 import { sessions } from "@/lib/db/schema";
 
 /**
- * Returns the next upcoming (or currently live) house game for the Play hub.
- * Public, read-only, safe to cache briefly.
+ * GET /api/game/public/house — public HTTP surface.
+ *
+ * Returns the next upcoming (or currently live) house game.
+ *
+ * Not consumed by the in-repo app. The `/play` Play-hub renders from
+ * `lib/game/houseGames` directly as an RSC. This route is kept as the
+ * external contract for embeds, mobile clients, and future partner
+ * integrations — read-only, safe to cache briefly, and the response shape
+ * should stay stable.
  */
 export async function GET() {
   const now = new Date();

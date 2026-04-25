@@ -2,8 +2,15 @@ import { NextResponse } from "next/server";
 import { getMarketplaceDeck } from "@/lib/deckMarketplace";
 
 /**
- * Public detail view for a single approved deck. Returns null for private /
+ * GET /api/decks/[id]/public — public HTTP surface.
+ *
+ * Public detail view for a single approved deck. Returns 404 for private or
  * unapproved decks so anonymous pokes can't enumerate.
+ *
+ * Not consumed by the in-repo app. The `/decks/[id]` page calls
+ * `getMarketplaceDeck` directly as an RSC. This route is kept as the external
+ * contract for embeds, mobile clients, and future partner integrations —
+ * keep the response shape stable.
  */
 export async function GET(
   _req: Request,

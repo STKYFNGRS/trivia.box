@@ -2,6 +2,7 @@ import { and, eq, ilike, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { questionDrafts, questions } from "@/lib/db/schema";
 
+/** @internal Exported only for `dedupe.test.ts`; production code should call the public `dedupeWithinBatchParaphrase` / `duplicateScoreForBody`. */
 export function normalizeBodyForDedupe(body: string): string {
   return body
     .toLowerCase()
@@ -75,11 +76,13 @@ export function getDuplicateRejectThreshold(): number {
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 1;
 }
 
+/** @internal Exported only for `dedupe.test.ts`; not part of the public dedupe API. */
 export function tokenSetForOverlap(body: string): Set<string> {
   const norm = normalizeBodyForDedupe(body);
   return new Set(norm.split(" ").filter((w) => w.length > 2));
 }
 
+/** @internal Exported only for `dedupe.test.ts`; not part of the public dedupe API. */
 export function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
   let inter = 0;
   for (const x of a) if (b.has(x)) inter += 1;

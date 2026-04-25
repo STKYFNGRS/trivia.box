@@ -11,6 +11,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getPublicPlayerStats } from "@/lib/game/publicPlayerStats";
 import { xpToLevel } from "@/lib/xp";
+import { formatMs, formatRank } from "@/lib/format";
 
 export async function generateMetadata(props: {
   params: Promise<{ username: string }>;
@@ -38,20 +39,6 @@ export async function generateMetadata(props: {
       description,
     },
   };
-}
-
-function formatMs(ms: number | null | undefined): string | null {
-  if (ms == null) return null;
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
-}
-
-function formatRank(rank: number | null | undefined): string | null {
-  if (rank == null) return null;
-  if (rank === 1) return "1st";
-  if (rank === 2) return "2nd";
-  if (rank === 3) return "3rd";
-  return `${rank}th`;
 }
 
 export default async function PublicPlayerPage(props: {

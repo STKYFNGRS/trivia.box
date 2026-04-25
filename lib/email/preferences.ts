@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { emailPreferences } from "@/lib/db/schema";
 
-export type EmailPreferenceRow = typeof emailPreferences.$inferSelect;
+type EmailPreferenceRow = typeof emailPreferences.$inferSelect;
 
 export type EmailPreferences = {
   prizeWon: boolean;

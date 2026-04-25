@@ -1,6 +1,7 @@
 import { and, count, eq, gte, inArray, notInArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { questionVenueHistory, questions } from "@/lib/db/schema";
+import { shuffleArray } from "@/lib/game/shuffleChoices";
 
 export type PulledQuestion = typeof questions.$inferSelect;
 
@@ -35,15 +36,6 @@ export async function getVettedQuestionsByOrderedIds(
     ordered.push(q);
   }
   return ordered;
-}
-
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
 }
 
 function roundBoost(roundNumber: number): number {
@@ -167,7 +159,7 @@ export async function smartPullQuestions(input: {
   }
 
   if (picked.length < input.count && enforceSubcatCap) {
-    for (const q of shuffle(base)) {
+    for (const q of shuffleArray(base)) {
       if (picked.length >= input.count) break;
       if (picked.some((p) => p.id === q.id)) continue;
       const c = subcatCounts.get(q.subcategory) ?? 0;
@@ -178,7 +170,7 @@ export async function smartPullQuestions(input: {
   }
 
   if (picked.length < input.count) {
-    for (const q of shuffle(base)) {
+    for (const q of shuffleArray(base)) {
       if (picked.length >= input.count) break;
       if (picked.some((p) => p.id === q.id)) continue;
       picked.push(q);

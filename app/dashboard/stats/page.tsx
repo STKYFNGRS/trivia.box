@@ -18,6 +18,7 @@ import { listPlayerClaims } from "@/lib/prizes";
 import { getScopedPlayerRank } from "@/lib/stats/aggregate";
 import { cn } from "@/lib/utils";
 import { xpToLevel } from "@/lib/xp";
+import { formatMs, formatRank } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -25,20 +26,6 @@ export const metadata = {
   title: "Stats",
   description: "Your lifetime score, trophies, prize claims and recent games across every venue.",
 };
-
-function formatMs(ms: number | null | undefined): string | null {
-  if (ms == null) return null;
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
-}
-
-function formatRank(rank: number | null | undefined): string | null {
-  if (rank == null) return null;
-  if (rank === 1) return "1st";
-  if (rank === 2) return "2nd";
-  if (rank === 3) return "3rd";
-  return `${rank}th`;
-}
 
 /**
  * Personal player-stats page for the signed-in account. This is the host/admin

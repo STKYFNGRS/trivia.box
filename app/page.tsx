@@ -109,7 +109,7 @@ function Hero({ houseCountdown }: { houseCountdown: string }) {
               lineHeight: 0.92,
             }}
           >
-            <span className="block">Trivia that</span>
+            <span className="block">Know-it-alls</span>
             <span
               className="block bg-clip-text text-transparent"
               style={{
@@ -117,14 +117,14 @@ function Hero({ houseCountdown }: { houseCountdown: string }) {
                   "linear-gradient(90deg, var(--neon-magenta) 0%, var(--neon-amber) 40%, var(--neon-lime) 70%, var(--neon-cyan) 100%)",
               }}
             >
-              earns the pint.
+              welcome.
             </span>
           </h1>
 
           <p className="mt-7 max-w-2xl text-lg leading-relaxed text-white/75 md:text-xl">
-            A free house game every 30 minutes, live venue nights, and
-            server-scored solo runs. One app for players, one dashboard for
-            hosts. No CSV wrangling.
+            Free rounds every 30 minutes. Real venue nights down the block. A
+            host dashboard so clean it feels like cheating. One app for players,
+            one dashboard for bars, zero CSVs.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -142,7 +142,7 @@ function Hero({ houseCountdown }: { houseCountdown: string }) {
                   "0 0 0 1px color-mix(in oklab, var(--neon-magenta) 45%, transparent), 0 16px 50px -12px color-mix(in oklab, var(--neon-magenta) 70%, transparent)",
               }}
             >
-              Play solo now
+              Play now
               <ArrowRight className="ml-1 size-4 transition-transform group-hover/btn:translate-x-0.5" />
             </Link>
             <Link
@@ -152,13 +152,13 @@ function Hero({ houseCountdown }: { houseCountdown: string }) {
                 "h-12 border-white/20 bg-white/5 px-6 text-base font-semibold text-white backdrop-blur hover:bg-white/10 hover:text-white"
               )}
             >
-              Have a code? Join
+              Got a code?
             </Link>
             <Link
               href="/sign-up"
               className="ml-1 inline-flex items-center gap-1 text-sm font-medium text-white/65 underline-offset-4 hover:text-white hover:underline"
             >
-              Host a game
+              Run trivia at your bar
               <ArrowRight className="size-3" />
             </Link>
           </div>
@@ -218,11 +218,11 @@ function LiveTicker({
     },
     {
       icon: <Timer className="size-3.5" />,
-      text: "Next free house game drops every :00 and :30",
+      text: "Free house game every :00 and :30. Set your watch.",
     },
     {
       icon: <Library className="size-3.5" />,
-      text: "Community decks are free to play",
+      text: "Every community deck. Free forever. No paywalls mid-round.",
     },
     ...(category
       ? [
@@ -278,7 +278,7 @@ function PlayModes({ nextHouse }: { nextHouse: string }) {
       tone: "magenta",
       title: "Solo run",
       subtitle: "Any time · 5-25 Qs",
-      body: "Pick your pace and categories. Server-timed, server-scored. Sign in to keep your streaks and XP.",
+      body: "One tap, five minutes, zero commitment. Server-scored so you can't cheat yourself. Streaks and XP follow you across devices.",
       cta: { href: "/play/solo", label: "Start a solo run" },
       meta: "Chill · Standard · Blitz",
       icon: <PlayCircle className="size-5" />,
@@ -287,7 +287,7 @@ function PlayModes({ nextHouse }: { nextHouse: string }) {
       tone: "lime",
       title: "House game",
       subtitle: "Free · Every 30 min",
-      body: "Our always-on autopilot round. Jump in anonymously, climb the live board, brag in the group chat.",
+      body: "Our always-on free round. Jump in anonymously, climb the live board, text the group chat \u201Cyou're going DOWN.\u201D",
       cta: { href: "/play", label: "See the next round" },
       meta: nextHouse,
       icon: <Radio className="size-5" />,
@@ -296,7 +296,7 @@ function PlayModes({ nextHouse }: { nextHouse: string }) {
       tone: "cyan",
       title: "Venue nights",
       subtitle: "Live · Near you",
-      body: "Real bars. Real hosts. Real pints. Find a public room tonight and bring the group chat.",
+      body: "Real bars. Real hosts. Real jars of questionable bar nuts. Grab a table, grab a code, heckle accordingly.",
       cta: { href: "/games/upcoming", label: "Find a live game" },
       meta: "Hosted + autopilot rooms",
       icon: <Mic2 className="size-5" />,
@@ -309,11 +309,12 @@ function PlayModes({ nextHouse }: { nextHouse: string }) {
         <HomeSectionFade>
           <SectionEyebrow accent="cyan">Three ways to play</SectionEyebrow>
           <SectionTitle>
-            Pick your <span className="italic">mode</span>.
+            Pick your <span className="italic">poison</span>.
           </SectionTitle>
           <SectionLead>
-            Trivia that works whether you&rsquo;re killing 10 minutes at a bus
-            stop or filling a bar with 80 teams on a Tuesday.
+            Killing ten minutes at a bus stop or packing 80 teams into your
+            back room on a Tuesday &mdash; same app, same engine, same
+            you&rsquo;re-not-allowed-to-google-it energy.
           </SectionLead>
         </HomeSectionFade>
 
@@ -386,9 +387,9 @@ function DeckPreview({
                 Built by your favorite <span className="italic">freaks</span>.
               </SectionTitle>
               <SectionLead className="mt-3">
-                Weird categories, sharp writing, venue-ready formats. Play any
-                deck free — and if you write one, we&rsquo;ll put it on bar TVs
-                nationwide.
+                Niche categories, sharp writing, venue-ready formats. Every
+                deck free to play &mdash; and if yours bangs, we&rsquo;ll ship
+                it to bar TVs nationwide.
               </SectionLead>
             </div>
             <Link
@@ -494,8 +495,9 @@ function CreatorPitch() {
               </span>
             </SectionTitle>
             <SectionLead className="mt-3">
-              Write once, get played by thousands. Earn badges as your decks
-              climb the ratings. We&rsquo;re cooking real creator payouts next.
+              Write it once. Get played by thousands. Earn badges as your
+              decks climb the ratings. Real creator payouts are cooking
+              &mdash; you want to be on the list when that timer dings.
             </SectionLead>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link
@@ -533,25 +535,25 @@ function CreatorPitch() {
                   icon: <Crown className="size-4" />,
                   tone: "amber" as NeonTone,
                   title: "Hall of Flame",
-                  body: "Top-rated decks get featured on the marketplace.",
+                  body: "Top-rated decks get featured front-and-center on the marketplace. Fame, but nerdier.",
                 },
                 {
                   icon: <Trophy className="size-4" />,
                   tone: "magenta" as NeonTone,
                   title: "Creator badges",
-                  body: "Earn perks as your decks rack up plays and ratings.",
+                  body: "Unlock perks as your decks rack up plays and ratings. Your profile page does the bragging for you.",
                 },
                 {
                   icon: <Wand2 className="size-4" />,
                   tone: "cyan" as NeonTone,
                   title: "AI-assist",
-                  body: "Draft questions in bulk with smart category balance.",
+                  body: "Draft questions in bulk with category balance built in. You bring the weird angles, we bring the structure.",
                 },
                 {
                   icon: <Gamepad2 className="size-4" />,
                   tone: "lime" as NeonTone,
                   title: "Play-ready",
-                  body: "Decks drop straight into solo, house, and venue modes.",
+                  body: "Every deck drops straight into solo, house, and venue modes. Zero reformatting.",
                 },
               ].map((p) => (
                 <NeonCard key={p.title} tone={p.tone} className="flex flex-col gap-2 p-5">
@@ -634,36 +636,92 @@ function StatsBand({
 }
 
 function HostPitch() {
+  // "Why trivia night?" grid runs ABOVE the 3-step workflow so owners see
+  // the business case before the how-to. Four cards, one per tone, mirror
+  // the marketing NeonCard palette used elsewhere on the page.
+  const benefits: Array<{
+    tone: NeonTone;
+    title: string;
+    body: string;
+  }> = [
+    {
+      tone: "amber",
+      title: "Tuesdays that pay rent",
+      body: "The slowest night of the week turns into a reservation list. Regulars bring friends. Friends bring tabs.",
+    },
+    {
+      tone: "magenta",
+      title: "Regulars, forged weekly",
+      body: "Season-long leagues, running totals, rivalries. The team that wins in February will absolutely be there in July.",
+    },
+    {
+      tone: "cyan",
+      title: "The tab grows legs",
+      body: "90 minutes of rounds = two orders of drinks, one order of food, zero people leaving at halftime. Trivia night earns its keep.",
+    },
+    {
+      tone: "lime",
+      title: "No prep. No panic.",
+      body: "No printing, no host notes, no \u201Cdid I already ask this one?\u201D One tap launches. One phone runs the whole room.",
+    },
+  ];
+
   const steps = [
     {
       n: "01",
       title: "Make an account",
-      body: "Sign up, add your venue, pick a timezone. Two minutes flat.",
+      body: "Sign up, drop in your venue, pick a timezone. Two minutes, zero friction.",
     },
     {
       n: "02",
       title: "Pick a deck",
-      body: "Use a community deck, auto-generate one, or write your own.",
+      body: "Grab a community deck, auto-generate one in your vibe, or write your own. Mix and match rounds.",
     },
     {
       n: "03",
       title: "Press go",
-      body: "Big-screen TV, phone remote, leaderboard live. We handle timing and scoring.",
+      body: "TV on the wall, phone in your hand, live leaderboard on every table. We keep time and score \u2014 you keep the room going.",
     },
   ];
   return (
     <section className="relative py-20 md:py-28">
       <div className="mx-auto w-full max-w-7xl px-6">
         <HomeSectionFade>
-          <SectionEyebrow accent="amber">For hosts</SectionEyebrow>
+          <SectionEyebrow accent="amber">For bars &amp; hosts</SectionEyebrow>
           <SectionTitle>
-            Run trivia without the <span className="italic">spreadsheet</span>.
+            Pack the place. Skip the{" "}
+            <span className="italic">spreadsheet</span>.
           </SectionTitle>
           <SectionLead>
-            We do the timers, the scoring, the big-screen display, and the
-            anti-cheat. You do the heckling.
+            Trivia night is the highest-margin butts-in-seats play in
+            hospitality, and nobody should need a clipboard for it. We handle
+            timers, scoring, the big-screen display, anti-cheat, and prize
+            claims. You pour drinks and talk trash.
           </SectionLead>
         </HomeSectionFade>
+
+        <div className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+          {benefits.map((b) => (
+            <NeonCard
+              key={b.title}
+              tone={b.tone}
+              className="flex flex-col gap-3 p-6"
+            >
+              <span
+                aria-hidden
+                className="inline-block h-0.5 w-10"
+                style={{
+                  background: `linear-gradient(90deg, var(--neon-${b.tone}), transparent)`,
+                }}
+              />
+              <div className="font-[family-name:var(--font-display)] text-lg font-bold tracking-tight text-white">
+                {b.title}
+              </div>
+              <p className="text-sm leading-relaxed text-white/70">{b.body}</p>
+            </NeonCard>
+          ))}
+        </div>
+
         <div className="mt-12 grid gap-5 md:grid-cols-3">
           {steps.map((s, i) => (
             <NeonCard
@@ -699,7 +757,7 @@ function HostPitch() {
                 "0 0 0 1px color-mix(in oklab, var(--neon-amber) 35%, transparent), 0 16px 50px -14px color-mix(in oklab, var(--neon-amber) 60%, transparent)",
             }}
           >
-            Host a game
+            Run trivia at your bar
           </Link>
           <Link
             href="/dashboard"
@@ -728,7 +786,7 @@ function LeaderboardTeaser({
         <HomeSectionFade>
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <SectionEyebrow accent="violet">The Hall of Fame</SectionEyebrow>
+              <SectionEyebrow accent="violet">Hall of Fame</SectionEyebrow>
               <SectionTitle>
                 Top players <span className="italic">right now</span>.
               </SectionTitle>
@@ -748,8 +806,8 @@ function LeaderboardTeaser({
         <div className="mt-8 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
           {players.length === 0 ? (
             <div className="p-8 text-sm text-white/60">
-              The leaderboard boots up as soon as the first games wrap. Play a
-              solo run to get on it.
+              The board boots up the second the first games wrap. Run a solo
+              round and stake your claim.
             </div>
           ) : (
             <ul>
@@ -787,11 +845,11 @@ function FaqSection() {
   const faqs: Array<{ q: string; a: string }> = [
     {
       q: "Do I need an account to play?",
-      a: "Solo runs work fully anonymously — jump in with one tap. Multiplayer games (house rounds + venue nights) ask for a free account so your name appears on the leaderboard and your streaks, XP, and rank persist across devices.",
+      a: "Solo runs are one-tap anonymous. Multiplayer (house rounds + venue nights) wants a free account so your name hits the leaderboard and your streaks, XP, and rank follow you across devices.",
     },
     {
       q: "How often do free house games run?",
-      a: "Every 30 minutes, around the clock. The autopilot scheduler queues the next round automatically, so there's always one within reach.",
+      a: "Every 30 minutes, around the clock. The autopilot queues the next round automatically — there's always one within reach.",
     },
     {
       q: "What does a host pay for?",
@@ -803,11 +861,23 @@ function FaqSection() {
     },
     {
       q: "Is this just Kahoot in a new coat?",
-      a: "We share the 4-choice format, but trivia.box is venue-first: real scheduling, venue pages, prize claim flows, anti-cheat, and a public marketplace for decks.",
+      a: "We share the 4-choice format. Everything else is venue-first — scheduled games, venue pages, prize-claim flows, anti-cheat, and a public marketplace for decks. Kahoot is for classrooms. This is for bars.",
     },
     {
       q: "Does it work on TV?",
       a: "Yes — every game has a big-screen display URL that auto-advances in sync with the host's phone.",
+    },
+    {
+      q: "What do I need in the venue to run a game?",
+      a: "One TV (or any screen), one phone, one Wi-Fi signal. That's the whole kit. No console, no dongles, no \u201Cwas the app supposed to update?\u201D",
+    },
+    {
+      q: "Will my staff need training?",
+      a: "If they can open an email, they can run a round. Hand a phone to whoever's on bar, press Launch, go pour.",
+    },
+    {
+      q: "What if nobody shows up the first night?",
+      a: "Your venue lands on the public \u201Cupcoming games\u201D page the moment you schedule a night, so players find you for free. Most new rooms book 2-3 tables in week one and 8+ by week four.",
     },
   ];
   return (
@@ -864,8 +934,9 @@ function Closer() {
           Ready?
         </h2>
         <p className="mx-auto mt-6 max-w-xl text-lg text-white/70">
-          A round takes about 5 minutes. The house game is free, always on, and
-          one tap away.
+          A round takes five minutes. The house game is free and one tap
+          away. Hosting takes two minutes to set up. Tuesdays don&rsquo;t have
+          to taste like regret.
         </p>
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
           <Link
@@ -882,7 +953,7 @@ function Closer() {
                 "0 0 0 1px color-mix(in oklab, var(--neon-magenta) 45%, transparent), 0 18px 60px -14px color-mix(in oklab, var(--neon-magenta) 70%, transparent)",
             }}
           >
-            Play solo now
+            Play now
           </Link>
           <Link
             href="/join"
@@ -891,13 +962,13 @@ function Closer() {
               "h-12 border-white/20 bg-white/5 px-6 text-base font-semibold text-white backdrop-blur hover:bg-white/10 hover:text-white"
             )}
           >
-            Have a code?
+            Got a code?
           </Link>
           <Link
             href="/sign-up"
             className="ml-1 inline-flex items-center gap-1 text-sm font-medium text-white/65 underline-offset-4 hover:text-white hover:underline"
           >
-            Host a game
+            Run trivia at your bar
             <ArrowRight className="size-3" />
           </Link>
         </div>

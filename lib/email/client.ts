@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { sentEmails } from "@/lib/db/schema";
 
@@ -144,17 +144,4 @@ export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
  */
 export function isEmailConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY?.trim());
-}
-
-/**
- * Test-only peek into the ledger. Not used at runtime, but exported so we
- * can assert behaviour from the vitest suite.
- */
-export async function __peekSentEmail(kind: string, dedupeKey: string) {
-  const rows = await db
-    .select()
-    .from(sentEmails)
-    .where(and(eq(sentEmails.kind, kind), eq(sentEmails.dedupeKey, dedupeKey)))
-    .limit(1);
-  return rows[0] ?? null;
 }

@@ -7,9 +7,14 @@ import { listPlayerClaims } from "@/lib/prizes";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 4.2: return the current player's prize claims. Response mirrors
- * `PlayerClaimRow` — the dashboard player card + the dedicated claims
- * page both consume this endpoint.
+ * GET /api/me/player/claims — public HTTP surface.
+ *
+ * Returns the signed-in player's prize claims. Response mirrors `PlayerClaimRow`.
+ *
+ * Not consumed by the in-repo app. The dashboard player card and the dedicated
+ * claims page render from `lib/prizes#listPlayerClaims` directly as RSCs. This
+ * route is kept as the external contract for embeds, mobile clients, and future
+ * partner integrations — keep the response shape stable.
  */
 export async function GET(req: Request) {
   try {

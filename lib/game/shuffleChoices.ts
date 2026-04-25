@@ -41,12 +41,32 @@ function mulberry32(seed: number): () => number {
  * Return a copy of `items` shuffled deterministically for the given
  * `sessionQuestionId`. Callers should pass the question's correct answer +
  * wrong answers already combined (see `buildChoiceList`).
+ *
+ * @internal Exported for the unit tests in `shuffleChoices.test.ts`. Production
+ * code should call `buildChoiceList` instead — that's the public surface.
  */
 export function shuffleChoicesFor<T>(sessionQuestionId: string, items: T[]): T[] {
   const out = [...items];
   const rng = mulberry32(fnv1a32(sessionQuestionId));
   for (let i = out.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+/**
+ * Non-deterministic Fisher-Yates shuffle that returns a fresh copy of `arr`.
+ * Used by callers that don't need the per-question seed contract (e.g. the
+ * smart-pull diversity pass, solo question selection). Prefer
+ * `shuffleChoicesFor` whenever the same input must shuffle the same way for
+ * different viewers — that's the contract that backs hosted-game choice
+ * ordering.
+ */
+export function shuffleArray<T>(arr: T[]): T[] {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
     [out[i], out[j]] = [out[j], out[i]];
   }
   return out;

@@ -9,7 +9,7 @@ import { getCategoryLabels } from "@/lib/questionTaxonomy";
 import { db } from "@/lib/db/client";
 import { questionDrafts } from "@/lib/db/schema";
 
-export type GeneratedQuestion = {
+type GeneratedQuestion = {
   body: string;
   correctAnswer: string;
   wrongAnswers: [string, string, string];
@@ -19,7 +19,7 @@ export type GeneratedQuestion = {
   timeHint?: number;
 };
 
-export type QuestionPipelineInput = {
+type QuestionPipelineInput = {
   category: string;
   topicHint?: string | null;
   /** Canonical label from `question_subcategories.label` when targeted. */
@@ -39,7 +39,7 @@ export type QuestionPipelineInput = {
   forcedDifficulty?: 1 | 2 | 3;
 };
 
-export type QuestionPipelineResult = {
+type QuestionPipelineResult = {
   draftId: string;
   duplicateScore: number;
   selfReview: "pass" | "fail" | "skipped";

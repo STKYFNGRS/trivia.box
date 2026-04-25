@@ -15,10 +15,15 @@ import { getPlayerByAccountId } from "@/lib/players";
 import { xpToLevel } from "@/lib/xp";
 
 /**
- * GET /api/me/player/stats
+ * GET /api/me/player/stats — public HTTP surface.
  *
  * Returns the denormalized `player_stats` rollup, recent sessions joined to
- * their venues, and earned achievements. Powers the player dashboard.
+ * their venues, and earned achievements for the signed-in account.
+ *
+ * Not consumed by the in-repo app. The `/dashboard/player` and `/u/[username]`
+ * pages render from `lib/game/publicPlayerStats` directly as RSCs. This route
+ * is kept as the external contract for embeds, mobile clients, and future
+ * partner integrations — keep the response shape stable.
  */
 export async function GET() {
   const { userId } = await auth();

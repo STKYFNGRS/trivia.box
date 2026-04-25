@@ -3,7 +3,17 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { accounts, sessions } from "@/lib/db/schema";
 
-/** Public: upcoming listed games for player discovery (no join codes). */
+/**
+ * GET /api/game/public/upcoming — public HTTP surface.
+ *
+ * Upcoming listed games for player discovery. Never includes join codes —
+ * those only appear at the venue's display screen.
+ *
+ * Not consumed by the in-repo app. The `/games/upcoming` and `/play` pages
+ * read `sessions` directly as RSCs. This route is kept as the external
+ * contract for embeds, mobile clients, and future partner integrations —
+ * keep the response shape stable.
+ */
 export async function GET() {
   const now = new Date();
   const rows = await db

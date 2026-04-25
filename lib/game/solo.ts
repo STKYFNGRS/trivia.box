@@ -19,6 +19,7 @@ import {
   SOLO_SPEEDS,
   type SoloSpeed,
 } from "@/lib/game/soloConstants";
+import { shuffleArray } from "@/lib/game/shuffleChoices";
 
 export {
   SOLO_SPEEDS,
@@ -58,15 +59,6 @@ export type SoloQuestionPublic = {
   shownAtMs: number;
   totalQuestions: number;
 };
-
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
 
 /**
  * Pull `count` vetted, non-retired questions for a solo session, optionally
@@ -109,7 +101,7 @@ async function pickSoloQuestions(input: {
 
 /** Shuffled choices for a question. Only the 4 options — no indication of correctness. */
 function publicChoices(row: typeof questions.$inferSelect): string[] {
-  return shuffle([row.correctAnswer, ...row.wrongAnswers]);
+  return shuffleArray([row.correctAnswer, ...row.wrongAnswers]);
 }
 
 export async function startSoloSession(input: {

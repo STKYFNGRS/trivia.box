@@ -2,8 +2,15 @@ import { NextResponse } from "next/server";
 import { listMarketplaceDecks, type DeckSort } from "@/lib/deckMarketplace";
 
 /**
- * Public deck marketplace listing. Anonymous-friendly; cached briefly so
- * Vercel / the browser can coalesce identical queries from the index page.
+ * GET /api/decks/public — public HTTP surface.
+ *
+ * Anonymous-friendly deck marketplace listing. Cached briefly so Vercel / the
+ * browser can coalesce identical queries.
+ *
+ * Not consumed by the in-repo app. The `/decks` index page calls
+ * `listMarketplaceDecks` directly as an RSC. This route is kept as the
+ * external contract for embeds, mobile clients, and future partner
+ * integrations — keep the response shape stable.
  *
  * Query params:
  *   - sort: popular | top_rated | new

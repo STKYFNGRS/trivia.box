@@ -6,8 +6,16 @@ import {
 } from "@/lib/venue";
 
 /**
- * Public venue summary used by the lobby page and any future subdomain rewrite.
- * Never returns the join code — the display screen shows it at the venue.
+ * GET /api/venues/[slug]/public — public HTTP surface.
+ *
+ * Public venue summary plus the venue's currently-active or next upcoming
+ * session. Never returns the join code — the display screen shows it at the
+ * venue.
+ *
+ * Not consumed by the in-repo app. The `/v/[slug]` lobby page calls
+ * `lib/venue` helpers directly as an RSC. This route is kept as the external
+ * contract for embeds, future subdomain rewrites, mobile clients, and
+ * partner integrations — keep the response shape stable.
  */
 export async function GET(
   _req: Request,

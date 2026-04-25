@@ -5,13 +5,12 @@ import { getCurrentAccount } from "@/lib/accounts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
 import { getSessionAnalytics } from "@/lib/game/sessionAnalytics";
+import { formatMs } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
 function fmtMs(ms: number | null | undefined): string {
-  if (ms == null) return "—";
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
+  return formatMs(ms) ?? "—";
 }
 
 function difficultyLabel(n: number): string {

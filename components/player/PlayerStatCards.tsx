@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatMs, formatRank } from "@/lib/format";
 
 /**
  * Presentational-only wrapper that renders the three "Career / Points & speed
@@ -24,20 +25,6 @@ export type PlayerStatCardsProps = {
     third: number;
   };
 };
-
-function formatMs(ms: number | null | undefined): string | null {
-  if (ms == null) return null;
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
-}
-
-function formatRank(rank: number | null | undefined): string | null {
-  if (rank == null) return null;
-  if (rank === 1) return "1st";
-  if (rank === 2) return "2nd";
-  if (rank === 3) return "3rd";
-  return `${rank}th`;
-}
 
 export function PlayerStatCards({ stats }: PlayerStatCardsProps) {
   const fastest = formatMs(stats.fastestCorrectMs);

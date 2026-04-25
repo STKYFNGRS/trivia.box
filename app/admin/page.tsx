@@ -9,6 +9,7 @@ import {
   ListChecks,
   ShieldAlert,
   Sparkles,
+  Upload,
   Users2,
 } from "lucide-react";
 import { isSiteAdminOperator } from "@/lib/siteAdmin";
@@ -88,6 +89,13 @@ const TILES: SectionTile[] = [
     title: "Anti-cheat",
     description: "Review clustered fingerprints and disqualify suspicious answers.",
     icon: ShieldAlert,
+    operatorOnly: true,
+  },
+  {
+    href: "/admin/import",
+    title: "Emergency bulk import",
+    description: "Paste raw CSV/JSON to seed vetted questions when the AI pipeline is down.",
+    icon: Upload,
     operatorOnly: true,
   },
 ];

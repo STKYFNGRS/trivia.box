@@ -1,4 +1,4 @@
-import { and, countDistinct, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
+import { and, countDistinct, desc, eq, gte, lt, lte, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   accounts,
@@ -15,7 +15,6 @@ import {
 } from "@/lib/db/schema";
 import { sendMail, isEmailConfigured } from "@/lib/email/client";
 import {
-  ensureEmailPreferences,
   getEmailPreferences,
   isEmailKindAllowed,
 } from "@/lib/email/preferences";
@@ -146,7 +145,7 @@ function isoDateOnly(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-export type WeeklyDigestSummary = {
+type WeeklyDigestSummary = {
   /** Number of emails we actually queued for send (excluding duplicates). */
   queued: number;
   /** Number of candidate players evaluated. */
@@ -506,11 +505,3 @@ export async function sendUpcomingSessionBatch(
   return summary;
 }
 
-/**
- * Helper for the notifications UI — lazy-upsert the row and return the
- * current set of flags in display order.
- */
-export async function readOrInitEmailPreferences(accountId: string) {
-  void inArray; // keep import shape stable for future multi-account reads.
-  return ensureEmailPreferences(accountId);
-}
