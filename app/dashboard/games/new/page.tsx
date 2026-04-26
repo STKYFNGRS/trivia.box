@@ -7,8 +7,8 @@ export default function NewGamePage() {
       <SectionHeader
         as="h1"
         eyebrow="New game"
-        title="Plan a session"
-        description="Set when the event runs (with time zone) and optional prize info for players browsing upcoming games. Then configure rounds, preview, and launch."
+        title="Create a lobby"
+        description="Pick a venue and start time, set the game shape, and we'll generate a join code you can share right away. Start the game when everyone's ready."
       />
       <GameSetup />
     </div>

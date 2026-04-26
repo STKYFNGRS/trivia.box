@@ -15,8 +15,13 @@ import { startNextQuestion, type SessionForHost } from "@/lib/game/hostActions";
 /**
  * Launch window guard bounds. Exposed so the launch route and the autopilot
  * cron can share the same "launchable now" definition.
+ *
+ * The early-launch window was removed: hosts now create a lobby (which
+ * pre-allocates the join code) and explicitly click Start when they're
+ * ready. They can do that whenever they like — including hours before
+ * the scheduled start time. The late window still exists so a session
+ * that's been forgotten doesn't surprise-launch days later.
  */
-export const LAUNCH_EARLY_MS = 60 * 60 * 1000; // 60 minutes before scheduled start
 export const LAUNCH_LATE_MS = 3 * 60 * 60 * 1000; // 3 hours after scheduled start
 
 export type SessionRow = {
@@ -37,7 +42,6 @@ export type SessionRow = {
 
 export type LaunchBlockedReason =
   | "already_launched"
-  | "too_early"
   | "too_late"
   | "venue_busy";
 
@@ -86,9 +90,6 @@ export async function launchSession(input: {
   if (!force && session.eventStartsAt) {
     const now = Date.now();
     const startMs = session.eventStartsAt.getTime();
-    if (now < startMs - LAUNCH_EARLY_MS) {
-      throw new LaunchBlockedError("too_early", session.eventStartsAt);
-    }
     if (now > startMs + LAUNCH_LATE_MS) {
       throw new LaunchBlockedError("too_late", session.eventStartsAt);
     }

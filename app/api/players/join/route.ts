@@ -3,6 +3,7 @@ import { and, desc, eq, gt } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAccountByClerkUserId } from "@/lib/accounts";
+import { publishGameEvent } from "@/lib/ably/server";
 import { track } from "@/lib/analytics/server";
 import { apiErrorResponse } from "@/lib/apiError";
 import { db } from "@/lib/db/client";
@@ -57,13 +58,26 @@ export async function POST(req: Request) {
       status: sessions.status,
       venueAccountId: sessions.venueAccountId,
       houseGame: sessions.houseGame,
+      joinCode: sessions.joinCode,
     })
     .from(sessions)
     .where(eq(sessions.joinCode, code))
     .limit(1);
   const session = sessionRows[0];
-  if (!session || session.status !== "active") {
-    return NextResponse.json({ error: "Session not available" }, { status: 400 });
+  if (!session) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  }
+  // Players can drop into the lobby once a join code exists (status
+  // `pending`) and stay through `active`. We reject terminal / paused
+  // states so a stale link can't sneak someone into the wrong screen.
+  if (
+    session.status !== "pending" &&
+    session.status !== "active"
+  ) {
+    return NextResponse.json(
+      { error: "This game isn't accepting players right now." },
+      { status: 400 }
+    );
   }
 
   const playerRow = await getPlayerByAccountId(account.id);
@@ -120,12 +134,29 @@ export async function POST(req: Request) {
     .where(and(eq(playerSessions.sessionId, session.id), eq(playerSessions.playerId, playerId)))
     .limit(1);
 
-  if (existingJoin.length === 0) {
+  const isFirstJoin = existingJoin.length === 0;
+  if (isFirstJoin) {
     await db.insert(playerSessions).values({
       playerId,
       sessionId: session.id,
       venueAccountId: session.venueAccountId,
     });
+  }
+
+  // Tell every connected client (host lobby roster, display, other
+  // players) that someone just joined. We only fire this on the first
+  // insert so a refresh / rejoin doesn't spam the channel.
+  if (isFirstJoin) {
+    try {
+      await publishGameEvent(session.joinCode, "player_joined", {
+        playerId,
+        username,
+        joinedAt: new Date().toISOString(),
+      });
+    } catch {
+      // Realtime is best-effort — the lobby endpoint will still return
+      // the new player on next bootstrap.
+    }
   }
 
   const existingPv = await db

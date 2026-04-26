@@ -202,7 +202,6 @@ export function JoinClient() {
 
   const padded = joinCode.padEnd(6, "·");
   const isLobbyWaiting = lobby.kind === "waiting";
-  const isLobbyReady = lobby.kind === "ready";
   const isLobbyEnded = lobby.kind === "ended";
   const isLobbyMissing = lobby.kind === "missing";
   const isLobbyCooldown = lobby.kind === "cooldown";
@@ -391,7 +390,7 @@ export function JoinClient() {
 
               <Button
                 type="submit"
-                disabled={loading || joinCode.length !== 6 || !isLobbyReady}
+                disabled={loading || joinCode.length !== 6 || isLobbyEnded || isLobbyMissing}
                 className="mt-6 h-12 w-full text-base font-bold uppercase tracking-[0.12em]"
                 style={{
                   background:

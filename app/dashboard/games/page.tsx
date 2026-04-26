@@ -21,7 +21,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StatusPill } from "@/components/ui/status-pill";
 import { CancelSessionButton } from "@/components/dashboard/CancelSessionButton";
 import { HostClaimsCard } from "@/components/dashboard/HostClaimsCard";
-import { LaunchNowButton } from "@/components/dashboard/LaunchNowButton";
 import { RemoveSessionButton } from "@/components/dashboard/RemoveSessionButton";
 import { db } from "@/lib/db/client";
 import { sessions } from "@/lib/db/schema";
@@ -193,10 +192,13 @@ export default async function GamesPage() {
           <div className="grid gap-3">
             {upcomingRows.map((s) => {
               const isPending = s.status === "pending";
+              // Real join codes are now allocated at creation; the legacy
+              // `pending_` prefix only shows up on rows from before the
+              // lobby flow shipped, so we tolerate it here without pinning
+              // future logic to it.
               const isActive =
                 s.status === "active" && !s.joinCode.startsWith("pending_");
               const startsAt = s.eventStartsAt ? new Date(s.eventStartsAt) : null;
-              const isAutopilot = s.runMode === "autopilot";
               return (
                 <Card key={s.id} className="shadow-[var(--shadow-card)]">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0">
@@ -204,9 +206,9 @@ export default async function GamesPage() {
                       {s.joinCode}
                     </CardTitle>
                     <div className="flex items-center gap-2">
-                      {isPending && isAutopilot && startsAt ? (
+                      {isPending && startsAt ? (
                         <span className="text-muted-foreground text-xs tabular-nums">
-                          Auto-launch {startsAt.toLocaleString()}
+                          Starts {startsAt.toLocaleString()}
                         </span>
                       ) : null}
                       {statusPillFor(s.status as SessionStatus, s.runMode)}
@@ -237,7 +239,12 @@ export default async function GamesPage() {
                     ) : null}
                     {isPending ? (
                       <>
-                        <LaunchNowButton sessionId={s.id} size="sm" />
+                        <Link
+                          href={`/dashboard/games/${s.id}/lobby`}
+                          className={cn(buttonVariants({ size: "sm" }))}
+                        >
+                          Open lobby
+                        </Link>
                         <Link
                           href={`/dashboard/games/${s.id}/edit`}
                           className={cn(

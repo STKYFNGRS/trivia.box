@@ -54,6 +54,8 @@ type BootstrapResponse = {
   currentQuestion?: BootstrapQuestion | null;
   totalQuestions?: number;
   completedCount?: number;
+  /** Players currently sitting in the lobby (pending or active sessions). */
+  lobbyCount?: number;
   leaderboard?: LeaderboardEntry[];
   serverTimeMs?: number;
 };
@@ -602,15 +604,32 @@ export default function PlayPage() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.2 }}
-                className="flex flex-col items-center gap-3 py-6 text-center"
+                className="flex flex-col items-center gap-3 py-8 text-center"
               >
                 <span className="relative flex h-2.5 w-2.5">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white/60 opacity-75" />
                   <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white/80" />
                 </span>
                 <span className="text-[11px] font-semibold uppercase tracking-[0.3em] text-white/60">
-                  Waiting for the host…
+                  {boot?.status === "pending"
+                    ? "You're in the lobby"
+                    : "Waiting for the host…"}
                 </span>
+                {boot?.status === "pending" ? (
+                  <>
+                    <p className="max-w-sm text-sm text-white/80">
+                      The host will start the game any minute. We&rsquo;ll drop you
+                      straight into question one when they do.
+                    </p>
+                    {typeof boot?.lobbyCount === "number" && boot.lobbyCount > 0 ? (
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-white/55">
+                        {boot.lobbyCount === 1
+                          ? "Just you so far"
+                          : `${boot.lobbyCount} players in the lobby`}
+                      </p>
+                    ) : null}
+                  </>
+                ) : null}
               </motion.div>
             )}
           </AnimatePresence>

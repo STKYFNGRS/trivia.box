@@ -1,4 +1,4 @@
-import { and, eq, lte, or, sql } from "drizzle-orm";
+import { and, eq, lte, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { cronAuthOrResponse } from "@/lib/cronAuth";
@@ -14,24 +14,12 @@ const bodySchema = z.object({
 });
 
 /**
- * Grace window (minutes) we give a hosted session's host to click Launch
- * before the cron steps in and auto-launches on their behalf. Autopilot
- * sessions have no grace — the whole point of autopilot is that the
- * server drives everything, so they launch exactly on `eventStartsAt`.
- *
- * Not exported: Next.js route modules only allow the HTTP method exports
- * plus a short allowlist of route config exports, so we keep this as a
- * module-local constant. See PROJECT_GUIDE.md §13 (row 21) for rationale.
- */
-const HOSTED_AUTO_LAUNCH_GRACE_MIN = 5;
-
-/**
- * Vercel cron / worker: finds pending sessions whose `eventStartsAt` is
- * due and launches them. Autopilot launches exactly at the scheduled
- * time; hosted launches only after a 5-minute grace window so a host
- * who's running late gets rescued but an early host still drives the
- * launch themselves. Guarded by `CRON_SECRET` / `x-vercel-cron` via
- * `lib/cronAuth.ts`.
+ * Vercel cron / worker: finds pending **house** sessions whose
+ * `eventStartsAt` is due and launches them. Host-created sessions
+ * (autopilot or hosted) are deliberately not auto-launched: the host
+ * runs the lobby and clicks Start when ready, so the cron only takes
+ * over for the platform's free-to-play house games. Guarded by
+ * `CRON_SECRET` / `x-vercel-cron` via `lib/cronAuth.ts`.
  *
  * Recommended schedule: every 1 minute. Both GET and POST are accepted —
  * Vercel Cron issues GET by default, and we still expose POST so local /
@@ -53,15 +41,11 @@ async function run(req: Request) {
   }
 
   const now = new Date(parsed.data.nowMs ?? Date.now());
-  const hostedGraceCutoff = new Date(
-    now.getTime() - HOSTED_AUTO_LAUNCH_GRACE_MIN * 60 * 1000
-  );
 
-  // Two launch lanes keyed off runMode:
-  //   - autopilot → launch exactly when eventStartsAt arrives
-  //   - hosted    → launch only if the host never pressed Launch within
-  //                 HOSTED_AUTO_LAUNCH_GRACE_MIN of the scheduled time
-  // A single OR-ed where keeps this as one query per tick.
+  // House-game-only lane: any pending house game whose start time has
+  // arrived. Host-created sessions live in their dashboard lobby and
+  // are launched by the host clicking Start — they never get rescued
+  // by this cron.
   const due = await db
     .select({
       id: sessions.id,
@@ -78,16 +62,8 @@ async function run(req: Request) {
     .where(
       and(
         eq(sessions.status, "pending"),
-        or(
-          and(
-            eq(sessions.runMode, "autopilot"),
-            lte(sessions.eventStartsAt, now)
-          ),
-          and(
-            eq(sessions.runMode, "hosted"),
-            lte(sessions.eventStartsAt, hostedGraceCutoff)
-          )
-        )
+        eq(sessions.houseGame, true),
+        lte(sessions.eventStartsAt, now)
       )
     )
     .orderBy(sql`${sessions.eventStartsAt} ASC`)
@@ -116,17 +92,11 @@ async function run(req: Request) {
           joinCode: row.joinCode,
         },
       });
-      // Tag hosted auto-launches so ops can distinguish host-driven
-      // launches (via /api/game/sessions/[id]/launch) from grace-lapse
-      // launches (this cron) in the Sentry / PostHog trail.
-      const reason =
-        row.runMode === "hosted" ? "hosted_grace_lapsed" : undefined;
       results.push({
         sessionId: row.id,
         ok: true,
         joinCode,
         runMode: row.runMode,
-        reason,
       });
     } catch (err) {
       if (err instanceof LaunchBlockedError) {
@@ -149,7 +119,6 @@ async function run(req: Request) {
 
   return NextResponse.json({
     now: now.toISOString(),
-    hostedGraceCutoff: hostedGraceCutoff.toISOString(),
     launched: results.filter((r) => r.ok).length,
     blocked: results.filter((r) => !r.ok).length,
     results,

@@ -36,14 +36,6 @@ export async function POST(
       switch (e.reason) {
         case "already_launched":
           return NextResponse.json({ error: "Session already launched" }, { status: 400 });
-        case "too_early":
-          return NextResponse.json(
-            {
-              error: "Too early to launch. Add ?force=1 to launch now.",
-              eventStartsAt: e.eventStartsAt,
-            },
-            { status: 400 }
-          );
         case "too_late":
           return NextResponse.json(
             {

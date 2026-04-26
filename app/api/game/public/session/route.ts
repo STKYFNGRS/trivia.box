@@ -4,6 +4,7 @@ import { apiErrorResponse } from "@/lib/apiError";
 import { db } from "@/lib/db/client";
 import {
   accounts,
+  playerSessions,
   questions,
   rounds,
   sessionQuestions,
@@ -155,6 +156,23 @@ export async function GET(req: Request) {
     }
   }
 
+  // Lightweight roster count — players sitting in a `pending` lobby
+  // get to see "12 others waiting" while the host queues the start.
+  // Only computed for pending/active so completed games don't pay the
+  // extra round-trip on every client poll.
+  let lobbyCount = 0;
+  if (session.status === "pending" || session.status === "active") {
+    try {
+      const [row] = await db
+        .select({ value: sql<number>`count(*)::int` })
+        .from(playerSessions)
+        .where(eq(playerSessions.sessionId, session.id));
+      lobbyCount = typeof row?.value === "number" ? row.value : 0;
+    } catch {
+      lobbyCount = 0;
+    }
+  }
+
   // Leaderboard is cheap + useful to every client (play page renders its own
   // rank; display page shows standings between questions).
   let leaderboard: Array<{ playerId: string; username: string; score: number }> = [];
@@ -209,6 +227,7 @@ export async function GET(req: Request) {
     totalQuestions,
     completedCount,
     leaderboard,
+    lobbyCount,
     /** Monotonic client cache-buster. */
     serverTimeMs: Date.now(),
   });

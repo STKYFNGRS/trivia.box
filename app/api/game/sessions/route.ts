@@ -15,6 +15,7 @@ import {
 } from "@/lib/db/schema";
 import { slugifyDeckName } from "@/lib/decks";
 import { wallClockToUtcDate } from "@/lib/game/eventStartUtc";
+import { generateUniqueJoinCode } from "@/lib/game/joinCode";
 import {
   countSmartPullEligible,
   getVettedQuestionsByOrderedIds,
@@ -529,7 +530,11 @@ export async function POST(req: Request) {
     throw e;
   }
 
-  const joinCode = `pending_${nanoid(18)}`;
+  // Allocate a real 6-character join code at creation time so the host
+  // can share it (and players can sit in the lobby) before the session
+  // is launched. `launchSession` detects an already-allocated code and
+  // re-uses it, so this is safe end-to-end.
+  const joinCode = await generateUniqueJoinCode();
 
   const totalQuestionCount = planned.reduce((sum, p) => sum + p.questions.length, 0);
   const breaksConfig = body.breaks && body.breaks.length > 0 ? body.breaks : null;
