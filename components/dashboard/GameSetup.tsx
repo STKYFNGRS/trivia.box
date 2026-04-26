@@ -7,9 +7,15 @@ import { toast } from "sonner";
 import {
   CalendarClock,
   ChevronDown,
+  Dice5,
+  Gift,
   Layers,
+  ListChecks,
   MapPin,
   Settings2,
+  Shuffle,
+  Sparkles,
+  Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,10 +44,8 @@ import {
   computeEstimatedEndAt,
   estimatedDurationMinutes,
   totalBreakSeconds,
-  DEFAULT_SECONDS_PER_QUESTION,
-  SESSION_REVEAL_BUFFER_SECONDS,
-  SESSION_WARMUP_SECONDS,
 } from "@/lib/game/sessionEndTime";
+import { cn } from "@/lib/utils";
 
 type VenueOption = {
   venueAccountId: string;
@@ -87,6 +91,18 @@ type RoundLine = {
   /** Empty string means "inherit session default"; otherwise 5..60 step 5. */
   secondsPerQuestion: "" | TimerSeconds;
 };
+
+/**
+ * Top-level "where are the questions coming from" decision.
+ * - random: server picks vetted questions across categories per round
+ * - categories: host picks the category per round, server still smart-pulls
+ * - decks: host picks one of their (or a community) deck per round
+ *
+ * This drives the per-round controls visible in the form. The server payload
+ * still per-round sends `{ category, deckId? }` so the API doesn't need a
+ * matching mode field — picking a deck implies the source for that round.
+ */
+type QuestionSource = "random" | "categories" | "decks";
 
 function makeRoundLine(category: string): RoundLine {
   return {
@@ -158,6 +174,8 @@ export function GameSetup() {
   const [timerMode, setTimerMode] = useState<"auto" | "manual" | "hybrid">("auto");
   const [seconds, setSeconds] = useState<TimerSeconds>(20);
 
+  const [questionSource, setQuestionSource] = useState<QuestionSource>("random");
+
   const [venueDialogOpen, setVenueDialogOpen] = useState(false);
   const [addVenueOpen, setAddVenueOpen] = useState(false);
 
@@ -177,9 +195,6 @@ export function GameSetup() {
     )
   );
 
-  /** Round-detail accordion. Open the first round by default so it's discoverable. */
-  const [expandedRounds, setExpandedRounds] = useState<Set<number>>(() => new Set([0]));
-
   const browserTz =
     typeof Intl !== "undefined"
       ? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "America/Los_Angeles"
@@ -198,6 +213,9 @@ export function GameSetup() {
   >([]);
   const [onlineMeetingUrl, setOnlineMeetingUrl] = useState<string>("");
 
+  // Resize the round list when the round count changes. Existing rows are
+  // preserved (so toggling rounds 4 → 5 → 4 keeps your picks); new rows
+  // pull a unique random vetted category.
   useEffect(() => {
     setRoundLines((prev) => {
       const n = Math.min(12, Math.max(1, rounds));
@@ -217,6 +235,35 @@ export function GameSetup() {
       return next;
     });
   }, [rounds, categoryOptions]);
+
+  // When the host flips the question source we sync per-round defaults so
+  // the visible controls match. Random/categories use the existing category
+  // assignment; decks resets each row to the host's first deck if available.
+  useEffect(() => {
+    setRoundLines((prev) =>
+      prev.map((line) => {
+        if (questionSource === "random" || questionSource === "categories") {
+          return line.source === "random" ? line : { ...line, source: "random" };
+        }
+        // decks: prefer myDeck if the host has any, otherwise a community deck.
+        if (myDecks.length > 0) {
+          return {
+            ...line,
+            source: "myDeck",
+            myDeckId: line.myDeckId || myDecks[0]!.id,
+          };
+        }
+        if (publicDecks.length > 0) {
+          return {
+            ...line,
+            source: "communityDeck",
+            communityDeckId: line.communityDeckId || publicDecks[0]!.id,
+          };
+        }
+        return line;
+      })
+    );
+  }, [questionSource, myDecks, publicDecks]);
 
   async function refreshVenues(preferAccountId?: string) {
     setVenuesLoading(true);
@@ -308,7 +355,7 @@ export function GameSetup() {
           setPublicDecks((data.decks ?? []).filter((d) => d.questionCount > 0));
         }
       } catch {
-        // Non-fatal
+        // Non-fatal — host can still create games on random vetted questions.
       }
     })();
   }, []);
@@ -413,30 +460,6 @@ export function GameSetup() {
     }
   }, [endTimePreview, eventTimezone]);
 
-  /**
-   * When the host picks a total game length, derive question count from
-   * length ÷ (seconds + reveal buffer) and spread evenly across rounds.
-   */
-  const derivedPerRound = useMemo(() => {
-    const mins = Number(hostDurationMinutes);
-    if (!hostDurationMinutes || !Number.isFinite(mins) || mins <= 0) return null;
-    const secs = timerMode === "manual" ? DEFAULT_SECONDS_PER_QUESTION : seconds;
-    const perQ = Math.max(1, secs) + SESSION_REVEAL_BUFFER_SECONDS;
-    const breakSec = totalBreakSeconds(
-      breaks.filter((b) => b.afterRound >= 1 && b.afterRound < rounds && b.minutes > 0)
-    );
-    const usable = Math.max(perQ, mins * 60 - SESSION_WARMUP_SECONDS - breakSec);
-    const totalQuestions = Math.max(1, Math.floor(usable / perQ));
-    const rounded = Math.max(1, Math.floor(totalQuestions / Math.max(1, rounds)));
-    return Math.min(50, rounded);
-  }, [hostDurationMinutes, timerMode, seconds, rounds, breaks]);
-
-  useEffect(() => {
-    if (derivedPerRound !== null && derivedPerRound !== perRound) {
-      setPerRound(derivedPerRound);
-    }
-  }, [derivedPerRound, perRound]);
-
   function updateLine(idx: number, patch: Partial<RoundLine>) {
     setRoundLines((prev) => {
       const copy = [...prev];
@@ -447,15 +470,16 @@ export function GameSetup() {
     });
   }
 
-  function toggleRoundExpanded(idx: number) {
-    setExpandedRounds((prev) => {
-      const next = new Set(prev);
-      if (next.has(idx)) {
-        next.delete(idx);
-      } else {
-        next.add(idx);
-      }
-      return next;
+  function reshuffleRandomCategories() {
+    setRoundLines((prev) => {
+      if (categoryOptions.length === 0) return prev;
+      const used = new Set<string>();
+      return prev.map((line) => {
+        if (used.size >= categoryOptions.length) used.clear();
+        const label = pickRandomCategory(categoryOptions, used);
+        used.add(label);
+        return { ...line, category: label };
+      });
     });
   }
 
@@ -566,9 +590,11 @@ export function GameSetup() {
       ? ` · ${endTimePreview.breakMinutes} min breaks`
       : "");
 
+  const noDecksAvailable = myDecks.length === 0 && publicDecks.length === 0;
+
   return (
     <div className="flex flex-col gap-6 pb-24">
-      {/* Basics */}
+      {/* Where & When */}
       <Card className="shadow-[var(--shadow-card)]">
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -576,8 +602,7 @@ export function GameSetup() {
             <CardTitle className="tracking-tight">Where & when</CardTitle>
           </div>
           <CardDescription>
-            Pick the venue and the start time. Everything else has a smart default —
-            tweak it under <strong>Advanced</strong> below if you want to.
+            Pick the venue and the start time. Time zone defaults to your browser.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
@@ -696,9 +721,6 @@ export function GameSetup() {
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-muted-foreground text-xs">
-              Detected from your browser. Players see the event in their own zone.
-            </p>
           </div>
         </CardContent>
       </Card>
@@ -722,269 +744,195 @@ export function GameSetup() {
             <CardTitle className="tracking-tight">Game shape</CardTitle>
           </div>
           <CardDescription>
-            We default to {rounds} rounds with random vetted categories.
-            Adjust the count below; expand a round to swap its category or use one of your decks.
+            How long, who&apos;s driving, and where the questions come from.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
+        <CardContent className="grid gap-5">
+          {/* Run mode — segmented */}
           <div className="grid gap-2">
-            <Label>Rounds</Label>
-            <Input
-              type="number"
-              min={1}
-              max={12}
-              value={rounds}
-              onChange={(e) => setRounds(Number(e.target.value))}
-              className="tabular-nums"
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="duration-minutes">Game length (minutes)</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                id="duration-minutes"
-                type="number"
-                inputMode="numeric"
-                min={5}
-                max={480}
-                step={5}
-                value={hostDurationMinutes}
-                placeholder={endTimePreview ? String(endTimePreview.defaultDuration) : "60"}
-                onChange={(e) => setHostDurationMinutes(e.target.value)}
-                className="tabular-nums"
+            <Label>Run mode</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <RunModeOption
+                active={runMode === "autopilot"}
+                title="Autopilot"
+                subtitle="Server runs each round on a timer. Recommended."
+                onClick={() => setRunMode("autopilot")}
               />
-              {hostDurationMinutes ? (
-                <button
-                  type="button"
-                  onClick={() => setHostDurationMinutes("")}
-                  className="text-muted-foreground hover:text-foreground text-xs underline underline-offset-2"
-                >
-                  Clear
-                </button>
-              ) : null}
+              <RunModeOption
+                active={runMode === "hosted"}
+                title="Hosted"
+                subtitle="You tap Lock / Reveal / Next yourself."
+                onClick={() => setRunMode("hosted")}
+              />
             </div>
-            <p className="text-muted-foreground text-xs">
-              Optional — leave blank to set questions per round directly under Advanced.
-            </p>
           </div>
 
-          {derivedPerRound === null ? (
-            <div className="grid gap-2 md:col-span-2">
-              <Label>Questions per round</Label>
+          {/* Counts row */}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-2">
+              <Label htmlFor="rounds-input">Rounds</Label>
               <Input
+                id="rounds-input"
+                type="number"
+                min={1}
+                max={12}
+                value={rounds}
+                onChange={(e) => setRounds(Number(e.target.value))}
+                className="tabular-nums"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="per-round-input">Questions / round</Label>
+              <Input
+                id="per-round-input"
                 type="number"
                 min={1}
                 max={50}
                 value={perRound}
                 onChange={(e) => setPerRound(Number(e.target.value))}
-                className="tabular-nums max-w-[12rem]"
+                className="tabular-nums"
               />
             </div>
-          ) : (
-            <div className="md:col-span-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
-              <span className="text-muted-foreground">Derived: </span>
-              <span className="font-semibold tabular-nums">
-                {derivedPerRound} questions × {rounds} rounds = {derivedPerRound * rounds} total
-              </span>
-            </div>
-          )}
-
-          <div className="grid gap-2 md:col-span-2">
-            <Label>Round categories</Label>
             <div className="grid gap-2">
-              {roundLines.slice(0, rounds).map((line, idx) => {
-                const expanded = expandedRounds.has(idx);
-                return (
-                  <div
-                    key={idx}
-                    className="rounded-lg border bg-muted/20"
-                  >
-                    <div className="flex items-center gap-3 px-3 py-2">
-                      <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wider">
-                        Round {idx + 1}
-                      </span>
-                      <span className="flex-1 truncate text-sm font-medium">
-                        {line.category}
-                        {line.source !== "random" ? (
-                          <span className="text-muted-foreground ml-2 text-xs">
-                            · {line.source === "myDeck" ? "Your deck" : "Community deck"}
-                          </span>
-                        ) : null}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => toggleRoundExpanded(idx)}
-                        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs font-semibold underline underline-offset-2"
-                      >
-                        {expanded ? "Done" : "Customize"}
-                        <ChevronDown
-                          className={`size-3 transition-transform ${expanded ? "rotate-180" : ""}`}
-                          aria-hidden
-                        />
-                      </button>
-                    </div>
-                    {expanded ? (
-                      <div className="grid gap-3 border-t px-3 py-3 md:grid-cols-2">
-                        <div className="grid gap-1.5">
-                          <Label className="text-xs">Category</Label>
-                          <Select
-                            value={line.category}
-                            onValueChange={(v) => v && updateLine(idx, { category: v })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="max-h-72">
-                              {(categoryOptions.length > 0
-                                ? categoryOptions.map((c) => ({
-                                    label: c.label,
-                                    eligible: c.eligibleCount,
-                                    total: c.totalVetted,
-                                  }))
-                                : FALLBACK_CATEGORIES.map((label) => ({
-                                    label,
-                                    eligible: 0,
-                                    total: 0,
-                                  }))
-                              ).map((opt) => {
-                                const countLabel = categoryOptions.length > 0
-                                  ? ` — ${opt.eligible} ready${opt.eligible !== opt.total ? ` / ${opt.total} total` : ""}`
-                                  : "";
-                                const thin = categoryOptions.length > 0 && opt.eligible < perRound;
-                                return (
-                                  <SelectItem key={opt.label} value={opt.label} label={opt.label}>
-                                    <span className={thin ? "text-muted-foreground" : undefined}>
-                                      {opt.label}
-                                      <span className="text-muted-foreground">{countLabel}</span>
-                                    </span>
-                                  </SelectItem>
-                                );
-                              })}
-                            </SelectContent>
-                          </Select>
-                          {(() => {
-                            if (categoriesLoading || categoryOptions.length === 0) return null;
-                            const opt = categoryOptions.find((c) => c.label === line.category);
-                            if (!opt) {
-                              return (
-                                <p className="text-amber-600 dark:text-amber-500 text-xs">
-                                  No vetted questions tagged &quot;{line.category}&quot; yet.
-                                </p>
-                              );
-                            }
-                            if (line.source !== "random") return null;
-                            if (opt.eligibleCount < perRound) {
-                              return (
-                                <p className="text-amber-600 dark:text-amber-500 text-xs">
-                                  Only {opt.eligibleCount} available; this round needs {perRound}.
-                                </p>
-                              );
-                            }
-                            return null;
-                          })()}
-                        </div>
-                        <div className="grid gap-1.5">
-                          <Label className="text-xs">Source</Label>
-                          <Select
-                            value={line.source}
-                            onValueChange={(v) => v && updateLine(idx, { source: v as RoundSource })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="random">Trivia.Box random</SelectItem>
-                              <SelectItem value="myDeck">My decks</SelectItem>
-                              <SelectItem value="communityDeck">Community decks</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        {line.source === "myDeck" ? (
-                          <div className="grid gap-1.5 md:col-span-2">
-                            <Label className="text-xs">Pick one of your decks</Label>
-                            <Select
-                              value={line.myDeckId || "__none__"}
-                              onValueChange={(v) => v && updateLine(idx, { myDeckId: v === "__none__" ? "" : v })}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select a deck" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__none__">— choose a deck —</SelectItem>
-                                {myDecks.map((d) => (
-                                  <SelectItem key={d.id} value={d.id}>
-                                    {d.name} ({d.questionCount})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            {myDecks.length === 0 ? (
-                              <p className="text-muted-foreground text-xs">
-                                You don&apos;t have any decks yet.{" "}
-                                <Link href="/dashboard/decks" className="underline underline-offset-4">
-                                  Create one
-                                </Link>
-                                .
-                              </p>
-                            ) : null}
-                          </div>
-                        ) : null}
-                        {line.source === "communityDeck" ? (
-                          <div className="grid gap-1.5 md:col-span-2">
-                            <Label className="text-xs">Approved community decks</Label>
-                            <Select
-                              value={line.communityDeckId || "__none__"}
-                              onValueChange={(v) =>
-                                v && updateLine(idx, { communityDeckId: v === "__none__" ? "" : v })
-                              }
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select a community deck" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__none__">— choose a deck —</SelectItem>
-                                {publicDecks.map((d) => (
-                                  <SelectItem key={d.id} value={d.id}>
-                                    {d.name} ({d.questionCount}){d.ownerName ? ` · ${d.ownerName}` : ""}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        ) : null}
-                        <div className="grid gap-1.5">
-                          <Label className="text-xs">Timer override</Label>
-                          <Select
-                            value={line.secondsPerQuestion === "" ? "__inherit__" : String(line.secondsPerQuestion)}
-                            onValueChange={(v) => {
-                              if (!v) return;
-                              if (v === "__inherit__") {
-                                updateLine(idx, { secondsPerQuestion: "" });
-                              } else {
-                                updateLine(idx, { secondsPerQuestion: Number(v) as TimerSeconds });
-                              }
-                            }}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__inherit__">Use session default ({seconds}s)</SelectItem>
-                              {SECONDS_OPTIONS.map((n) => (
-                                <SelectItem key={n} value={String(n)}>
-                                  {n}s
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
+              <Label>Seconds / question</Label>
+              <Select
+                value={String(seconds)}
+                disabled={timerMode === "manual"}
+                onValueChange={(v) => v && setSeconds(Number(v) as TimerSeconds)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SECONDS_OPTIONS.map((n) => (
+                    <SelectItem key={n} value={String(n)}>
+                      {n}s
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
+
+          {/* Questions source */}
+          <div className="grid gap-3">
+            <div className="flex items-center justify-between gap-2">
+              <Label>Questions</Label>
+              {questionSource === "random" ? (
+                <button
+                  type="button"
+                  onClick={reshuffleRandomCategories}
+                  className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs font-semibold underline underline-offset-2"
+                >
+                  <Shuffle className="size-3.5" aria-hidden />
+                  Reshuffle categories
+                </button>
+              ) : null}
+            </div>
+            <div className="grid gap-2 md:grid-cols-3">
+              <SourceOption
+                active={questionSource === "random"}
+                icon={<Sparkles className="size-4" aria-hidden />}
+                title="Random vetted"
+                subtitle="We pick across categories."
+                onClick={() => setQuestionSource("random")}
+              />
+              <SourceOption
+                active={questionSource === "categories"}
+                icon={<ListChecks className="size-4" aria-hidden />}
+                title="Pick categories"
+                subtitle="Choose a topic per round."
+                onClick={() => setQuestionSource("categories")}
+              />
+              <SourceOption
+                active={questionSource === "decks"}
+                icon={<Wand2 className="size-4" aria-hidden />}
+                title="Use my decks"
+                subtitle={
+                  noDecksAvailable
+                    ? "No decks yet — create one first."
+                    : "Bring your own questions."
+                }
+                onClick={() => {
+                  if (noDecksAvailable) {
+                    toast.error("Create a deck first.", {
+                      action: {
+                        label: "Open decks",
+                        onClick: () => router.push("/dashboard/decks"),
+                      },
+                    });
+                    return;
+                  }
+                  setQuestionSource("decks");
+                }}
+                disabled={noDecksAvailable}
+              />
+            </div>
+
+            {/* Round list (varies by source) */}
+            <div className="grid gap-2">
+              {roundLines.slice(0, rounds).map((line, idx) => (
+                <RoundRow
+                  key={idx}
+                  index={idx}
+                  line={line}
+                  source={questionSource}
+                  categoryOptions={categoryOptions}
+                  categoriesLoading={categoriesLoading}
+                  myDecks={myDecks}
+                  publicDecks={publicDecks}
+                  perRound={perRound}
+                  onChange={(patch) => updateLine(idx, patch)}
+                />
+              ))}
+            </div>
+            {questionSource === "decks" && noDecksAvailable ? (
+              <p className="text-muted-foreground text-xs">
+                You don&apos;t have any decks yet.{" "}
+                <Link href="/dashboard/decks" className="underline underline-offset-4">
+                  Create a deck
+                </Link>{" "}
+                to pick your own questions.
+              </p>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Prize */}
+      <Card className="shadow-[var(--shadow-card)]">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Gift className="size-4 text-muted-foreground" aria-hidden />
+            <CardTitle className="tracking-tight">Prize</CardTitle>
+          </div>
+          <CardDescription>
+            Optional. Shown to players in the lobby and on the public listing if you toggle it on.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              className="size-4 accent-foreground"
+              checked={hasPrize}
+              onChange={(e) => setHasPrize(e.target.checked)}
+            />
+            <span className="text-sm">This game has a prize</span>
+          </label>
+          {hasPrize ? (
+            <div className="grid gap-1.5">
+              <Label htmlFor="prize-desc" className="text-xs">
+                Prize description
+              </Label>
+              <Input
+                id="prize-desc"
+                value={prizeDescription}
+                onChange={(e) => setPrizeDescription(e.target.value)}
+                placeholder="e.g. $50 bar tab for the winning team"
+              />
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -997,7 +945,7 @@ export function GameSetup() {
                 <Settings2 className="size-4 text-muted-foreground" aria-hidden />
                 <span className="font-semibold">Advanced settings</span>
                 <span className="text-muted-foreground text-xs">
-                  Run mode · timer · prize · breaks · meeting link
+                  Timer mode · package · meeting link · breaks
                 </span>
               </div>
               <ChevronDown
@@ -1006,26 +954,6 @@ export function GameSetup() {
               />
             </summary>
             <div className="grid gap-4 border-t px-6 py-5 md:grid-cols-2">
-              <div className="grid gap-2 md:col-span-2">
-                <Label>Run mode</Label>
-                <Select value={runMode} onValueChange={(v) => v && setRunMode(v as typeof runMode)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="autopilot">
-                      Autopilot — runs itself on each question&apos;s timer
-                    </SelectItem>
-                    <SelectItem value="hosted">
-                      Hosted — you tap Lock / Reveal / Next
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-muted-foreground text-xs">
-                  Autopilot is recommended; the server keeps the game moving even if you close the tab.
-                </p>
-              </div>
-
               <div className="grid gap-2">
                 <Label>Timer mode</Label>
                 <Select value={timerMode} onValueChange={(v) => v && setTimerMode(v as typeof timerMode)}>
@@ -1038,47 +966,13 @@ export function GameSetup() {
                     <SelectItem value="hybrid">Hybrid</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-muted-foreground text-xs">
+                  Auto runs the timer; Manual lets the host control reveal pacing.
+                </p>
               </div>
+
               <div className="grid gap-2">
-                <Label>Seconds per question</Label>
-                <Select
-                  value={String(seconds)}
-                  disabled={timerMode === "manual"}
-                  onValueChange={(v) => v && setSeconds(Number(v) as TimerSeconds)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SECONDS_OPTIONS.map((n) => (
-                      <SelectItem key={n} value={String(n)}>
-                        {n}s
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {runMode === "hosted" ? (
-                <div className="grid gap-2 md:col-span-2">
-                  <Label htmlFor="ends-at-override" className="text-sm">
-                    Exact end time (optional)
-                  </Label>
-                  <Input
-                    id="ends-at-override"
-                    type="datetime-local"
-                    value={hostEndsAtOverride}
-                    onChange={(e) => setHostEndsAtOverride(e.target.value)}
-                    className="sm:max-w-sm"
-                  />
-                  <p className="text-muted-foreground text-xs">
-                    Pin a wall-clock end. Wins over game length above.
-                  </p>
-                </div>
-              ) : null}
-
-              <div className="grid gap-2 md:col-span-2">
-                <Label>Question package (optional)</Label>
+                <Label>Question package</Label>
                 <Select
                   value={packageId || "__none__"}
                   disabled={packagesLoading}
@@ -1088,10 +982,10 @@ export function GameSetup() {
                   }}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={packagesLoading ? "Loading…" : "None — smart pull only"} />
+                    <SelectValue placeholder={packagesLoading ? "Loading…" : "None — smart pull"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">None — smart pull only</SelectItem>
+                    <SelectItem value="__none__">None — smart pull</SelectItem>
                     {packages.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
                         {p.name}
@@ -1100,6 +994,35 @@ export function GameSetup() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {runMode === "hosted" ? (
+                <>
+                  <div className="grid gap-2">
+                    <Label htmlFor="duration-minutes">Game length (mins, optional)</Label>
+                    <Input
+                      id="duration-minutes"
+                      type="number"
+                      inputMode="numeric"
+                      min={5}
+                      max={480}
+                      step={5}
+                      value={hostDurationMinutes}
+                      placeholder={endTimePreview ? String(endTimePreview.defaultDuration) : "60"}
+                      onChange={(e) => setHostDurationMinutes(e.target.value)}
+                      className="tabular-nums"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="ends-at-override">Exact end time (optional)</Label>
+                    <Input
+                      id="ends-at-override"
+                      type="datetime-local"
+                      value={hostEndsAtOverride}
+                      onChange={(e) => setHostEndsAtOverride(e.target.value)}
+                    />
+                  </div>
+                </>
+              ) : null}
 
               <div className="grid gap-2 md:col-span-2">
                 <Label htmlFor="online-meeting-url">Online meeting link (optional)</Label>
@@ -1117,38 +1040,16 @@ export function GameSetup() {
                 </p>
               </div>
 
-              <div className="md:col-span-2 grid gap-3 rounded-md border bg-muted/30 p-3">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-foreground"
-                      checked={listedPublic}
-                      onChange={(e) => setListedPublic(e.target.checked)}
-                    />
-                    <span className="text-sm">Show on public upcoming list</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-foreground"
-                      checked={hasPrize}
-                      onChange={(e) => setHasPrize(e.target.checked)}
-                    />
-                    <span className="text-sm">This game has a prize</span>
-                  </label>
-                </div>
-                {hasPrize ? (
-                  <div className="grid gap-2">
-                    <Label htmlFor="prize-desc" className="text-xs">Prize description</Label>
-                    <Input
-                      id="prize-desc"
-                      value={prizeDescription}
-                      onChange={(e) => setPrizeDescription(e.target.value)}
-                      placeholder="e.g. $50 bar tab for the winning team"
-                    />
-                  </div>
-                ) : null}
+              <div className="md:col-span-2">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-foreground"
+                    checked={listedPublic}
+                    onChange={(e) => setListedPublic(e.target.checked)}
+                  />
+                  <span className="text-sm">Show on public upcoming list</span>
+                </label>
               </div>
 
               <div className="grid gap-2 md:col-span-2">
@@ -1178,7 +1079,7 @@ export function GameSetup() {
                 </div>
                 {breaks.length === 0 ? (
                   <p className="text-muted-foreground text-xs">
-                    Optional intermissions between rounds. Add one to extend the game length.
+                    Optional intermissions between rounds.
                   </p>
                 ) : (
                   <div className="grid gap-2">
@@ -1266,7 +1167,11 @@ export function GameSetup() {
               ) : null}
             </p>
             <p className="text-muted-foreground">
-              {totalQuestions} total questions · you can share the join code immediately after creating the lobby.
+              {totalQuestions} total questions ·{" "}
+              {runMode === "autopilot"
+                ? "autopilot launches at start time; you can also Start now from the lobby"
+                : "you'll Start the game from the lobby when ready"}
+              .
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1280,6 +1185,231 @@ export function GameSetup() {
             </Button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function RunModeOption({
+  active,
+  title,
+  subtitle,
+  onClick,
+}: {
+  active: boolean;
+  title: string;
+  subtitle: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "flex flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-left transition",
+        active
+          ? "border-primary bg-primary/5 shadow-sm"
+          : "border-border bg-background hover:bg-muted/40"
+      )}
+    >
+      <span
+        className={cn(
+          "text-sm font-semibold",
+          active ? "text-foreground" : "text-foreground/90"
+        )}
+      >
+        {title}
+      </span>
+      <span className="text-muted-foreground text-xs">{subtitle}</span>
+    </button>
+  );
+}
+
+function SourceOption({
+  active,
+  icon,
+  title,
+  subtitle,
+  onClick,
+  disabled = false,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      className={cn(
+        "flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left transition",
+        active
+          ? "border-primary bg-primary/5 shadow-sm"
+          : "border-border bg-background hover:bg-muted/40",
+        disabled && "cursor-not-allowed opacity-60 hover:bg-background"
+      )}
+    >
+      <span
+        className={cn(
+          "mt-0.5 inline-flex size-6 flex-none items-center justify-center rounded-md",
+          active ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+        )}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold">{title}</span>
+        <span className="text-muted-foreground block text-xs">{subtitle}</span>
+      </span>
+    </button>
+  );
+}
+
+function RoundRow({
+  index,
+  line,
+  source,
+  categoryOptions,
+  categoriesLoading,
+  myDecks,
+  publicDecks,
+  perRound,
+  onChange,
+}: {
+  index: number;
+  line: RoundLine;
+  source: QuestionSource;
+  categoryOptions: CategoryOption[];
+  categoriesLoading: boolean;
+  myDecks: DeckOption[];
+  publicDecks: DeckOption[];
+  perRound: number;
+  onChange: (patch: Partial<RoundLine>) => void;
+}) {
+  const label = `Round ${index + 1}`;
+
+  if (source === "random") {
+    return (
+      <div className="bg-muted/20 flex items-center gap-3 rounded-md border px-3 py-2">
+        <span className="text-muted-foreground w-16 text-xs font-semibold uppercase tracking-wider">
+          {label}
+        </span>
+        <Dice5 className="text-muted-foreground size-4" aria-hidden />
+        <span className="flex-1 truncate text-sm">
+          {line.category}
+          <span className="text-muted-foreground"> · random vetted</span>
+        </span>
+      </div>
+    );
+  }
+
+  if (source === "categories") {
+    const opt = categoryOptions.find((c) => c.label === line.category);
+    const thin = opt && opt.eligibleCount < perRound;
+    return (
+      <div className="bg-muted/20 grid grid-cols-[4rem_1fr] items-center gap-3 rounded-md border px-3 py-2">
+        <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wider">
+          {label}
+        </span>
+        <div className="flex items-center gap-2">
+          <Select
+            value={line.category}
+            onValueChange={(v) => v && onChange({ category: v })}
+            disabled={categoriesLoading}
+          >
+            <SelectTrigger className="h-8 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="max-h-72">
+              {(categoryOptions.length > 0
+                ? categoryOptions
+                : FALLBACK_CATEGORIES.map((l) => ({
+                    label: l,
+                    eligibleCount: 0,
+                    totalVetted: 0,
+                  }))
+              ).map((c) => {
+                const lbl = "label" in c ? c.label : "";
+                const eligible = "eligibleCount" in c ? c.eligibleCount : 0;
+                const total = "totalVetted" in c ? c.totalVetted : 0;
+                const tail =
+                  total > 0
+                    ? ` — ${eligible} ready${eligible !== total ? ` / ${total}` : ""}`
+                    : "";
+                return (
+                  <SelectItem key={lbl} value={lbl} label={lbl}>
+                    {lbl}
+                    <span className="text-muted-foreground">{tail}</span>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+          {thin ? (
+            <span className="text-amber-600 dark:text-amber-500 text-xs whitespace-nowrap">
+              {opt?.eligibleCount ?? 0} ready · need {perRound}
+            </span>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  // decks
+  const isMine = line.source === "myDeck";
+  const value = (isMine ? line.myDeckId : line.communityDeckId) || "__none__";
+  return (
+    <div className="bg-muted/20 grid grid-cols-[4rem_1fr] items-center gap-3 rounded-md border px-3 py-2">
+      <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wider">
+        {label}
+      </span>
+      <div className="grid gap-2 sm:grid-cols-[120px_1fr]">
+        <Select
+          value={isMine ? "myDeck" : "communityDeck"}
+          onValueChange={(v) => {
+            if (!v) return;
+            onChange({ source: v as RoundSource });
+          }}
+        >
+          <SelectTrigger className="h-8 text-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="myDeck" disabled={myDecks.length === 0}>
+              My decks
+            </SelectItem>
+            <SelectItem value="communityDeck" disabled={publicDecks.length === 0}>
+              Community
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        <Select
+          value={value}
+          onValueChange={(v) => {
+            if (!v) return;
+            const id = v === "__none__" ? "" : v;
+            onChange(isMine ? { myDeckId: id } : { communityDeckId: id });
+          }}
+        >
+          <SelectTrigger className="h-8 text-sm">
+            <SelectValue placeholder="Pick a deck" />
+          </SelectTrigger>
+          <SelectContent className="max-h-72">
+            <SelectItem value="__none__">— choose a deck —</SelectItem>
+            {(isMine ? myDecks : publicDecks).map((d) => (
+              <SelectItem key={d.id} value={d.id}>
+                {d.name} ({d.questionCount})
+                {!isMine && d.ownerName ? ` · ${d.ownerName}` : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
     </div>
   );

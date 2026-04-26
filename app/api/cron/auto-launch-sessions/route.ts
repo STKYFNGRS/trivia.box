@@ -14,13 +14,17 @@ const bodySchema = z.object({
 });
 
 /**
- * Vercel cron / worker: finds pending **house** sessions whose
- * `eventStartsAt` is due and launches them. Host-created sessions
- * (autopilot or hosted) are deliberately not auto-launched: the host
- * runs the lobby and clicks Start when ready, so the cron only takes
- * over for the platform's free-to-play house games. Guarded by
- * `CRON_SECRET` / `x-vercel-cron` via `lib/cronAuth.ts`.
+ * Vercel cron / worker: finds pending **autopilot** sessions whose
+ * `eventStartsAt` is due and launches them. Both platform house games
+ * and host-scheduled autopilot games run through this lane — the whole
+ * point of autopilot is that the server drives the round, so the host
+ * shouldn't have to babysit the lobby and press Start.
  *
+ * Hosted sessions (`runMode = "hosted"`) are deliberately excluded:
+ * those wait in the dashboard lobby until the host clicks Start. There
+ * is no grace window or rescue path — manual is manual.
+ *
+ * Guarded by `CRON_SECRET` / `x-vercel-cron` via `lib/cronAuth.ts`.
  * Recommended schedule: every 1 minute. Both GET and POST are accepted —
  * Vercel Cron issues GET by default, and we still expose POST so local /
  * integration tests can pass `maxSessions` / `nowMs` overrides.
@@ -42,10 +46,9 @@ async function run(req: Request) {
 
   const now = new Date(parsed.data.nowMs ?? Date.now());
 
-  // House-game-only lane: any pending house game whose start time has
-  // arrived. Host-created sessions live in their dashboard lobby and
-  // are launched by the host clicking Start — they never get rescued
-  // by this cron.
+  // Autopilot lane: any pending autopilot session (house or host-created)
+  // whose scheduled start time has arrived. Hosted sessions sit out and
+  // wait for their host to click Start in the lobby.
   const due = await db
     .select({
       id: sessions.id,
@@ -62,7 +65,7 @@ async function run(req: Request) {
     .where(
       and(
         eq(sessions.status, "pending"),
-        eq(sessions.houseGame, true),
+        eq(sessions.runMode, "autopilot"),
         lte(sessions.eventStartsAt, now)
       )
     )

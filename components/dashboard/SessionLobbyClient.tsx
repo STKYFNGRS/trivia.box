@@ -453,12 +453,14 @@ export function SessionLobbyClient({ initial }: { initial: SessionLobbyInitial }
             {initial.runMode === "autopilot" ? (
               <span className="text-muted-foreground">
                 {" "}
-                · autopilot will start question 1 right away
+                · autopilot will launch automatically at{" "}
+                <span className="text-foreground font-medium">{startLabel}</span>
+                . Press Start to launch sooner.
               </span>
             ) : (
               <span className="text-muted-foreground">
                 {" "}
-                · you&apos;ll control each question manually
+                · click Start when you&apos;re ready — you&apos;ll control each question manually
               </span>
             )}
           </div>
@@ -481,7 +483,7 @@ export function SessionLobbyClient({ initial }: { initial: SessionLobbyInitial }
               ) : (
                 <>
                   <Play className="mr-2 size-4" aria-hidden />
-                  Start game
+                  {initial.runMode === "autopilot" ? "Start now" : "Start game"}
                 </>
               )}
             </Button>
